@@ -9,6 +9,7 @@ import           Control.Lens                             ((^.))
 import           Graphics.GPipe                           hiding (lookAt,
                                                            normalize)
 import           Prelude                                  hiding ((<*))
+import LambdaRay.Config 
 
 
 aspectRatio :: Fractional a => V2 Int -> a
@@ -19,12 +20,6 @@ aspectRatio viewPort = fromRational $ toRational y / toRational x
 diskOuterSqr, diskInnerSqr :: Fractional a => a
 diskInnerSqr = fromRational (2.6 * 2.6)
 diskOuterSqr = fromIntegral (14 * 14 :: Int)
-
-
-iterations :: Int
-iterations = 50
-stepsize :: Fractional a => a
-stepsize = 0.7
 
 
 viewMatrix :: Floating a => V3 a -> V3 (V3 a)
@@ -53,14 +48,18 @@ xorB :: Boolean b => b -> b -> b
 xorB a b = a &&* notB b ||* b &&* notB a
 
 blendcolors :: Num a => V4 a -> V4 a -> V4 a
-blendcolors (V4 ra ga ba aa) (V4 rb gb bb ab) =
-    V4 (ra + rb * a) (ga + gb * a) (ba + bb * a) a
+blendcolors ca cb =
+    V4 (color ^. _x) (color ^. _y) (color ^. _z) alpha
   where
-    a = ab * (1 - aa)
+    aa = ca ^. _w
+    ba = cb ^. _w
+    color = ca ^. _xyz + cb ^. _xyz ^* (ba * (1 - aa))
+    alpha = aa + ba * (1 - aa)
 
 
-computeDiskColor :: (IfB a, Real' a, OrdB a) => Context a -> V3 a -> BooleanOf a -> V4 a
-computeDiskColor ctx newpoint diskMask = diskcolor
+computeDiskColor :: (IfB a, Real' a, OrdB a) => DiskMode -> Context a -> V3 a -> BooleanOf a -> V4 a
+computeDiskColor DiskSolid _ _ _ = V4 1 1 1 1
+computeDiskColor DiskGrid ctx newpoint diskMask = diskcolor
   where
     -- actual collision point by intersection
     lambdaa = -(newpoint ^. _y / (ctxVelocity ctx ^. _y))
@@ -74,8 +73,9 @@ computeDiskColor ctx newpoint diskMask = diskcolor
         (V4 0 0 1 diskalpha)
 
 
-computeHorizonColor :: (IfB a, Real' a, OrdB a) => V3 a -> a -> V3 a -> a -> BooleanOf a -> V4 a
-computeHorizonColor oldpoint oldpointsqr newpoint newpointsqr horizonMask = horizoncolor
+computeHorizonColor :: (IfB a, Real' a, OrdB a) => HorizonMode -> V3 a -> a -> V3 a -> a -> BooleanOf a -> V4 a
+computeHorizonColor HorizonBlack _ _ _ _ _ = V4 0 0 0 1
+computeHorizonColor HorizonGrid oldpoint oldpointsqr newpoint newpointsqr horizonMask = horizoncolor
   where
     lambdaa = 1 - (1 - oldpointsqr) / (newpointsqr - oldpointsqr)
     colpoint = lambdaa *^ newpoint + (1 - lambdaa) *^ oldpoint
@@ -105,11 +105,11 @@ iteration h2 ctx = nctx
     maskDistance = newpointsqr <* diskOuterSqr &&* newpointsqr >* diskInnerSqr
 
     diskMask = maskCrossing &&* maskDistance
-    diskcolor = ifB diskMask (computeDiskColor ctx newpoint diskMask) 0
+    diskcolor = ifB diskMask (computeDiskColor DiskSolid ctx newpoint diskMask) 0
 
     -- event horizon
     horizonMask = newpointsqr <* 1 &&* oldpointsqr >* 1
-    horizoncolor = ifB horizonMask (computeHorizonColor oldpoint oldpointsqr newpoint newpointsqr horizonMask) 0
+    horizoncolor = ifB horizonMask (computeHorizonColor horizonMode oldpoint oldpointsqr newpoint newpointsqr horizonMask) 0
 
     nctx = Context
       { ctxPoint = newpoint

@@ -11,7 +11,7 @@ main = do
   let (img, viewPort) = CPUImage.image
 
   runContextT GLFW.defaultHandleConfig $ do
-    win <- newWindow (WindowFormatColor RGB8) (GLFW.defaultWindowConfig "Checkers")
+    win <- newWindow (WindowFormatColor RGB8) (GLFW.defaultWindowConfig "LambdaRay: CPU")
         { GLFW.configWidth = 2000
         , GLFW.configHeight = 1000
         }

@@ -16,14 +16,14 @@ import           System.IO                   (hFlush, stdout)
 
 
 viewPort :: V2 Int
-viewPort = V2 640 480
+viewPort = V2 1500 1000
 
 
 main :: IO ()
 main = do
     runContextT GLFW.defaultHandleConfig $ do
       let V2 w h = viewPort
-      win <- newWindow (WindowFormatColor RGB8) $ (GLFW.defaultWindowConfig "Hello world!")
+      win <- newWindow (WindowFormatColor RGB8) $ (GLFW.defaultWindowConfig "LambdaRay")
           { GLFW.configWidth = w
           , GLFW.configHeight = h
           }
