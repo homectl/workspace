@@ -18,8 +18,10 @@ source-repository head
 library
   default-language:    Haskell2010
   exposed-modules:
+      LambdaRay.CPU
+      LambdaRay.CPUImage
       LambdaRay.Dynamic
-      LambdaRay.Main
+      LambdaRay.GPU
       LambdaRay.Schwarzschild
   ghc-options:
       -Wall
@@ -31,6 +33,8 @@ library
     , GPipe-GLFW
     , ghc
     , ghc-paths
+    , lens
+    , time
 
 executable lambdaray
   hs-source-dirs:   tools
