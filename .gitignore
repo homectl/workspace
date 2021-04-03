@@ -1,4 +1,6 @@
 /wip
+*.frag
+*.vert
 
 dist
 dist-*
