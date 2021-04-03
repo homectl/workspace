@@ -34,19 +34,19 @@ import           Graphics.GL.Core33
 import           Graphics.GL.Types                (GLuint)
 
 type WinId = Int
-data Drawcall s = Drawcall {
-                    drawcallFBO :: s -> (Either WinId (IO FBOKeys, IO ()), IO ()),
-                    drawcallName :: Int,
-                    rasterizationName :: Int,
-                    vertexsSource :: String,
-                    fragmentSource :: String,
-                    usedInputs :: [Int],
-                    usedVUniforms :: [Int],
-                    usedVSamplers :: [Int],
-                    usedFUniforms :: [Int],
-                    usedFSamplers :: [Int],
-                    primStrUBufferSize :: Int -- The size of the ubuffer for uniforms in primitive stream
-                    }
+data Drawcall s = Drawcall
+    { drawcallFBO        :: s -> (Either WinId (IO FBOKeys, IO ()), IO ())
+    , drawcallName       :: Int
+    , rasterizationName  :: Int
+    , vertexsSource      :: String
+    , fragmentSource     :: String
+    , usedInputs         :: [Int]
+    , usedVUniforms      :: [Int]
+    , usedVSamplers      :: [Int]
+    , usedFUniforms      :: [Int]
+    , usedFSamplers      :: [Int]
+    , primStrUBufferSize :: Int -- The size of the ubuffer for uniforms in primitive stream
+    }
 
 -- index/binding refers to what is used in the final shader. Index space is limited, usually 16
 -- attribname is what was declared, but all might not be used. Attribname share namespace with uniforms and textures (in all shaders) and is unlimited(TM)
@@ -56,11 +56,10 @@ type Binding = Int
 --       then create a function that checks that none of the input buffers are used as output, and throws if it is
 
 data RenderIOState s = RenderIOState
-    {
-        uniformNameToRenderIO :: Map.IntMap (s -> Binding -> IO ()), -- TODO: Return buffer name here when we start writing to buffers during rendering (transform feedback, buffer textures)
-        samplerNameToRenderIO :: Map.IntMap (s -> Binding -> IO Int), -- IO returns texturename for validating that it isnt used as render target
-        rasterizationNameToRenderIO :: Map.IntMap (s -> IO ()),
-        inputArrayToRenderIOs :: Map.IntMap (s -> [([Binding], GLuint, Int) -> ((IO [VAOKey], IO ()), IO ())])
+    { uniformNameToRenderIO       :: Map.IntMap (s -> Binding -> IO ()) -- TODO: Return buffer name here when we start writing to buffers during rendering (transform feedback, buffer textures)
+    , samplerNameToRenderIO       :: Map.IntMap (s -> Binding -> IO Int) -- IO returns texturename for validating that it isnt used as render target
+    , rasterizationNameToRenderIO :: Map.IntMap (s -> IO ())
+    , inputArrayToRenderIOs       :: Map.IntMap (s -> [([Binding], GLuint, Int) -> ((IO [VAOKey], IO ()), IO ())])
     }
 
 newRenderIOState :: RenderIOState s

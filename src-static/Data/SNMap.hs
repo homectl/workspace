@@ -1,24 +1,25 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, ExistentialQuantification, RankNTypes #-}
+{-# LANGUAGE ExistentialQuantification  #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE RankNTypes                 #-}
 
 module Data.SNMap (
     SNMap,
     SNMapReaderT,
     runSNMapReaderT,
     newSNMap,
-    memoize,    
+    memoize,
     memoizeM,
     scopedM
 )where
 
-import System.Mem.StableName 
-import qualified Data.HashTable.IO as HT 
-import Data.Functor
-import Control.Monad.IO.Class (liftIO, MonadIO)
-import Control.Monad.Trans.Class
-import System.Mem.Weak (addFinalizer)
-import Control.Applicative (Applicative)
-import Control.Monad.Exception (MonadException, MonadAsyncException)
-import Control.Monad.Trans.State.Strict
+import           Control.Monad.Exception          (MonadAsyncException,
+                                                   MonadException)
+import           Control.Monad.IO.Class           (MonadIO, liftIO)
+import           Control.Monad.Trans.Class        (MonadTrans (..))
+import           Control.Monad.Trans.State.Strict (StateT (StateT), evalStateT,
+                                                   get, put)
+import qualified Data.HashTable.IO                as HT
+import           System.Mem.StableName            (StableName, makeStableName)
 
 newtype SNMap m a = SNMap (HT.BasicHashTable (StableName (m a)) a)
 
@@ -27,12 +28,12 @@ newSNMap = SNMap <$> HT.new
 
 memoize :: MonadIO m => m (SNMap m a) -> m a -> m a
 memoize getter m = do s <- liftIO $ makeStableName $! m
-                      (SNMap h) <- getter 
+                      (SNMap h) <- getter
                       x <- liftIO $ HT.lookup h s
                       case x of
                                 Just a -> return a
                                 Nothing -> do a <- m
-                                              (SNMap h') <- getter --Need to redo because of scope 
+                                              (SNMap h') <- getter --Need to redo because of scope
                                               liftIO $ HT.insert h' s a
                                               return a
 
@@ -40,7 +41,7 @@ newtype SNMapReaderT a m b = SNMapReaderT (StateT (SNMap (SNMapReaderT a m) a) m
 
 runSNMapReaderT :: MonadIO m => SNMapReaderT a m b -> m b
 runSNMapReaderT (SNMapReaderT m) = do h <- liftIO newSNMap
-                                      evalStateT m h 
+                                      evalStateT m h
 
 instance MonadTrans (SNMapReaderT a) where
     lift = SNMapReaderT . lift
