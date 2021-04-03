@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
@@ -72,7 +73,10 @@ main = do
   where
     loadTexture name =
       let file = "data/textures/" ++ name ++ ".jpg" in do
-        Right (Pic.ImageYCbCr8 image) <- timeIt ("Loading texture: " ++ file) $ liftIO $ Pic.readImage file
+        image <- timeIt ("Loading texture: " ++ file) (liftIO $ Pic.readImage file) >>= \case
+          Left err                    -> error err
+          Right (Pic.ImageYCbCr8 img) -> return img
+          Right _                     -> error "Wrong pixel format"
         let w = Pic.imageWidth image
             h = Pic.imageHeight image
             size = V2 w h
@@ -83,8 +87,10 @@ main = do
           writeTexture2D tex 0 0 size pixels
           return tex
 
-    getJuicyPixel xs _x _y pix =
-      let Pic.PixelRGB8 r g b = Pic.convertPixel pix in V3 r g b : xs
+
+getJuicyPixel :: [V3 Pic.Pixel8] -> Int -> Int -> Pic.PixelYCbCr8 -> [V3 Pic.Pixel8]
+getJuicyPixel xs _x _y pix =
+  let Pic.PixelRGB8 r g b = Pic.convertPixel pix in V3 r g b : xs
 
 
 loop startTime vertexBuffer (uniformBuffer :: Buffer os (Uniform (B Float))) shader win = do
@@ -124,8 +130,8 @@ data Status
     | Running
 
 instance Show Status where
-    show Fail = "\027[1;31mFAIL\027[0m"
-    show Done = "\027[1;32mDONE\027[0m"
+    show Fail    = "\027[1;31mFAIL\027[0m"
+    show Done    = "\027[1;32mDONE\027[0m"
     show Running = "\027[1;33m....\027[0m"
 
 class Info a where
@@ -139,7 +145,7 @@ instance Info [a] where
     getInfo r = (r, (Done, "(" ++ show (length r) ++ ")"))
 
 instance Info b => Info (Either a b) where
-    getInfo r@Left{}  = (r, (Fail, ""))
+    getInfo r@Left{}     = (r, (Fail, ""))
     getInfo r@(Right ok) = (r, snd $ getInfo ok)
 
 instance Info Pic.DynamicImage where

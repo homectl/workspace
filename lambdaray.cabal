@@ -18,25 +18,72 @@ source-repository head
 library
   default-language:    Haskell2010
   exposed-modules:
+      Graphics.GPipe.Context.GLFW
+      Graphics.GPipe.Context.GLFW.Input
+      Graphics.GPipe.Context.GLFW.Window
+      Graphics.GPipe.Context.GLFW.Misc
+      Graphics.GPipe
+      Graphics.GPipe.Buffer
+      Graphics.GPipe.Context
+      Graphics.GPipe.Expr
+      Graphics.GPipe.Format
+      Graphics.GPipe.FragmentStream
+      Graphics.GPipe.FrameBuffer
+      Graphics.GPipe.PrimitiveArray
+      Graphics.GPipe.PrimitiveStream
+      Graphics.GPipe.Sampler
+      Graphics.GPipe.Shader
+      Graphics.GPipe.Texture
+      Graphics.GPipe.Uniform
+      Graphics.GPipe.Orphans
       LambdaRay.Config
       LambdaRay.CPU
       LambdaRay.CPUImage
       LambdaRay.Dynamic
       LambdaRay.GPU
       LambdaRay.Schwarzschild
+  other-modules:
+      Data.SNMap
+      Graphics.GPipe.Context.GLFW.Calls
+      Graphics.GPipe.Context.GLFW.Resource
+      Graphics.GPipe.Context.GLFW.Wrappers
+      Graphics.GPipe.Context.GLFW.Format
+      Graphics.GPipe.Context.GLFW.Handler
+      Graphics.GPipe.Context.GLFW.RPC
+      Graphics.GPipe.Context.GLFW.Logger
+      Graphics.GPipe.Internal.Buffer
+      Graphics.GPipe.Internal.Compiler
+      Graphics.GPipe.Internal.Context
+      Graphics.GPipe.Internal.Expr
+      Graphics.GPipe.Internal.Format
+      Graphics.GPipe.Internal.FragmentStream
+      Graphics.GPipe.Internal.FrameBuffer
+      Graphics.GPipe.Internal.PrimitiveArray
+      Graphics.GPipe.Internal.PrimitiveStream
+      Graphics.GPipe.Internal.Shader
+      Graphics.GPipe.Internal.Texture
+      Graphics.GPipe.Internal.Uniform
+      Graphics.GPipe.Internal.Orphans
   ghc-options:
       -Wall
-  hs-source-dirs: src
+  hs-source-dirs: src, src-static
   build-depends:
       base              >= 4 && < 5
+    , Boolean
     , GLFW-b
-    , GPipe
-    , GPipe-GLFW
     , JuicyPixels
+    , async
+    , containers
+    , exception-transformers
     , ghc
     , ghc-paths
+    , gl
+    , hashtables
     , lens
+    , linear
+    , stm
     , time
+    , transformers
 
 executable lambdaray
   hs-source-dirs:   tools

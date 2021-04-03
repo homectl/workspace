@@ -34,12 +34,19 @@ run modName = GHC.runGhc (Just libdir) $ do
         , GHC.hscTarget = GHC.HscInterpreted
         , GHC.packageFlags =
             [ F.ExposePackage pkg (F.PackageArg pkg) (F.ModRenaming True [])
-            | pkg <- ["GPipe", "JuicyPixels", "lens", "time"]
+            | pkg <- ["JuicyPixels", "lambdaray", "lens", "time"]
+            ] ++
+            [ F.HidePackage pkg
+            | pkg <- ["GPipe", "GPipe-GLFW"]
             ]
         -- C:\\Users\\Pippijn\\AppData\\Roaming\\cabal\\store\\ghc-8.10.4\\package.db
         -- C:\\Users\\Pippijn\\Documents\\code\\lambdaray\\dist-newstyle\\build\\x86_64-windows\\ghc-8.10.4\\lambdaray-0.0.1\\package.conf.inplace
         -- C:\\Users\\Pippijn\\Documents\\code\\lambdaray\\dist-newstyle\\packagedb\\ghc-8.10.4
-        , GHC.packageDBFlags = [F.PackageDB (F.PkgConfFile "C:\\Users\\Pippijn\\AppData\\Roaming\\cabal\\store\\ghc-8.10.4\\package.db")]
+        , GHC.packageDBFlags =
+            [ F.PackageDB (F.PkgConfFile db)
+            | db <- [ "C:\\Users\\Pippijn\\AppData\\Roaming\\cabal\\store\\ghc-8.10.4\\package.db"
+                    , "C:\\Users\\Pippijn\\Documents\\code\\lambdaray\\dist-newstyle\\packagedb\\ghc-8.10.4"]
+            ]
         , GHC.importPaths = ["src"]
         })
     target <- GHC.guessTarget ("src/LambdaRay/" ++ modName ++ ".hs") Nothing

@@ -1,10 +1,8 @@
 {-# LANGUAGE LambdaCase          #-}
-{-# LANGUAGE PackageImports      #-}
+{-# LANGUAGE NamedFieldPuns      #-}
+{-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies        #-}
-{-# OPTIONS_GHC -Wno-missing-signatures #-}
-{-# LANGUAGE NamedFieldPuns      #-}
-{-# LANGUAGE RecordWildCards #-}
 module LambdaRay.Schwarzschild (frag) where
 
 import           Control.Lens     ((^.))

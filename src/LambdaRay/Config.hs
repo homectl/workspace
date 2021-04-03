@@ -20,12 +20,12 @@ data DistortionMethod
     | MethodLeapFrog
 
 data Config a = Config
-    { horizonMode :: HorizonMode
-    , diskMode    :: DiskMode a
-    , skyMode     :: SkyMode a
+    { horizonMode      :: HorizonMode
+    , diskMode         :: DiskMode a
+    , skyMode          :: SkyMode a
     , distortionMethod :: DistortionMethod
-    , iterations  :: Int
-    , stepsize    :: a
+    , iterations       :: Int
+    , stepsize         :: a
     }
 
 defaultConfig :: Fractional a => Config a
