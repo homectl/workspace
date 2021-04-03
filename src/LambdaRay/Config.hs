@@ -1,24 +1,40 @@
 module LambdaRay.Config where
 
+import           Graphics.GPipe (V2, V3)
+
 data HorizonMode
     = HorizonGrid
     | HorizonBlack
 
-horizonMode :: HorizonMode
-horizonMode = HorizonBlack
-
-
-data DiskMode
+data DiskMode a
     = DiskGrid
     | DiskSolid
+    | DiskTexture (V2 a -> V3 a)
 
-diskMode :: DiskMode
-diskMode = DiskSolid
+data SkyMode a
+    = SkyBlack
+    | SkyTexture (V2 a -> V3 a)
 
+data DistortionMethod
+    = MethodNone
+    | MethodLeapFrog
 
-iterations :: Int
-iterations = 150
+data Config a = Config
+    { horizonMode :: HorizonMode
+    , diskMode    :: DiskMode a
+    , skyMode     :: SkyMode a
+    , distortionMethod :: DistortionMethod
+    , iterations  :: Int
+    , stepsize    :: a
+    }
 
-stepsize :: Fractional a => a
-stepsize = 0.2
-
+defaultConfig :: Fractional a => Config a
+defaultConfig = Config
+    { distortionMethod = MethodLeapFrog
+    , horizonMode = HorizonBlack
+    , diskMode = DiskSolid
+    , skyMode = SkyBlack
+    , iterations = 70
+    -- 0.4 is the maximum before you end up with lots of additional Einstein rings.
+    , stepsize = 0.4
+    }

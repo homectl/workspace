@@ -27,15 +27,14 @@ whileM a = do
 
 
 run :: String -> IO ()
-run mod = GHC.runGhc (Just libdir) $ do
+run modName = GHC.runGhc (Just libdir) $ do
     dflags <- GHC.getSessionDynFlags
     _ <- GHC.setSessionDynFlags (dflags
         { GHC.ghcLink = GHC.LinkInMemory
         , GHC.hscTarget = GHC.HscInterpreted
         , GHC.packageFlags =
-            [ F.ExposePackage "GPipe" (F.PackageArg "GPipe") (F.ModRenaming True [])
-            , F.ExposePackage "lens" (F.PackageArg "lens") (F.ModRenaming True [])
-            , F.ExposePackage "time" (F.PackageArg "time") (F.ModRenaming True [])
+            [ F.ExposePackage pkg (F.PackageArg pkg) (F.ModRenaming True [])
+            | pkg <- ["GPipe", "JuicyPixels", "lens", "time"]
             ]
         -- C:\\Users\\Pippijn\\AppData\\Roaming\\cabal\\store\\ghc-8.10.4\\package.db
         -- C:\\Users\\Pippijn\\Documents\\code\\lambdaray\\dist-newstyle\\build\\x86_64-windows\\ghc-8.10.4\\lambdaray-0.0.1\\package.conf.inplace
@@ -43,13 +42,13 @@ run mod = GHC.runGhc (Just libdir) $ do
         , GHC.packageDBFlags = [F.PackageDB (F.PkgConfFile "C:\\Users\\Pippijn\\AppData\\Roaming\\cabal\\store\\ghc-8.10.4\\package.db")]
         , GHC.importPaths = ["src"]
         })
-    target <- GHC.guessTarget ("src/LambdaRay/" ++ mod ++ ".hs") Nothing
+    target <- GHC.guessTarget ("src/LambdaRay/" ++ modName ++ ".hs") Nothing
     GHC.setTargets [target]
     whileM $ do
       ok <- GHC.load GHC.LoadAllTargets
       case ok of
         GHC.Succeeded -> do
-            modSum <- GHC.getModSummary $ GHC.mkModuleName $ "LambdaRay." ++ mod
+            modSum <- GHC.getModSummary $ GHC.mkModuleName $ "LambdaRay." ++ modName
             runExpr modSum "main"
         GHC.Failed -> do
             liftIO $ threadDelay 1000000

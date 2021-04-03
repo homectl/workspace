@@ -32,6 +32,7 @@ library
     , GLFW-b
     , GPipe
     , GPipe-GLFW
+    , JuicyPixels
     , ghc
     , ghc-paths
     , lens
