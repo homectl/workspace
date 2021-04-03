@@ -1,33 +1,37 @@
-{-# LANGUAGE PatternGuards, PatternSynonyms #-}
+{-# LANGUAGE PatternGuards   #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
+{-# OPTIONS_GHC -Wno-unused-matches #-}
 module Graphics.GPipe.Internal.Compiler where
 
-import Graphics.GPipe.Internal.Context
-import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.Exception (MonadException)
-import qualified Data.IntMap as Map
-import qualified Data.IntSet as Set
-import Data.IntMap ((!))
-import Data.Maybe
-import Control.Monad
-import Control.Monad.Trans.State.Strict
-import Control.Monad.Trans.Reader
-import Control.Monad.Trans.Except
-import Control.Monad.Trans.Class
+import           Control.Monad                    (forM_, void, when)
+import           Control.Monad.Exception          (MonadException)
+import           Control.Monad.IO.Class           (MonadIO, liftIO)
+import           Control.Monad.Trans.Class        (MonadTrans (lift))
+import           Control.Monad.Trans.Except       (throwE)
+import           Control.Monad.Trans.Reader       (ask)
+import           Control.Monad.Trans.State.Strict (get, put)
+import           Data.IntMap                      ((!))
+import qualified Data.IntMap                      as Map
+import qualified Data.IntSet                      as Set
+import           Data.Maybe                       (isJust, isNothing)
+import           Graphics.GPipe.Internal.Context
 
-import Graphics.GL.Core33
-import Graphics.GL.Types
-import Foreign.Marshal.Utils
-import Foreign.Marshal.Alloc (alloca)
-import Foreign.Storable (peek)
-import Foreign.C.String
-import Foreign.Marshal.Array
-import Foreign.Ptr (nullPtr)
-import Data.Either
-import Control.Exception (throwIO)
-import Data.IORef
-import Data.List (zip5)
-import Data.Word
-import Data.Monoid ((<>))
+import           Control.Exception                (throwIO)
+import           Data.Either                      (partitionEithers)
+import           Data.IORef                       (mkWeakIORef, newIORef,
+                                                   readIORef)
+import           Data.List                        (zip5)
+import           Data.Word                        (Word32)
+import           Foreign.C.String                 (peekCString, withCString,
+                                                   withCStringLen)
+import           Foreign.Marshal.Alloc            (alloca)
+import           Foreign.Marshal.Array            (allocaArray, withArray)
+import           Foreign.Marshal.Utils            (with)
+import           Foreign.Ptr                      (nullPtr)
+import           Foreign.Storable                 (peek)
+import           Graphics.GL.Core33
+import           Graphics.GL.Types                (GLuint)
 
 type WinId = Int
 data Drawcall s = Drawcall {

@@ -28,12 +28,12 @@ module Graphics.GPipe.FragmentStream (
     Side(..),
     ViewPort(..),
     DepthRange(..),
-    
-    -- * Various FragmentStream operations   
-    filterFragments,   
+
+    -- * Various FragmentStream operations
+    filterFragments,
     withRasterizedInfo,
     RasterizedInfo(..),
 )
 where
 
-import Graphics.GPipe.Internal.FragmentStream
+import           Graphics.GPipe.Internal.FragmentStream

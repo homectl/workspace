@@ -1,7 +1,12 @@
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE Arrows, TypeFamilies, ScopedTypeVariables,
-  FlexibleContexts, FlexibleInstances , TypeSynonymInstances #-}
+{-# LANGUAGE Arrows               #-}
+{-# LANGUAGE FlexibleContexts     #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE PatternSynonyms      #-}
+{-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE TypeFamilies         #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
 module Graphics.GPipe.Internal.Buffer
 (
     BufferFormat(..),
@@ -19,36 +24,38 @@ module Graphics.GPipe.Internal.Buffer
     bufSize, bufName, bufElementSize, bufferLength, bufBElement, bufferWriteInternal, makeBuffer, getUniformAlignment, UniformAlignment
 ) where
 
-import Graphics.GPipe.Internal.Context
+import           Graphics.GPipe.Internal.Context
 
-import Graphics.GL.Core33
-import Graphics.GL.Types
-import Foreign.Marshal.Utils
-import Foreign.Marshal.Alloc
+import           Foreign.Marshal.Alloc             (alloca)
+import           Foreign.Marshal.Utils             (with)
+import           Graphics.GL.Core33
+import           Graphics.GL.Types                 (GLenum, GLuint)
 
-import Prelude hiding ((.), id)
-import Control.Category
-import Control.Arrow
-import Control.Monad (void)
-import Foreign.Storable
-import Foreign.Ptr
-import Control.Monad.IO.Class
-import Data.Word
-import Data.Int
-import Control.Monad.Trans.State.Strict
-import Control.Monad.Trans.Writer.Strict
-import Control.Monad.Trans.Reader
-import Control.Monad.Trans.Class (lift)
-import Data.IORef
-import Control.Applicative ((<$>))
-import Linear.V4
-import Linear.V3
-import Linear.V2
-import Linear.V1
-import Linear.V0
-import Linear.Plucker (Plucker(..))
-import Linear.Quaternion (Quaternion(..))
-import Linear.Affine (Point(..))
+import           Control.Arrow                     (Arrow (arr, first),
+                                                    Kleisli (..), returnA)
+import           Control.Category                  (Category (..))
+import           Control.Monad                     (void)
+import           Control.Monad.IO.Class            (MonadIO (..))
+import           Control.Monad.Trans.Class         (lift)
+import           Control.Monad.Trans.Reader        (Reader, ask, runReader)
+import           Control.Monad.Trans.State.Strict  (StateT (runStateT), get,
+                                                    put)
+import           Control.Monad.Trans.Writer.Strict (WriterT (runWriterT), tell)
+import           Data.IORef                        (IORef, newIORef, readIORef)
+import           Data.Int                          (Int16, Int32, Int8)
+import           Data.Word                         (Word16, Word32, Word8)
+import           Foreign.Ptr                       (Ptr, castPtr, minusPtr,
+                                                    nullPtr, plusPtr)
+import           Foreign.Storable                  (Storable (peek, peekElemOff, poke, sizeOf))
+import           Linear.Affine                     (Point (..))
+import           Linear.Plucker                    (Plucker (..))
+import           Linear.Quaternion                 (Quaternion (..))
+import           Linear.V0                         (V0 (..))
+import           Linear.V1                         (V1 (..))
+import           Linear.V2                         (V2 (..))
+import           Linear.V3                         (V3 (..))
+import           Linear.V4                         (V4 (..))
+import           Prelude                           hiding (id, (.))
 
 -- | The class that constraints which types can live in a buffer.
 class BufferFormat f where
@@ -69,12 +76,12 @@ class BufferFormat f where
 
 -- | A @Buffer os b@ lives in the object space @os@ and contains elements of type @b@.
 data Buffer os b = Buffer {
-                    bufName :: BufferName,
+                    bufName        :: BufferName,
                     bufElementSize :: Int,
                     -- | Retrieve the number of elements in a buffer.
-                    bufferLength :: Int,
-                    bufBElement :: BInput -> b,
-                    bufWriter :: Ptr () -> HostFormat b -> IO ()
+                    bufferLength   :: Int,
+                    bufBElement    :: BInput -> b,
+                    bufWriter      :: Ptr () -> HostFormat b -> IO ()
                     }
 
 instance Eq (Buffer os b) where
@@ -108,12 +115,12 @@ instance Category ToBuffer where
     ToBuffer a b c m1 . ToBuffer x y z m2 = ToBuffer (a.x) (b.y) (c.z) (comb m1 m2)
         where
             -- If only one uniform or one PackedIndices, use that, otherwise use Align4
-            comb AlignUniform AlignUnknown = AlignUniform
-            comb AlignUnknown AlignUniform = AlignUniform
+            comb AlignUniform AlignUnknown       = AlignUniform
+            comb AlignUnknown AlignUniform       = AlignUniform
             comb AlignUnknown AlignPackedIndices = AlignPackedIndices
             comb AlignPackedIndices AlignUnknown = AlignPackedIndices
-            comb AlignUnknown AlignUnknown = AlignUnknown
-            comb _ _ = Align4
+            comb AlignUnknown AlignUnknown       = AlignUnknown
+            comb _ _                             = Align4
 
 instance Arrow ToBuffer where
     {-# INLINE arr #-}
@@ -230,10 +237,10 @@ instance BufferFormat a => BufferFormat (Normalized a) where
     getGlType (Normalized a) = getGlType a
     getGlPaddedFormat (Normalized a) = case getGlPaddedFormat a of
                                             GL_RGBA_INTEGER -> GL_RGBA
-                                            GL_RGB_INTEGER -> GL_RGB
-                                            GL_RG_INTEGER -> GL_RG
-                                            GL_RED_INTEGER -> GL_RED
-                                            x -> x
+                                            GL_RGB_INTEGER  -> GL_RGB
+                                            GL_RG_INTEGER   -> GL_RG
+                                            GL_RED_INTEGER  -> GL_RED
+                                            x               -> x
 
 instance BufferFormat a => BufferFormat (V0 a) where
     type HostFormat (V0 a) = V0 (HostFormat a)

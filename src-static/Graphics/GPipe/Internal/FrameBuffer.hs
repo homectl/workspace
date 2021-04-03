@@ -1,37 +1,63 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TupleSections              #-}
+{-# OPTIONS_GHC -Wno-unused-foralls #-}
+{-# OPTIONS_GHC -Wno-unused-matches #-}
 module Graphics.GPipe.Internal.FrameBuffer where
 
-import           Control.Applicative
-import           Control.Monad                           (when, void)
-import           Control.Monad.Trans.Class
-import           Control.Monad.Trans.State.Lazy
-import qualified Control.Monad.Trans.State.Strict as StrictState
-import           Control.Monad.Trans.Writer.Lazy
+import           Control.Monad                           (void, when)
+import           Control.Monad.Trans.Class               (MonadTrans (lift))
+import           Control.Monad.Trans.State.Lazy          (StateT (..), get, put)
+import qualified Control.Monad.Trans.State.Strict        as StrictState
+import           Control.Monad.Trans.Writer.Lazy         (Writer, execWriter,
+                                                          tell)
 import           Data.List                               (intercalate)
-import           Graphics.GPipe.Internal.Compiler
-import           Graphics.GPipe.Internal.Context
-import           Graphics.GPipe.Internal.Expr
-import           Graphics.GPipe.Internal.Format
-import           Graphics.GPipe.Internal.FragmentStream
-import           Graphics.GPipe.Internal.PrimitiveStream
-import           Graphics.GPipe.Internal.Shader
-import           Graphics.GPipe.Internal.Texture
+import           Graphics.GPipe.Internal.Compiler        (Drawcall (Drawcall),
+                                                          WinId, getFBOerror)
+import           Graphics.GPipe.Internal.Context         (FBOKey,
+                                                          FBOKeys (FBOKeys),
+                                                          Render (Render),
+                                                          RenderState (perWindowRenderState),
+                                                          Window (getWinName),
+                                                          asSync, getFBO,
+                                                          getLastRenderWin,
+                                                          setFBO)
+import           Graphics.GPipe.Internal.Expr            (ExprM, F, FFloat,
+                                                          GlobDeclM, S (..),
+                                                          discard, runExprM,
+                                                          tellAssignment',
+                                                          tellGlobal,
+                                                          tellGlobalLn)
+import           Graphics.GPipe.Internal.Format          (ColorRenderable (clearColor),
+                                                          ColorSampleable (Color, ColorElement, fromColor, typeStr),
+                                                          ContextColorFormat,
+                                                          DepthRenderable,
+                                                          DepthStencil, Format,
+                                                          StencilRenderable)
+import           Graphics.GPipe.Internal.FragmentStream  (FragmentStream (..),
+                                                          FragmentStreamData (..))
+import           Graphics.GPipe.Internal.PrimitiveStream (PrimitiveStreamData (PrimitiveStreamData))
+import           Graphics.GPipe.Internal.Shader          (Shader (..), ShaderM,
+                                                          tellDrawcall)
+import           Graphics.GPipe.Internal.Texture         (ComparisonFunction,
+                                                          Image, getGlCompFunc,
+                                                          getImageBinding,
+                                                          getImageFBOKey,
+                                                          imageEquals)
 
-import           Data.Word                               (Word)
-import           Foreign.Marshal.Utils
-import Graphics.GL.Core33
-import Graphics.GL.Types
-import Data.IORef
-import Foreign.Marshal.Alloc
-import Foreign.Storable (peek)
-import Foreign.Marshal.Array (withArray)
-import Foreign.Ptr (nullPtr)
-import Linear.V4
-import Control.Monad.IO.Class
-import Control.Monad.Trans.Except
-import qualified Data.IntMap as IMap
+import           Control.Monad.IO.Class                  (MonadIO (liftIO))
+import           Control.Monad.Trans.Except              (ExceptT, throwE)
+import           Data.IORef                              (mkWeakIORef, newIORef,
+                                                          readIORef)
+import qualified Data.IntMap                             as IMap
+import           Foreign.Marshal.Alloc                   (alloca)
+import           Foreign.Marshal.Array                   (withArray)
+import           Foreign.Marshal.Utils                   (fromBool, with)
+import           Foreign.Ptr                             (nullPtr)
+import           Foreign.Storable                        (peek)
+import           Graphics.GL.Core33
+import           Graphics.GL.Types                       (GLenum, GLuint)
+import           Linear.V4                               (V4 (..))
 
 -- | A monad in which individual color images can be drawn.
 newtype DrawColors os s a = DrawColors (StateT Int (Writer [Int -> (ExprM (), GlobDeclM (), s -> (IO FBOKey, IO (), IO ()))]) a) deriving (Functor, Applicative, Monad)
@@ -192,8 +218,8 @@ setGlContextColorOptions c (ContextColorOption blend mask) = do
         setGlBlend blend
         case blend of
             NoBlending -> glDisable GL_BLEND
-            LogicOp _ -> glDisable GL_BLEND
-            _ -> glEnable GL_BLEND
+            LogicOp _  -> glDisable GL_BLEND
+            _          -> glEnable GL_BLEND
 
 setGlBlend :: Blending -> IO ()
 setGlBlend NoBlending = return ()
@@ -298,11 +324,12 @@ data BlendingFactor =
    | OneMinusConstantAlpha
    | SrcAlphaSaturate
 
-usesConstantColor ConstantColor = True
+usesConstantColor :: BlendingFactor -> Bool
+usesConstantColor ConstantColor         = True
 usesConstantColor OneMinusConstantColor = True
-usesConstantColor ConstantAlpha = True
+usesConstantColor ConstantAlpha         = True
 usesConstantColor OneMinusConstantAlpha = True
-usesConstantColor _ = False
+usesConstantColor _                     = False
 
 -- | A bitwise logical operation that will be used to combine colors that has an integral internal representation.
 data LogicOp =
@@ -443,10 +470,11 @@ clearImageDepthStencil i d s = do
                                                      glClearBufferfi GL_DEPTH_STENCIL 0 (realToFrac d) (fromIntegral s)
                                                      glEnable GL_SCISSOR_TEST
 
+inWin :: Window os1 c ds -> IO () -> Render os2 ()
 inWin w m = Render $ do
   rs <- lift $ lift StrictState.get
   case IMap.lookup (getWinName w) (perWindowRenderState rs) of
-    Nothing -> return () -- Window deleted, do nothing
+    Nothing           -> return () -- Window deleted, do nothing
     Just (_, doAsync) -> liftIO $ doAsync m
 
 -- | Fill the window's back buffer with a constant color value
@@ -491,7 +519,7 @@ maybeThrow :: Monad m => ExceptT e m (Maybe e) -> ExceptT e m ()
 maybeThrow m = do mErr <- m
                   case mErr of
                      Just err -> throwE err
-                     Nothing -> return ()
+                     Nothing  -> return ()
 
 ---------------
 glTrue :: Num n => n
@@ -499,55 +527,55 @@ glTrue = fromBool True
 
 
 getGlBlendEquation :: BlendEquation -> GLenum
-getGlBlendEquation FuncAdd = GL_FUNC_ADD
-getGlBlendEquation FuncSubtract = GL_FUNC_SUBTRACT
+getGlBlendEquation FuncAdd             = GL_FUNC_ADD
+getGlBlendEquation FuncSubtract        = GL_FUNC_SUBTRACT
 getGlBlendEquation FuncReverseSubtract = GL_FUNC_REVERSE_SUBTRACT
-getGlBlendEquation Min = GL_MIN
-getGlBlendEquation Max = GL_MAX
+getGlBlendEquation Min                 = GL_MIN
+getGlBlendEquation Max                 = GL_MAX
 
 getGlBlendFunc :: BlendingFactor -> GLenum
-getGlBlendFunc Zero = GL_ZERO
-getGlBlendFunc One = GL_ONE
-getGlBlendFunc SrcColor = GL_SRC_COLOR
-getGlBlendFunc OneMinusSrcColor = GL_ONE_MINUS_SRC_COLOR
-getGlBlendFunc DstColor = GL_DST_COLOR
-getGlBlendFunc OneMinusDstColor = GL_ONE_MINUS_DST_COLOR
-getGlBlendFunc SrcAlpha = GL_SRC_ALPHA
-getGlBlendFunc OneMinusSrcAlpha = GL_ONE_MINUS_SRC_ALPHA
-getGlBlendFunc DstAlpha = GL_DST_ALPHA
-getGlBlendFunc OneMinusDstAlpha = GL_ONE_MINUS_DST_ALPHA
-getGlBlendFunc ConstantColor = GL_CONSTANT_COLOR
+getGlBlendFunc Zero                  = GL_ZERO
+getGlBlendFunc One                   = GL_ONE
+getGlBlendFunc SrcColor              = GL_SRC_COLOR
+getGlBlendFunc OneMinusSrcColor      = GL_ONE_MINUS_SRC_COLOR
+getGlBlendFunc DstColor              = GL_DST_COLOR
+getGlBlendFunc OneMinusDstColor      = GL_ONE_MINUS_DST_COLOR
+getGlBlendFunc SrcAlpha              = GL_SRC_ALPHA
+getGlBlendFunc OneMinusSrcAlpha      = GL_ONE_MINUS_SRC_ALPHA
+getGlBlendFunc DstAlpha              = GL_DST_ALPHA
+getGlBlendFunc OneMinusDstAlpha      = GL_ONE_MINUS_DST_ALPHA
+getGlBlendFunc ConstantColor         = GL_CONSTANT_COLOR
 getGlBlendFunc OneMinusConstantColor = GL_ONE_MINUS_CONSTANT_COLOR
-getGlBlendFunc ConstantAlpha = GL_CONSTANT_ALPHA
+getGlBlendFunc ConstantAlpha         = GL_CONSTANT_ALPHA
 getGlBlendFunc OneMinusConstantAlpha = GL_ONE_MINUS_CONSTANT_ALPHA
-getGlBlendFunc SrcAlphaSaturate = GL_SRC_ALPHA_SATURATE
+getGlBlendFunc SrcAlphaSaturate      = GL_SRC_ALPHA_SATURATE
 
 getGlLogicOp :: LogicOp -> GLenum
-getGlLogicOp Clear = GL_CLEAR
-getGlLogicOp And = GL_AND
-getGlLogicOp AndReverse = GL_AND_REVERSE
-getGlLogicOp Copy = GL_COPY
-getGlLogicOp AndInverted = GL_AND_INVERTED
-getGlLogicOp Noop = GL_NOOP
-getGlLogicOp Xor = GL_XOR
-getGlLogicOp Or = GL_OR
-getGlLogicOp Nor = GL_NOR
-getGlLogicOp Equiv = GL_EQUIV
-getGlLogicOp Invert = GL_INVERT
-getGlLogicOp OrReverse = GL_OR_REVERSE
+getGlLogicOp Clear        = GL_CLEAR
+getGlLogicOp And          = GL_AND
+getGlLogicOp AndReverse   = GL_AND_REVERSE
+getGlLogicOp Copy         = GL_COPY
+getGlLogicOp AndInverted  = GL_AND_INVERTED
+getGlLogicOp Noop         = GL_NOOP
+getGlLogicOp Xor          = GL_XOR
+getGlLogicOp Or           = GL_OR
+getGlLogicOp Nor          = GL_NOR
+getGlLogicOp Equiv        = GL_EQUIV
+getGlLogicOp Invert       = GL_INVERT
+getGlLogicOp OrReverse    = GL_OR_REVERSE
 getGlLogicOp CopyInverted = GL_COPY_INVERTED
-getGlLogicOp OrInverted = GL_OR_INVERTED
-getGlLogicOp Nand = GL_NAND
-getGlLogicOp Set = GL_SET
+getGlLogicOp OrInverted   = GL_OR_INVERTED
+getGlLogicOp Nand         = GL_NAND
+getGlLogicOp Set          = GL_SET
 
 getGlStencilOp :: StencilOp -> GLenum
-getGlStencilOp OpZero = GL_ZERO
-getGlStencilOp OpKeep = GL_KEEP
-getGlStencilOp OpReplace = GL_REPLACE
-getGlStencilOp OpIncr = GL_INCR
+getGlStencilOp OpZero     = GL_ZERO
+getGlStencilOp OpKeep     = GL_KEEP
+getGlStencilOp OpReplace  = GL_REPLACE
+getGlStencilOp OpIncr     = GL_INCR
 getGlStencilOp OpIncrWrap = GL_INCR_WRAP
-getGlStencilOp OpDecr = GL_DECR
+getGlStencilOp OpDecr     = GL_DECR
 getGlStencilOp OpDecrWrap = GL_DECR_WRAP
-getGlStencilOp OpInvert = GL_INVERT
+getGlStencilOp OpInvert   = GL_INVERT
 
    --------------------

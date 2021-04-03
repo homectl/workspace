@@ -1,37 +1,40 @@
-{-# LANGUAGE TypeFamilies #-} -- To define types in the ContextHandler instance
+{-# LANGUAGE TypeFamilies #-}
 -- | Internal module defining handler and its ContextHandler instance as well as some methods
 module Graphics.GPipe.Context.GLFW.Handler where
 
 -- stdlib
-import Control.Monad (forM_, forM)
-import Text.Printf (printf)
-import Data.List (partition, delete)
-import Data.Maybe (fromMaybe)
-import Control.Monad (when, unless, void)
-import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Exception (Exception, throwIO)
-import Control.Concurrent.Async (withAsync)
-import Control.Concurrent.STM (atomically)
-import Control.Concurrent.STM.TVar
-    ( TVar, newTVarIO, readTVarIO, writeTVar, modifyTVar
-    )
-import Control.Concurrent
-    ( MVar, newMVar, modifyMVar_, withMVar
-    , ThreadId, myThreadId
-    )
+import           Control.Concurrent                   (MVar, ThreadId,
+                                                       modifyMVar_, myThreadId,
+                                                       newMVar, withMVar)
+import           Control.Concurrent.Async             (withAsync)
+import           Control.Concurrent.STM               (atomically)
+import           Control.Concurrent.STM.TVar          (TVar, modifyTVar,
+                                                       newTVarIO, readTVarIO,
+                                                       writeTVar)
+import           Control.Exception                    (Exception, throwIO)
+import           Control.Monad                        (forM, forM_, unless,
+                                                       void, when)
+import           Control.Monad.IO.Class               (MonadIO, liftIO)
+import           Data.List                            (delete, partition)
+import           Data.Maybe                           (fromMaybe)
+import           Text.Printf                          (printf)
 -- thirdparty
-import qualified Graphics.GPipe as GPipe (ContextHandler(..), Window(), ContextT(), WindowBits, withContextWindow)
-import qualified Graphics.UI.GLFW as GLFW (Window, Error)
+import qualified Graphics.GPipe                       as GPipe (ContextHandler (..),
+                                                                ContextT,
+                                                                Window,
+                                                                WindowBits,
+                                                                withContextWindow)
+import qualified Graphics.UI.GLFW                     as GLFW (Error, Window)
 -- local
-import qualified Graphics.GPipe.Context.GLFW.Calls as Call
-import qualified Graphics.GPipe.Context.GLFW.Format as Format
-import qualified Graphics.GPipe.Context.GLFW.RPC as RPC
+import qualified Graphics.GPipe.Context.GLFW.Calls    as Call
+import qualified Graphics.GPipe.Context.GLFW.Format   as Format
+import qualified Graphics.GPipe.Context.GLFW.Logger   as Log
+import qualified Graphics.GPipe.Context.GLFW.RPC      as RPC
+import           Graphics.GPipe.Context.GLFW.Resource (defaultWindowConfig)
 import qualified Graphics.GPipe.Context.GLFW.Resource as Resource
-import qualified Graphics.GPipe.Context.GLFW.Logger as Log
-import Graphics.GPipe.Context.GLFW.Resource (defaultWindowConfig) -- in scope for haddock
 
 -- | Internal handle for a GPipe-created GLFW window/context
-data Context = Context
+newtype Context = Context
     { contextRaw :: GLFW.Window
 --  , contextComm :: RPC.Handle
 --  , contextAsync :: Async ()
@@ -52,12 +55,12 @@ type MMContext = MVar (Maybe Context)
 --          -- Do GPipe things here
 -- @
 data Handle = Handle
-    { handleTid :: ThreadId
-    , handleComm :: RPC.Handle
-    , handleRaw :: GLFW.Window
-    , handleCtxs :: TVar [MMContext]
+    { handleTid         :: ThreadId
+    , handleComm        :: RPC.Handle
+    , handleRaw         :: GLFW.Window
+    , handleCtxs        :: TVar [MMContext]
     , handleEventPolicy :: Maybe EventPolicy
-    , handleLogger :: Log.Logger
+    , handleLogger      :: Log.Logger
     }
 
 -- | Opaque handle representing a, possibly closed, internal 'Context'. You'll

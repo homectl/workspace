@@ -81,5 +81,5 @@ module Graphics.GPipe.FrameBuffer (
 )
 where
 
-import Graphics.GPipe.Internal.Texture
-import Graphics.GPipe.Internal.FrameBuffer
+import           Graphics.GPipe.Internal.FrameBuffer
+import           Graphics.GPipe.Internal.Texture

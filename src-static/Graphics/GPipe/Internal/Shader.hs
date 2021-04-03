@@ -1,7 +1,14 @@
-{-# LANGUAGE MultiParamTypeClasses, TypeFamilies, FlexibleContexts,
-  RankNTypes, ExistentialQuantification, GeneralizedNewtypeDeriving,
-  FlexibleInstances, GADTs #-}
+{-# LANGUAGE ExistentialQuantification  #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GADTs                      #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE RankNTypes                 #-}
+{-# LANGUAGE TypeFamilies               #-}
 
+{-# OPTIONS_GHC -Wno-deprecations #-}
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 module Graphics.GPipe.Internal.Shader (
     Shader(..),
     ShaderM(..),
@@ -21,24 +28,30 @@ module Graphics.GPipe.Internal.Shader (
 ) where
 
 
-import Graphics.GPipe.Internal.Compiler
-import Graphics.GPipe.Internal.Context
-import Graphics.GPipe.Internal.Buffer
-import Control.Monad.Trans.State
-import qualified Control.Monad.Trans.State.Strict as StrictState
-import Control.Monad.IO.Class
-import qualified Data.IntSet as Set
-import Control.Monad.Trans.Writer.Lazy (tell, WriterT(..), execWriterT)
-import Control.Monad.Exception (MonadException)
-import Control.Applicative (Applicative, Alternative, (<|>))
-import Control.Monad.Trans.Class (lift)
-import Data.Maybe (fromJust, isJust, isNothing)
-import Control.Monad (MonadPlus, when)
-import Control.Monad.Trans.List (ListT(..))
-import Data.Monoid (All(..), mempty)
-import Data.Either
-import Control.Monad.Trans.Reader
-import Data.List (find)
+import           Control.Applicative              (Alternative, (<|>))
+import           Control.Monad                    (MonadPlus)
+import           Control.Monad.Exception          (MonadException)
+import           Control.Monad.IO.Class           (MonadIO)
+import           Control.Monad.Trans.Class        (lift)
+import           Control.Monad.Trans.List         (ListT (..))
+import           Control.Monad.Trans.Reader       (ReaderT (..), ask)
+import           Control.Monad.Trans.State        (State, get, modify, put,
+                                                   runState)
+import           Control.Monad.Trans.Writer.Lazy  (WriterT (..), execWriterT,
+                                                   tell)
+import           Data.Either                      (isLeft, isRight)
+import           Data.List                        (find)
+import           Data.Maybe                       (fromJust, isJust, isNothing)
+import           Data.Monoid                      (All (..))
+import           Graphics.GPipe.Internal.Buffer   (UniformAlignment,
+                                                   getUniformAlignment)
+import           Graphics.GPipe.Internal.Compiler (Drawcall (Drawcall),
+                                                   RenderIOState, compile,
+                                                   mapRenderIOState,
+                                                   newRenderIOState)
+import           Graphics.GPipe.Internal.Context  (ContextHandler, ContextT,
+                                                   Render (..),
+                                                   liftNonWinContextIO)
 
 data ShaderState s = ShaderState Int (RenderIOState s)
 
@@ -50,6 +63,7 @@ getName = do ShaderState n r <- ShaderM $ lift $ lift $ lift get
              ShaderM $ lift $ lift $ lift $ put $ ShaderState (n+1) r
              return n
 
+askUniformAlignment :: ShaderM s UniformAlignment
 askUniformAlignment = ShaderM ask
 
 modifyRenderIO :: (RenderIOState s -> RenderIOState s) -> ShaderM s ()

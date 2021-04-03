@@ -4,13 +4,15 @@
 module Graphics.GPipe.Context.GLFW.Calls where
 
 -- stdlib
-import Control.Monad (when)
-import qualified Text.Printf as Text
-import qualified Control.Concurrent as Conc
+import qualified Control.Concurrent                 as Conc
+import           Control.Monad                      (when)
+import           Data.Maybe                         (fromMaybe)
+import qualified Text.Printf                        as Text
 -- thirdparty
-import qualified Graphics.UI.GLFW as GLFW
+import qualified Graphics.UI.GLFW                   as GLFW
 -- local
-import Graphics.GPipe.Context.GLFW.Logger (Logger(), LogLevel(..), emitLog)
+import           Graphics.GPipe.Context.GLFW.Logger (LogLevel (..), Logger,
+                                                     emitLog)
 
 -- TODO: change from using explicit OnMain functions to passing a handle which implements the appropriate class (effect or fetch result)
 -- TODO: maybe an OnMain monad would be good to reduce the number of RPCS? Not really necessary, since they can already be easily sequenced with IO
@@ -29,7 +31,7 @@ say logger lvl msg = do
     tid <- Conc.myThreadId
     c <- getCurrentContext
     emitLog logger lvl $
-        Text.printf "[%03.3fs, %s has %s]: %s\n" (maybe (0/0) id t) (show tid) (show c) msg
+        Text.printf "[%03.3fs, %s has %s]: %s\n" (fromMaybe (0/0) t) (show tid) (show c) msg
 
 type OnMain a = IO a -> IO a
 type EffectMain = IO () -> IO ()
@@ -53,7 +55,7 @@ terminate onMain = onMain GLFW.terminate
 setErrorCallback :: EffectMain -> Maybe GLFW.ErrorCallback -> IO ()
 setErrorCallback onMain callbackHuh = onMain $ GLFW.setErrorCallback callbackHuh
 
--- | 
+-- |
 -- * There are many caveats: http://www.glfw.org/docs/latest/group__window.html#ga5c336fddf2cbb5b92f65f10fb6043344
 -- * ~~This function must not be called from a callback.~~
 -- * This function must only be called from the main thread.
@@ -88,7 +90,7 @@ makeContextCurrent logger reason windowHuh = do
         emitLog logger DEBUG $ Text.printf "attaching %s, reason: %s" (show windowHuh) reason
         GLFW.makeContextCurrent windowHuh
 
--- | 
+-- |
 -- * A context must be current on the calling thread. Calling this function without a current context will cause a GLFW_NO_CURRENT_CONTEXT error.
 -- * This function is not called during context creation, leaving the swap interval set to whatever is the default on that platform. This is done because some swap interval extensions used by GLFW do not allow the swap interval to be reset to zero once it has been set to a non-zero value.
 -- * This function may be called from any thread.

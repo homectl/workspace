@@ -135,29 +135,29 @@ module Graphics.GPipe.Context.GLFW.Input (
  ) where
 
 -- stdlib
-import Control.Monad.IO.Class (MonadIO)
-import qualified Graphics.GPipe.Context as GPipe (ContextT, Window())
+import           Control.Monad.IO.Class               (MonadIO)
+import qualified Graphics.GPipe.Context               as GPipe (ContextT,
+                                                                Window)
 -- third party
-import qualified Graphics.UI.GLFW as GLFW
-import Graphics.UI.GLFW (
- Key(..),
- KeyState(..),
- ModifierKeys(..),
- StickyKeysInputMode(..),
- CursorInputMode(..),
- Cursor(..),
- StandardCursorShape(..),
- CursorState(..),
- StickyMouseButtonsInputMode(..),
- MouseButton(..),
- MouseButtonState(..),
- Joystick(..),
- JoystickButtonState(..),
- )
+import           Graphics.UI.GLFW                     (Cursor (..),
+                                                       CursorInputMode (..),
+                                                       CursorState (..),
+                                                       Joystick (..),
+                                                       JoystickButtonState (..),
+                                                       Key (..), KeyState (..),
+                                                       ModifierKeys (..),
+                                                       MouseButton (..),
+                                                       MouseButtonState (..),
+                                                       StandardCursorShape (..),
+                                                       StickyKeysInputMode (..),
+                                                       StickyMouseButtonsInputMode (..))
+import qualified Graphics.UI.GLFW                     as GLFW
 -- local
-import Graphics.GPipe.Context.GLFW.Handler (Handle(..))
-import Graphics.GPipe.Context.GLFW.Wrappers
-import qualified Graphics.GPipe.Context.GLFW.Calls as Call
+import qualified Graphics.GPipe.Context.GLFW.Calls    as Call
+import           Graphics.GPipe.Context.GLFW.Handler  (Handle (..))
+import           Graphics.GPipe.Context.GLFW.Wrappers (withWindowRPC,
+                                                       wrapCallbackSetter,
+                                                       wrapWindowFun)
 
 
 

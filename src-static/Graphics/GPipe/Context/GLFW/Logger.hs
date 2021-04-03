@@ -1,8 +1,8 @@
 {-# LANGUAGE NamedFieldPuns #-}
 module Graphics.GPipe.Context.GLFW.Logger where
 
-import System.IO (hPutStrLn, stderr)
-import Text.Printf (printf)
+import           System.IO   (hPutStrLn, stderr)
+import           Text.Printf (printf)
 
 -- | Levels of severity for log messages.
 data LogLevel = DEBUG | INFO | WARNING | ERROR
@@ -14,7 +14,7 @@ newtype LogSink = LogSink { runSink :: String -> IO () }
 -- | Very simple logger handle.
 data Logger = Logger
     { loggerLevel :: LogLevel
-    , loggerSink :: LogSink
+    , loggerSink  :: LogSink
     }
 
 -- | Emit a message to the sink specified by 'Logger' if the provided

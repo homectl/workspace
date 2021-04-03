@@ -37,5 +37,5 @@ module Graphics.GPipe.Shader (
 )
 where
 
-import Graphics.GPipe.Internal.Context
-import Graphics.GPipe.Internal.Shader
+import           Graphics.GPipe.Internal.Context
+import           Graphics.GPipe.Internal.Shader

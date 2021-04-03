@@ -35,10 +35,10 @@ module Graphics.GPipe.Context.GLFW.Misc
 ) where
 
 -- internal
-import Graphics.GPipe.Context.GLFW.Format
-import Graphics.GPipe.Context.GLFW.Resource
-import Graphics.GPipe.Context.GLFW.Handler
+import           Graphics.GPipe.Context.GLFW.Format
+import           Graphics.GPipe.Context.GLFW.Handler
+import           Graphics.GPipe.Context.GLFW.Resource
 -- reexports
-import Graphics.GPipe.Context.GLFW.Input
-import Graphics.GPipe.Context.GLFW.Window
-import Graphics.GPipe.Context.GLFW.Misc
+import           Graphics.GPipe.Context.GLFW.Input
+import           Graphics.GPipe.Context.GLFW.Misc
+import           Graphics.GPipe.Context.GLFW.Window

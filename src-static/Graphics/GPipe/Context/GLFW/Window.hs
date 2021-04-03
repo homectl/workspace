@@ -41,12 +41,14 @@ GPipe.getFrameBufferSize,
 ) where
 
 -- stdlib
-import Control.Monad.IO.Class (MonadIO)
+import           Control.Monad.IO.Class               (MonadIO)
 --thirdparty
-import qualified Graphics.GPipe.Context as GPipe (ContextT, Window(), getFrameBufferSize)
+import qualified Graphics.GPipe.Context               as GPipe (ContextT,
+                                                                Window,
+                                                                getFrameBufferSize)
 --local
-import Graphics.GPipe.Context.GLFW.Handler (Handle(..))
-import qualified Graphics.GPipe.Context.GLFW.Calls as Call
+import qualified Graphics.GPipe.Context.GLFW.Calls    as Call
+import           Graphics.GPipe.Context.GLFW.Handler  (Handle (..))
 import qualified Graphics.GPipe.Context.GLFW.Wrappers as Wrappers
 
 -- TODO: function docstrings
@@ -61,7 +63,7 @@ windowShouldClose :: MonadIO m => GPipe.Window os c ds -> GPipe.ContextT Handle 
 windowShouldClose = Wrappers.withWindow Call.windowShouldClose
 
 setWindowShouldClose :: MonadIO m => GPipe.Window os c ds -> Bool -> GPipe.ContextT Handle os m (Maybe ())
-setWindowShouldClose w b = Wrappers.withWindow (flip Call.setWindowShouldClose b) w
+setWindowShouldClose w b = Wrappers.withWindow (`Call.setWindowShouldClose` b) w
 
 setWindowCloseCallback :: MonadIO m => GPipe.Window os c ds -> Maybe (IO ()) -> GPipe.ContextT Handle os m (Maybe ())
 setWindowCloseCallback = Wrappers.wrapCallbackSetter Call.setWindowCloseCallback

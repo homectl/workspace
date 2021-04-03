@@ -1,42 +1,70 @@
-{-# LANGUAGE TypeFamilies, TypeSynonymInstances, FlexibleContexts, FlexibleInstances, ScopedTypeVariables, Arrows, GeneralizedNewtypeDeriving, PatternSynonyms #-}
+{-# LANGUAGE Arrows                     #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE PatternSynonyms            #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE TypeSynonymInstances       #-}
 
+{-# OPTIONS_GHC -Wno-missing-signatures #-}
+{-# OPTIONS_GHC -Wno-type-defaults #-}
+{-# OPTIONS_GHC -Wno-unused-matches #-}
+{-# OPTIONS_GHC -Wno-unused-foralls #-}
 module Graphics.GPipe.Internal.PrimitiveStream where
 
-import Control.Monad.Trans.Class
-import Control.Monad.Trans.State.Strict
-import Control.Monad.Trans.Reader
-import Prelude hiding (length, id, (.))
-import Graphics.GPipe.Internal.Buffer
-import Graphics.GPipe.Internal.Expr
-import Graphics.GPipe.Internal.Shader
-import Graphics.GPipe.Internal.Compiler
-import Graphics.GPipe.Internal.PrimitiveArray
-import Graphics.GPipe.Internal.Context
-import Graphics.GPipe.Internal.Uniform
-import Control.Category
-import Control.Arrow
-import Control.Monad (void)
-import Data.Monoid (Monoid(..))
-import Data.IntMap.Lazy (insert)
-import Data.Word
-import Data.Int
-import Foreign.Storable
-import Foreign.Ptr
-import qualified Data.IntMap as Map
+import           Control.Arrow                          (Arrow (arr, first),
+                                                         Kleisli (Kleisli),
+                                                         returnA)
+import           Control.Category                       (Category (..))
+import           Control.Monad                          (void)
+import           Control.Monad.Trans.Class              (MonadTrans (lift))
+import           Control.Monad.Trans.Reader             (Reader, ask, runReader)
+import           Control.Monad.Trans.State.Strict       (State,
+                                                         StateT (runStateT),
+                                                         get, modify, put,
+                                                         runState)
+import           Data.Int                               (Int16, Int32, Int8)
+import qualified Data.IntMap                            as Map
+import           Data.IntMap.Lazy                       (insert)
+import           Data.Word                              (Word16, Word32, Word8)
+import           Foreign.Ptr                            (Ptr, castPtr,
+                                                         intPtrToPtr, plusPtr)
+import           Foreign.Storable                       (Storable (poke, sizeOf))
+import           Graphics.GPipe.Internal.Buffer         (B (..), B2 (..),
+                                                         B3 (..), B4 (..),
+                                                         BufferFormat (HostFormat),
+                                                         Normalized (..))
+import           Graphics.GPipe.Internal.Compiler       (Binding,
+                                                         RenderIOState (inputArrayToRenderIOs))
+import           Graphics.GPipe.Internal.Context        (VAOKey (VAOKey))
+import           Graphics.GPipe.Internal.Expr
+import           Graphics.GPipe.Internal.PrimitiveArray (IndexArray (..),
+                                                         Points,
+                                                         PrimitiveArray (getPrimitiveArray),
+                                                         PrimitiveArrayInt (..),
+                                                         toGLtopology)
+import           Graphics.GPipe.Internal.Shader         (Shader (..), ShaderM,
+                                                         askUniformAlignment,
+                                                         getName,
+                                                         modifyRenderIO)
+import           Graphics.GPipe.Internal.Uniform        (OffsetToSType,
+                                                         buildUDecl)
+import           Prelude                                hiding (id, length, (.))
 
-import Graphics.GL.Core33
-import Graphics.GL.Types
-import Foreign.Marshal.Utils
-import Data.IORef
-import Linear.V4
-import Linear.V3
-import Linear.V2
-import Linear.V1
-import Linear.V0
-import Linear.Plucker (Plucker(..))
-import Linear.Quaternion (Quaternion(..))
-import Linear.Affine (Point(..))
-import Data.Maybe (fromMaybe)
+import           Data.IORef                             (readIORef)
+import           Data.Maybe                             (fromMaybe)
+import           Foreign.Marshal.Utils                  (fromBool)
+import           Graphics.GL.Core33
+import           Graphics.GL.Types                      (GLuint)
+import           Linear.Affine                          (Point (..))
+import           Linear.Plucker                         (Plucker (..))
+import           Linear.Quaternion                      (Quaternion (..))
+import           Linear.V0                              (V0 (..))
+import           Linear.V1                              (V1 (..))
+import           Linear.V2                              (V2 (..))
+import           Linear.V3                              (V3 (..))
+import           Linear.V4                              (V4 (..))
 
 type DrawCallName = Int
 type USize = Int
@@ -134,7 +162,7 @@ toPrimitiveStream sf = Shader $ do n <- getName
                        void $ glUnmapBuffer GL_COPY_WRITE_BUFFER
 
 data InputIndices = InputIndices {
-        inputVertexID :: VInt,
+        inputVertexID   :: VInt,
         inputInstanceID :: VInt
     }
 

@@ -1,13 +1,12 @@
 module Graphics.GPipe.Context.GLFW.RPC where
 
 -- stdlib
-import Data.Sequence (Seq, (|>), empty)
-import Control.Concurrent (ThreadId, myThreadId)
-import Control.Concurrent.MVar (newEmptyMVar, takeMVar, putMVar)
-import Control.Concurrent.STM (STM, atomically)
-import Control.Concurrent.STM.TQueue
-    ( TQueue, newTQueue, writeTQueue, tryReadTQueue, peekTQueue
-    )
+import           Control.Concurrent            (ThreadId, myThreadId)
+import           Control.Concurrent.MVar       (newEmptyMVar, putMVar, takeMVar)
+import           Control.Concurrent.STM        (STM, atomically)
+import           Control.Concurrent.STM.TQueue (TQueue, newTQueue, peekTQueue,
+                                                tryReadTQueue, writeTQueue)
+import           Data.Sequence                 (Seq, empty, (|>))
 -- local
 --import qualified Graphics.GPipe.Context.GLFW.Calls as Call
 
@@ -56,12 +55,12 @@ drainComm queue = go empty
             result <- tryReadTQueue queue
             case result of
                 Just rpc -> go $ rpcs |> rpc
-                Nothing -> return rpcs
+                Nothing  -> return rpcs
 
 runActions :: Foldable t => t RPC -> IO ()
-runActions actions = mapM_ go actions
+runActions = mapM_ go
     where
-        go Noop = print "noop"
+        go Noop             = print "noop"
         go (Execute action) = action
 
 awaitActions :: Handle -> IO RPC

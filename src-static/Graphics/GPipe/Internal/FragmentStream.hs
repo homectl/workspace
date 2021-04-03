@@ -1,29 +1,40 @@
-{-# LANGUAGE TypeFamilies, ScopedTypeVariables, TypeSynonymInstances, FlexibleInstances, GeneralizedNewtypeDeriving, Arrows, FlexibleContexts  #-}
+{-# LANGUAGE Arrows                     #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE TypeSynonymInstances       #-}
+{-# OPTIONS_GHC -Wno-unused-foralls #-}
 module Graphics.GPipe.Internal.FragmentStream where
 
-import Control.Category hiding ((.))
-import Control.Arrow
-import Graphics.GPipe.Internal.Expr
-import Graphics.GPipe.Internal.Shader
-import Graphics.GPipe.Internal.Compiler
-import Graphics.GPipe.Internal.PrimitiveStream
-import Graphics.GPipe.Internal.PrimitiveArray
-import Control.Monad.Trans.State.Lazy
-import Data.Monoid (Monoid)
-import Data.Boolean
-import Data.IntMap.Lazy (insert)
-import Linear.V4
-import Linear.V3
-import Linear.V2
-import Linear.V1
-import Linear.V0
-import Linear.Plucker (Plucker(..))
-import Linear.Quaternion (Quaternion(..))
-import Linear.Affine (Point(..))
+import           Control.Arrow                           (Arrow (arr, first),
+                                                          Kleisli (Kleisli),
+                                                          returnA)
+import           Control.Category                        (Category)
+import           Control.Monad.Trans.State.Lazy          (State, evalState, get,
+                                                          put)
+import           Data.Boolean                            (Boolean (true, (&&*)),
+                                                          EqB ((==*)),
+                                                          IfB (ifB))
+import           Data.IntMap.Lazy                        (insert)
+import           Graphics.GPipe.Internal.Compiler        (RenderIOState (rasterizationNameToRenderIO))
+import           Graphics.GPipe.Internal.Expr
+import           Graphics.GPipe.Internal.PrimitiveStream (PrimitiveStream (..),
+                                                          PrimitiveStreamData)
+import           Graphics.GPipe.Internal.Shader          (Shader (..), getName,
+                                                          modifyRenderIO)
+import           Linear.Affine                           (Point (..))
+import           Linear.Plucker                          (Plucker (..))
+import           Linear.Quaternion                       (Quaternion (..))
+import           Linear.V0                               (V0 (..))
+import           Linear.V1                               (V1 (..))
+import           Linear.V2                               (V2 (..))
+import           Linear.V3                               (V3 (..))
+import           Linear.V4                               (V4 (..))
 
-import Graphics.GL.Core33
-import Control.Monad (when)
-import Data.Maybe (isJust)
+import           Data.Maybe                              (isJust)
+import           Graphics.GL.Core33
 
 type VPos = V4 VFloat
 
@@ -72,7 +83,7 @@ rasterize sf (PrimitiveStream xs) = Shader $ do
                                        z' <- z
                                        w' <- w
                                        tellAssignment' "gl_Position" $ "vec4("++x'++',':y'++',':z'++',':w'++")"
-        makePointSize Nothing = return ()
+        makePointSize Nothing       = return ()
         makePointSize (Just (S ps)) = ps >>= tellAssignment' "gl_PointSize"
         io s = let (side, ViewPort (V2 x y) (V2 w h), DepthRange dmin dmax) = sf s in if w < 0 || h < 0
                                                                                         then error "ViewPort, negative size"
@@ -83,8 +94,8 @@ rasterize sf (PrimitiveStream xs) = Shader $ do
                                                                                                 setGLPointSize
 
         setGlCullFace Front = glEnable GL_CULL_FACE >> glCullFace GL_BACK -- Back is culled when front is rasterized
-        setGlCullFace Back = glEnable GL_CULL_FACE >> glCullFace GL_FRONT
-        setGlCullFace _ = glDisable GL_CULL_FACE
+        setGlCullFace Back  = glEnable GL_CULL_FACE >> glCullFace GL_FRONT
+        setGlCullFace _     = glDisable GL_CULL_FACE
         setGLPointSize = if any (isJust.fst.snd) xs then glEnable GL_PROGRAM_POINT_SIZE else glDisable GL_PROGRAM_POINT_SIZE
 
 -- | Defines which side to rasterize. Non triangle primitives only has a front side.
@@ -100,9 +111,9 @@ filterFragments f (FragmentStream xs) = FragmentStream $ map g xs
     where g (a,FragmentStreamData x y z w) = (a,FragmentStreamData x y z (w &&* f a))
 
 data RasterizedInfo = RasterizedInfo {
-        rasterizedFragCoord :: V4 FFloat,
+        rasterizedFragCoord   :: V4 FFloat,
         rasterizedFrontFacing :: FBool,
-        rasterizedPointCoord :: V2 FFloat
+        rasterizedPointCoord  :: V2 FFloat
     }
 
 -- | Like 'fmap', but where various auto generated information from the rasterization is provided for each vertex.

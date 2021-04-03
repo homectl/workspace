@@ -2,18 +2,15 @@
 module Graphics.GPipe.Context.GLFW.Resource where
 
 -- thirdparty
-import qualified Graphics.UI.GLFW as GLFW
-    ( Monitor
-    , WindowHint
-    )
+import qualified Graphics.UI.GLFW as GLFW (Monitor, WindowHint)
 
 -- | Configuration for a new GLFW window and associated OpenGL context.
 data WindowConfig = WindowConfig
-    { configWidth :: Int
-    , configHeight :: Int
-    , configTitle :: String
-    , configMonitor :: Maybe GLFW.Monitor
-    , configHints :: [GLFW.WindowHint]
+    { configWidth        :: Int
+    , configHeight       :: Int
+    , configTitle        :: String
+    , configMonitor      :: Maybe GLFW.Monitor
+    , configHints        :: [GLFW.WindowHint]
     , configSwapInterval :: Maybe Int
     } deriving
     ( Show

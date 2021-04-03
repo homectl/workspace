@@ -1,35 +1,47 @@
-{-# LANGUAGE GADTs, EmptyDataDecls, NoMonomorphismRestriction,
-  TypeFamilies, ScopedTypeVariables, FlexibleInstances, RankNTypes,
-  MultiParamTypeClasses, FlexibleContexts, OverloadedStrings #-}
+{-# LANGUAGE EmptyDataDecls            #-}
+{-# LANGUAGE FlexibleContexts          #-}
+{-# LANGUAGE FlexibleInstances         #-}
+{-# LANGUAGE GADTs                     #-}
+{-# LANGUAGE MultiParamTypeClasses     #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE OverloadedStrings         #-}
+{-# LANGUAGE RankNTypes                #-}
+{-# LANGUAGE ScopedTypeVariables       #-}
+{-# LANGUAGE TypeFamilies              #-}
 
+{-# OPTIONS_GHC -Wno-type-defaults #-}
 module Graphics.GPipe.Internal.Expr where
 
-import Prelude hiding ((.), id, (<*))
-import Control.Category
-import Control.Monad (void, when)
-import Control.Monad.Trans.Writer
-import Control.Monad.Trans.State
-import Control.Monad.Trans.Reader
-import Data.Monoid (mconcat, mappend)
-import qualified Control.Monad.Trans.Class as T (lift)
-import Data.SNMap
-import qualified Data.IntMap as Map
-import Data.Boolean
-import Data.List (intercalate)
-import Control.Applicative ((<$>), liftA, liftA2, liftA3)
-import Linear.V4
-import Linear.V3
-import Linear.V2
-import Linear.V1
-import Linear.V0
-import Linear.Affine
-import Linear.Metric
-import Linear.Matrix
-import Linear.Vector
-import Linear.Conjugate
-import Data.Foldable (toList, Foldable)
-import Data.Int
-import Data.Word
+import           Control.Applicative        (liftA, liftA2, liftA3)
+import           Control.Category           (Category (id, (.)))
+import           Control.Monad              (void, when)
+import qualified Control.Monad.Trans.Class  as T (lift)
+import           Control.Monad.Trans.Reader (ReaderT (runReaderT), ask)
+import           Control.Monad.Trans.State  (State, StateT, evalState,
+                                             evalStateT, execStateT, get,
+                                             modify, put)
+import           Control.Monad.Trans.Writer (Writer, WriterT (runWriterT),
+                                             execWriter, execWriterT, tell)
+import           Data.Boolean               (Boolean (..), BooleanOf, EqB (..),
+                                             IfB (..), OrdB (..), maxB, minB)
+import           Data.Foldable              (toList)
+import           Data.Int                   (Int16, Int32, Int8)
+import qualified Data.IntMap                as Map
+import           Data.List                  (intercalate)
+import           Data.SNMap                 (SNMapReaderT, memoizeM,
+                                             runSNMapReaderT, scopedM)
+import           Data.Word                  (Word16, Word32, Word8)
+import           Linear.Affine              (distanceA)
+import           Linear.Conjugate           (Conjugate, TrivialConjugate)
+import           Linear.Matrix              ((!*!), (!*), (*!))
+import           Linear.Metric              (Metric (distance, dot, norm, signorm))
+import           Linear.V0                  (V0 (..))
+import           Linear.V1                  (V1 (..))
+import           Linear.V2                  (V2 (..))
+import           Linear.V3                  (V3 (..), cross)
+import           Linear.V4                  (V4 (..))
+import           Linear.Vector              (outer)
+import           Prelude                    hiding (id, (.), (<*))
 
 type NextTempVar = Int
 type NextGlobal = Int
@@ -37,21 +49,21 @@ type NextGlobal = Int
 data SType = STypeFloat | STypeInt | STypeBool | STypeUInt | STypeDyn String | STypeMat Int Int | STypeVec Int | STypeIVec Int | STypeUVec Int
 
 stypeName :: SType -> String
-stypeName STypeFloat = "float"
-stypeName STypeInt = "int"
-stypeName STypeBool = "bool"
-stypeName STypeUInt = "uint"
-stypeName (STypeDyn s) = s
+stypeName STypeFloat     = "float"
+stypeName STypeInt       = "int"
+stypeName STypeBool      = "bool"
+stypeName STypeUInt      = "uint"
+stypeName (STypeDyn s)   = s
 stypeName (STypeMat r c) = "mat" ++ show c ++ 'x' : show r
-stypeName (STypeVec n) = "vec" ++ show n
-stypeName (STypeIVec n) = "ivec" ++ show n
-stypeName (STypeUVec n) = "uvec" ++ show n
+stypeName (STypeVec n)   = "vec" ++ show n
+stypeName (STypeIVec n)  = "ivec" ++ show n
+stypeName (STypeUVec n)  = "uvec" ++ show n
 
 stypeSize :: SType -> Int
-stypeSize (STypeVec n) = n * 4
+stypeSize (STypeVec n)  = n * 4
 stypeSize (STypeIVec n) = n * 4
 stypeSize (STypeUVec n) = n * 4
-stypeSize _ = 4
+stypeSize _             = 4
 
 type ExprM = SNMapReaderT [String] (StateT ExprState (WriterT String (StateT NextTempVar IO))) -- IO for stable names
 data ExprState = ExprState {
@@ -430,6 +442,7 @@ while c f i = fromBase x $ while_ (c . fromBase x) (toBase x . f . fromBase x) (
                                            return decls
                              in evalState (runReaderT (shaderbaseReturn (toBase x (errShaderType :: a))) whileM) 0
 
+errShaderType :: a
 errShaderType = error "toBase in an instance of ShaderType is not lazy enough! Make sure you use tilde (~) for each pattern match on a data constructor."
 
 --------------------------------------------------------------------------------------------------------------------------------
@@ -844,19 +857,27 @@ fromMat43 = fromV fromVec3 "mat4x3"
 fromMat44 :: V4 (V4 (S x Float)) -> S x (V4 (V4 Float))
 fromMat44 = fromV fromVec4 "mat4x4"
 
+mulToV4 :: S c x -> S c y -> V4 (S c a)
 mulToV4 a b = vec4S'' $ bin (STypeVec 4) "*" a b
+mulToV3 :: S c x -> S c y -> V3 (S c a)
 mulToV3 a b = vec3S'' $ bin (STypeVec 3) "*" a b
+mulToV2 :: S c x -> S c y -> V2 (S c a)
 mulToV2 a b = vec2S'' $ bin (STypeVec 2) "*" a b
 
+mulToM :: Functor f => (Int, S c z -> f a) -> (Int, a -> b) -> S c x -> S c y -> f b
 mulToM (r,x) (c,y) a b = fmap y $ x $ bin (STypeMat c r) "*" a b
 
+d2 :: Num a1 => (a1, S c a2 -> V2 (S c a2))
 d2 = (2,vec2S'')
+d3 :: Num a1 => (a1, S c a2 -> V3 (S c a2))
 d3 = (3,vec3S'')
+d4 :: Num a1 => (a1, S c a2 -> V4 (S c a2))
 d4 = (4,vec4S'')
 
 unV1 :: V1 t -> t
 unV1 (V1 x) = x
 
+outerToM :: Functor f => (Int, S c z -> f a) -> (Int, a -> b) -> S c x -> S c y -> f b
 outerToM (r,x) (c,y) a b = fmap y $ x $ fun2 (STypeMat c r) "outerProduct" a b
 
 ------------------------------------------------------------------------------------------------------------------------------------

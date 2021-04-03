@@ -12,4 +12,4 @@ Error(..),
 ) where
 
 -- thirdparty
-import Graphics.UI.GLFW (Error(..))
+import           Graphics.UI.GLFW (Error (..))

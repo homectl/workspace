@@ -2,33 +2,33 @@
 module Graphics.GPipe.Context.GLFW.Format where
 
 -- stdlib
-import Control.Exception (Exception)
+import           Control.Exception (Exception)
 -- third party
-import qualified Graphics.UI.GLFW as GLFW
-import qualified Graphics.GPipe as GPipe
-import Graphics.UI.GLFW (WindowHint(..))
+import qualified Graphics.GPipe    as GPipe
+import           Graphics.UI.GLFW  (WindowHint (..))
+import qualified Graphics.UI.GLFW  as GLFW
 
 -- | IO Exception thrown when attempting to create a new window using GLFW
 -- hints which GPipe manages.
-data UnsafeWindowHintsException
+newtype UnsafeWindowHintsException
     = UnsafeWindowHintsException [WindowHint]
     deriving Show
 instance Exception UnsafeWindowHintsException
 
 allowedHint :: WindowHint -> Bool
-allowedHint (WindowHint'Visible _) = False
-allowedHint (WindowHint'sRGBCapable _) = False
-allowedHint (WindowHint'RedBits _) = False
-allowedHint (WindowHint'GreenBits _) = False
-allowedHint (WindowHint'BlueBits _) = False
-allowedHint (WindowHint'AlphaBits _) = False
-allowedHint (WindowHint'DepthBits _) = False
-allowedHint (WindowHint'StencilBits _) = False
+allowedHint (WindowHint'Visible _)             = False
+allowedHint (WindowHint'sRGBCapable _)         = False
+allowedHint (WindowHint'RedBits _)             = False
+allowedHint (WindowHint'GreenBits _)           = False
+allowedHint (WindowHint'BlueBits _)            = False
+allowedHint (WindowHint'AlphaBits _)           = False
+allowedHint (WindowHint'DepthBits _)           = False
+allowedHint (WindowHint'StencilBits _)         = False
 allowedHint (WindowHint'ContextVersionMajor _) = False
 allowedHint (WindowHint'ContextVersionMinor _) = False
 allowedHint (WindowHint'OpenGLForwardCompat _) = False
-allowedHint (WindowHint'OpenGLProfile _) = False
-allowedHint _ = True
+allowedHint (WindowHint'OpenGLProfile _)       = False
+allowedHint _                                  = True
 
 unconditionalHints :: [GLFW.WindowHint]
 unconditionalHints =

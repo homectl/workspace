@@ -1,15 +1,21 @@
-{-# LANGUAGE TypeSynonymInstances, FlexibleInstances, ScopedTypeVariables, EmptyDataDecls, TypeFamilies, GADTs #-}
+{-# LANGUAGE EmptyDataDecls       #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE GADTs                #-}
+{-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE TypeFamilies         #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# OPTIONS_GHC -Wno-unused-foralls #-}
 module Graphics.GPipe.Internal.PrimitiveArray where
 
-import Graphics.GPipe.Internal.Buffer
-import Graphics.GPipe.Internal.Shader
-import Data.Monoid
-import Data.IORef
+import           Data.IORef                     (IORef)
+import           Graphics.GPipe.Internal.Buffer (B, BInput (..), BPacked,
+                                                 Buffer (..), BufferFormat (..))
+import           Graphics.GPipe.Internal.Shader (Render (Render))
 
-import Data.Word
+import           Data.Word                      (Word16, Word32, Word8)
 
 import           Graphics.GL.Core33
-import           Graphics.GL.Types
+import           Graphics.GL.Types              (GLuint)
 
 -- | A vertex array is the basic building block for a primitive array. It is created from the contents of a 'Buffer', but unlike a 'Buffer',
 --   it may be truncated, zipped with other vertex arrays, and even morphed into arrays of a different type with the provided 'Functor' instance.
@@ -106,13 +112,13 @@ data PrimitiveTopology p where
     PointList :: PrimitiveTopology Points
 
 toGLtopology :: PrimitiveTopology p -> GLuint
-toGLtopology TriangleList = GL_TRIANGLES
+toGLtopology TriangleList  = GL_TRIANGLES
 toGLtopology TriangleStrip = GL_TRIANGLE_STRIP
-toGLtopology TriangleFan = GL_TRIANGLE_FAN
-toGLtopology LineList = GL_LINES
-toGLtopology LineStrip = GL_LINE_STRIP
-toGLtopology LineLoop = GL_LINE_LOOP
-toGLtopology PointList = GL_POINTS
+toGLtopology TriangleFan   = GL_TRIANGLE_FAN
+toGLtopology LineList      = GL_LINES
+toGLtopology LineStrip     = GL_LINE_STRIP
+toGLtopology LineLoop      = GL_LINE_LOOP
+toGLtopology PointList     = GL_POINTS
 
 
 {-
