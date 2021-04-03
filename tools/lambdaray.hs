@@ -1,16 +1,15 @@
 {-# LANGUAGE LambdaCase #-}
 module Main where
 
-import           System.Environment as Env (getArgs)
 import           Control.Concurrent     (threadDelay)
 import           Control.Monad          (when)
 import           Control.Monad.IO.Class (liftIO)
 import qualified DynFlags               as F
 import qualified GHC
 import           GHC.Paths              (libdir)
+import           System.Environment     as Env (getArgs)
 
-import qualified LambdaRay.CPU      as CPU
-import qualified LambdaRay.GPU      as GPU
+import qualified LambdaRay.GPU          as GPU
 
 
 runExpr :: GHC.GhcMonad m => GHC.ModSummary -> String -> m Bool
@@ -70,7 +69,5 @@ interpret modName = GHC.runGhc (Just libdir) $ do
 main :: IO ()
 main = do
   Env.getArgs >>= \case
-    args | all (`elem` args) ["-static", "-cpu"] -> CPU.main
-    args | all (`elem` args) ["-static"]         -> GPU.main
-    args | all (`elem` args) ["-cpu"]            -> interpret "CPU"
-    _                                            -> interpret "GPU"
+    args | all (`elem` args) ["-static"] -> GPU.main
+    _                                    -> interpret "GPU"

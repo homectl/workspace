@@ -17,6 +17,7 @@ source-repository head
 
 library
   default-language:    Haskell2010
+  hs-source-dirs: src, src-static
   exposed-modules:
       Graphics.GPipe.Context.GLFW
       Graphics.GPipe.Context.GLFW.Input
@@ -37,11 +38,10 @@ library
       Graphics.GPipe.Uniform
       Graphics.GPipe.Orphans
       LambdaRay.Config
-      LambdaRay.CPU
-      LambdaRay.CPUImage
       LambdaRay.GPU
       LambdaRay.Schwarzschild
-  other-modules:
+      -- Internal, don't use except in tests.
+  -- other-modules:
       Data.SNMap
       Graphics.GPipe.Context.GLFW.Calls
       Graphics.GPipe.Context.GLFW.Resource
@@ -65,7 +65,6 @@ library
       Graphics.GPipe.Internal.Orphans
   ghc-options:
       -Wall
-  hs-source-dirs: src, src-static
   build-depends:
       base              >= 4 && < 5
     , Boolean
@@ -83,9 +82,9 @@ library
     , transformers
 
 executable lambdaray
+  default-language: Haskell2010
   hs-source-dirs:   tools
   main-is:          lambdaray.hs
-  default-language: Haskell2010
   ghc-options:
       -Wall
       -threaded
@@ -93,4 +92,21 @@ executable lambdaray
       base < 5
     , ghc
     , ghc-paths
+    , lambdaray
+
+test-suite testsuite
+  default-language: Haskell2010
+  hs-source-dirs:   test
+  type: exitcode-stdio-1.0
+  main-is:          testsuite.hs
+  other-modules:
+      Graphics.GPipe.ExprSpec
+  ghc-options:
+      -Wall
+      -threaded
+  build-tool-depends:
+      hspec-discover:hspec-discover
+  build-depends:
+      base < 5
+    , hspec
     , lambdaray

@@ -31,7 +31,7 @@ module Graphics.GPipe.Internal.Shader (
 import           Control.Applicative              (Alternative, (<|>))
 import           Control.Monad                    (MonadPlus)
 import           Control.Monad.Exception          (MonadException)
-import           Control.Monad.IO.Class           (MonadIO)
+import           Control.Monad.IO.Class           (MonadIO (liftIO))
 import           Control.Monad.Trans.Class        (lift)
 import           Control.Monad.Trans.List         (ListT (..))
 import           Control.Monad.Trans.Reader       (ReaderT (..), ask)
@@ -83,12 +83,12 @@ newtype Shader os s a = Shader (ShaderM s a)  deriving (MonadPlus, Monad, Altern
 -- | Map the environment to a different environment and run a Shader in that sub environment, returning it's result.
 mapShader :: (s -> s') -> Shader os s' a -> Shader os s a
 mapShader f (Shader (ShaderM m)) = Shader $ ShaderM $ do
-        uniAl <- ask
-        lift $ WriterT $ ListT $ do
-            ShaderState x s <- get
-            let (adcs, ShaderState x' s') = runState (runListT (runWriterT (runReaderT m uniAl))) (ShaderState x newRenderIOState)
-            put $ ShaderState x' (mapRenderIOState f s' s)
-            return $ map (\(a,(dcs, disc)) -> (a, (map (>>= (return . mapDrawcall f)) dcs, disc . f))) adcs
+    uniAl <- ask
+    lift $ WriterT $ ListT $ do
+        ShaderState x s <- get
+        let (adcs, ShaderState x' s') = runState (runListT (runWriterT (runReaderT m uniAl))) (ShaderState x newRenderIOState)
+        put $ ShaderState x' (mapRenderIOState f s' s)
+        return $ map (\(a,(dcs, disc)) -> (a, (map (>>= (return . mapDrawcall f)) dcs, disc . f))) adcs
 
 -- | Conditionally run the effects of a shader when a 'Maybe' value is 'Just' something.
 maybeShader :: (s -> Maybe s') -> Shader os s' () -> Shader os s ()
@@ -108,25 +108,36 @@ chooseShader f a b = (guard' (isLeft . f) >> mapShader (fromLeft . f) a) <|> (gu
 -- | Discard all effects of a 'Shader' action (i.e., dont draw anything) and just return the resulting value.
 silenceShader :: Shader os s a -> Shader os s a
 silenceShader (Shader (ShaderM m)) = Shader $ ShaderM $ do
-        uniAl <- ask
-        lift $ WriterT $ ListT $ do
-            s <- get
-            let (adcs, s') = runState (runListT (runWriterT (runReaderT m uniAl))) s
-            put s'
-            return $ map (\ (a, (_, disc)) -> (a, ([], disc))) adcs
+    uniAl <- ask
+    lift $ WriterT $ ListT $ do
+        s <- get
+        let (adcs, s') = runState (runListT (runWriterT (runReaderT m uniAl))) s
+        put s'
+        return $ map (\ (a, (_, disc)) -> (a, ([], disc))) adcs
 
 -- | A compiled shader is just a function that takes an environment and returns a 'Render' action
 type CompiledShader os s = s -> Render os ()
+
+-- | Compile a shader into a set of draw calls and the IO state.
+--
+--   This function is pure, except for the execution of SNMap code.
+drawCalls :: Shader os s a -> UniformAlignment -> IO ([([Drawcall s], s -> All)], RenderIOState s)
+drawCalls (Shader (ShaderM m)) uniAl = do
+    let (adcs, ShaderState _ st) = runState (runListT (execWriterT (runReaderT m uniAl))) newShaderState
+    sdcs <- mapM (\(dcs, disc) -> do
+        sdcs <- sequence dcs -- IO only for SNMap
+        return (sdcs, disc)) adcs
+    return (sdcs, st)
 
 -- | Compiles a shader into a 'CompiledShader'. This action will usually take a second or more, so put it during a loading sequence or something.
 --
 --   May throw a 'GPipeException' if the graphics driver doesn't support something in this shader (e.g. too many interpolated floats sent between a vertex and a fragment shader)
 compileShader :: (ContextHandler ctx, MonadIO m, MonadException m) => Shader os x () -> ContextT ctx os m (CompiledShader os x)
-compileShader (Shader (ShaderM m)) = do
-        uniAl <- liftNonWinContextIO getUniformAlignment
-        let (adcs, ShaderState _ st) = runState (runListT (execWriterT (runReaderT m uniAl))) newShaderState
-        xs <- mapM (\(dcs, disc) -> do rf <- compile dcs st
-                                       return (rf, disc)) adcs
-        return $ \ s -> case find (\(_,disc) -> getAll (disc s)) xs of
-                          Nothing -> error "render: Shader evaluated to mzero"
-                          Just (rf,_) -> rf s
+compileShader shader = do
+    uniAl <- liftNonWinContextIO getUniformAlignment
+    (adcs, st) <- liftIO $ drawCalls shader uniAl
+    xs <- mapM (\(dcs, disc) -> do rf <- compile dcs st
+                                   return (rf, disc)) adcs
+    return $ \ s -> case find (\(_,disc) -> getAll (disc s)) xs of
+                    Nothing     -> error "render: Shader evaluated to mzero"
+                    Just (rf,_) -> rf s

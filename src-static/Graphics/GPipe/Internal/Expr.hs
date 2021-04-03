@@ -10,6 +10,7 @@
 {-# LANGUAGE TypeFamilies              #-}
 
 {-# OPTIONS_GHC -Wno-type-defaults #-}
+{-# OPTIONS_GHC -Wno-missing-signatures #-}
 module Graphics.GPipe.Internal.Expr where
 
 import           Control.Applicative        (liftA, liftA2, liftA3)
@@ -66,11 +67,11 @@ stypeSize (STypeUVec n) = n * 4
 stypeSize _             = 4
 
 type ExprM = SNMapReaderT [String] (StateT ExprState (WriterT String (StateT NextTempVar IO))) -- IO for stable names
-data ExprState = ExprState {
-                shaderUsedUniformBlocks :: Map.IntMap (GlobDeclM ()),
-                shaderUsedSamplers :: Map.IntMap (GlobDeclM ()),
-                shaderUsedInput :: Map.IntMap (GlobDeclM (), (ExprM (), GlobDeclM ())) -- For vertex shaders, the shaderM is always undefined and the int is the parameter name, for later shader stages it uses some name local to the transition instead
-                 }
+data ExprState = ExprState
+    { shaderUsedUniformBlocks :: Map.IntMap (GlobDeclM ())
+    , shaderUsedSamplers      :: Map.IntMap (GlobDeclM ())
+    , shaderUsedInput         :: Map.IntMap (GlobDeclM (), (ExprM (), GlobDeclM ())) -- For vertex shaders, the shaderM is always undefined and the int is the parameter name, for later shader stages it uses some name local to the transition instead
+    }
 
 runExprM :: GlobDeclM () -> ExprM () -> IO (String, [Int], [Int], [Int], GlobDeclM (), ExprM ())
 runExprM d m = do
@@ -285,8 +286,7 @@ shaderbaseAssignDef  (S shaderM) = do ul <- T.lift shaderM
                                       return ()
 shaderbaseReturnDef :: ReaderT (ExprM [String]) (State Int) (S x a)
 shaderbaseReturnDef = do i <- T.lift getNext
-                         m <- ask
-                         return $ S $ fmap (!!i) m
+                         S . fmap (!!i) <$> ask
 
 -- | Constraint for types that may pass in and out of shader control structures. Define your own instances in terms of others and make sure to
 --   make toBase as lazy as possible.

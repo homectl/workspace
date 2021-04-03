@@ -71,9 +71,8 @@ mapRenderIOState f (RenderIOState a b c d) (RenderIOState i j k l) = let g x = x
 
 
 -- | May throw a GPipeException
-compile :: (Monad m, MonadIO m, MonadException m, ContextHandler ctx) => [IO (Drawcall s)] -> RenderIOState s -> ContextT ctx os m (s -> Render os ())
-compile dcs s = do
-    drawcalls <- liftIO $ sequence dcs -- IO only for SNMap
+compile :: (Monad m, MonadIO m, MonadException m, ContextHandler ctx) => [Drawcall s] -> RenderIOState s -> ContextT ctx os m (s -> Render os ())
+compile drawcalls s = do
     (maxUnis,
      maxSamplers,
      maxVUnis,

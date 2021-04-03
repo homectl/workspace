@@ -99,10 +99,7 @@ drawStencil :: forall a os f s st. StencilRenderable st => (s -> (Blending, Imag
 drawDepthStencil :: forall a os f s d st. (DepthRenderable d, StencilRenderable st) => (s -> (Blending, Image (Format d), Image (Format st), DepthStencilOption)) -> FragmentStream (a, FragDepth) -> (a -> DrawColors os s ()) -> Shader os s ()
 
 makeFBOKeys :: IO [FBOKey] -> IO (Maybe FBOKey) -> IO (Maybe FBOKey) -> IO FBOKeys
-makeFBOKeys c d s = do c' <- c
-                       d' <- d
-                       s' <- s
-                       return $ FBOKeys c' d' s'
+makeFBOKeys c d s = FBOKeys <$> c <*> d <*> s
 
 draw sf fs m = Shader $ tellDrawcalls fs $ \c -> let (sh,g,ioc) = runDrawColors (m c) in (sh, g, f ioc)
     where f ioc s = let (fbokeyio, fboio, io) = ioc s
@@ -173,15 +170,19 @@ drawWindowColorDepthStencil sf fs = Shader $ tellDrawcalls fs $ \ (c,d) -> let (
                                         where io s = let (w, cop, dop) = sf s in (Left (getWinName w), setGlContextColorOptions cf cop >> setGlDepthStencilOptions dop)
                                               cf = undefined :: c
 
-tellDrawcalls :: FragmentStream a -> (a -> (ExprM (), GlobDeclM (), s -> (Either WinId (IO FBOKeys, IO ()), IO ()))) -> ShaderM s ()
+type DrawcallInfo s = (ExprM (), GlobDeclM (), s -> (Either WinId (IO FBOKeys, IO ()), IO ()))
+
+tellDrawcalls :: FragmentStream a -> (a -> DrawcallInfo s) -> ShaderM s ()
 tellDrawcalls (FragmentStream xs) f = do
                                let g (x, fd) = tellDrawcall $ makeDrawcall (f x) fd
                                mapM_ g xs
 
-makeDrawcall :: (ExprM (), GlobDeclM (), s -> (Either WinId (IO FBOKeys, IO ()), IO ())) -> FragmentStreamData -> IO (Drawcall s)
+makeDrawcall :: DrawcallInfo s -> FragmentStreamData -> IO (Drawcall s)
 makeDrawcall (sh, shd, wOrIo) (FragmentStreamData rastN shaderpos (PrimitiveStreamData primN ubuff) keep) =
        do (fsource, funis, fsamps, _, prevDecls, prevS) <- runExprM shd (discard keep >> sh)
           (vsource, vunis, vsamps, vinps, _, _) <- runExprM prevDecls (prevS >> shaderpos)
+          writeFile "data/shader.frag" fsource
+          writeFile "data/shader.vert" vsource
           return $ Drawcall wOrIo primN rastN vsource fsource vinps vunis vsamps funis fsamps ubuff
 
 setColor :: forall c. ColorSampleable c => c -> Int -> FragColor c -> (ExprM (), GlobDeclM ())
