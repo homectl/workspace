@@ -48,7 +48,7 @@ viewMatrix cameraPos = V3 leftVec nupVec frontVec
 data Context a = Context
     { ctxPoint       :: V3 a
     , ctxVelocity    :: V3 a
-    , ctxStepsize :: a
+    , ctxStepsize    :: a
     , ctxObjectColor :: V4 a
     }
 
@@ -134,7 +134,7 @@ computeVelocity MethodLeapFrog stepsize h2 velocity newpoint newpointsqr = (newv
     accel = (-1.5) * h2 *^ newpoint ^/ (newpointsqr ** 2.5)
     newvelocity = velocity + accel ^* stepsize
     -- step = abs $ norm velocity - norm newvelocity
-    newstepsize = stepsize * 0.97
+    newstepsize = stepsize -- * 0.97
 
 
 iteration :: Config FFloat -> FFloat -> FFloat -> Context FFloat -> Context FFloat

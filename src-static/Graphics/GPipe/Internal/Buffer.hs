@@ -75,14 +75,14 @@ class BufferFormat f where
     getGlPaddedFormat = error "This is only defined for BufferColor types"
 
 -- | A @Buffer os b@ lives in the object space @os@ and contains elements of type @b@.
-data Buffer os b = Buffer {
-                    bufName        :: BufferName,
-                    bufElementSize :: Int,
-                    -- | Retrieve the number of elements in a buffer.
-                    bufferLength   :: Int,
-                    bufBElement    :: BInput -> b,
-                    bufWriter      :: Ptr () -> HostFormat b -> IO ()
-                    }
+data Buffer os b = Buffer
+    { bufName        :: BufferName
+    , bufElementSize :: Int
+    -- | Retrieve the number of elements in a buffer.
+    , bufferLength   :: Int
+    , bufBElement    :: BInput -> b
+    , bufWriter      :: Ptr () -> HostFormat b -> IO ()
+    }
 
 instance Eq (Buffer os b) where
     a == b = bufName a == bufName b
@@ -103,9 +103,9 @@ data AlignmentMode = Align4 | AlignUniform | AlignPackedIndices | AlignUnknown d
 
 -- | The arrow type for 'toBuffer'.
 data ToBuffer a b = ToBuffer
-    !(Kleisli (StateT Offset (WriterT [Int] (Reader (UniformAlignment, AlignmentMode)))) a b) -- Normal = aligned to 4 bytes
-    !(Kleisli (StateT Offset (Reader (BufferName, Stride, BInput))) a b)
-    !(Kleisli (StateT (Ptr (), [Int]) IO) a b) -- Normal = aligned to 4 bytes
+    (Kleisli (StateT Offset (WriterT [Int] (Reader (UniformAlignment, AlignmentMode)))) a b) -- Normal = aligned to 4 bytes
+    (Kleisli (StateT Offset (Reader (BufferName, Stride, BInput))) a b)
+    (Kleisli (StateT (Ptr (), [Int]) IO) a b) -- Normal = aligned to 4 bytes
     !AlignmentMode
 
 instance Category ToBuffer where
@@ -343,8 +343,9 @@ newBuffer elementCount | elementCount < 0 = error "newBuffer, length negative"
     return buffer
 
 bufferWriteInternal :: Buffer os f -> Ptr () -> [HostFormat f] -> IO (Ptr ())
-bufferWriteInternal b ptr (x:xs) = do bufWriter b ptr x
-                                      bufferWriteInternal b (ptr `plusPtr` bufElementSize b) xs
+bufferWriteInternal b ptr (x:xs) = do
+    bufWriter b ptr x
+    bufferWriteInternal b (ptr `plusPtr` bufElementSize b) xs
 bufferWriteInternal _ ptr [] = return ptr
 
 -- | Write a buffer from the host (i.e. the normal Haskell world).
@@ -413,7 +414,7 @@ makeBuffer name elementCount uniformAlignment  = do
         err = error "toBuffer is creating values that are dependant on the actual HostFormat values, this is not allowed since it doesn't allow static creation of shaders" :: HostFormat b
         ((_,elementSize),pads) = runReader (runWriterT (runStateT (runKleisli a err) 0)) (uniformAlignment, m)
         elementF bIn = fst $ runReader (runStateT (runKleisli b err) 0) (name, elementSize, bIn)
-        writer ptr x = void $ runStateT (runKleisli c x) (ptr,pads)
+        writer ptr xs = void $ runStateT (runKleisli c xs) (ptr,pads)
     Buffer name elementSize elementCount elementF writer
 
 -- | This type family restricts what host and buffer types a texture format may be converted into.

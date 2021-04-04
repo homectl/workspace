@@ -34,7 +34,7 @@ defaultConfig = Config
     , horizonMode = HorizonBlack
     , diskMode = DiskSolid
     , skyMode = SkyBlack
-    , iterations = 250
+    , iterations = 70
     -- 0.4 is the maximum before you end up with lots of additional Einstein rings.
     , stepsize = 0.4
     }
