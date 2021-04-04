@@ -8,8 +8,8 @@ import           Graphics.GPipe.Internal.Expr
 
 spec :: Spec
 spec = do
-    describe "analyse" $ do
-        it "should parse a simple function" $ do
+    describe "expressions" $ do
+        it "should be able to add two numbers" $ do
             let a = (1 :: FFloat)
                 b = (2 :: FFloat)
                 c = a + b

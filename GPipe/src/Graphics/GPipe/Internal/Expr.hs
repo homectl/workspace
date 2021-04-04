@@ -80,23 +80,25 @@ data ExprState = ExprState
 
 runExprM :: GlobDeclM () -> ExprM () -> IO (Text, [Int], [Int], [Int], GlobDeclM (), ExprM ())
 runExprM d m = do
-               (st, body) <- evalStateT (runWriterT (execStateT (runSNMapReaderT (m :: ExprM ())) (ExprState Map.empty Map.empty Map.empty))) 0
-               let (unis, uniDecls) = unzip $ Map.toAscList (shaderUsedUniformBlocks st)
-                   (samps, sampDecls) = unzip $ Map.toAscList (shaderUsedSamplers st)
-                   (inps, inpDescs) = unzip $ Map.toAscList (shaderUsedInput st)
-                   (inpDecls, prevDesc) = unzip inpDescs
-                   (prevSs, prevDecls) = unzip prevDesc
-                   decls = do d
-                              sequence_ uniDecls
-                              sequence_ sampDecls
-                              sequence_ inpDecls
-                   source = mconcat [
-                                "#version 330\n",
-                                execWriter decls,
-                                "void main() {\n",
-                                body,
-                                "}\n"]
-               return (source, unis, samps, inps, sequence_ prevDecls, sequence_ prevSs)
+    (st, body) <- evalStateT (runWriterT (execStateT (runSNMapReaderT (m :: ExprM ())) (ExprState Map.empty Map.empty Map.empty))) 0
+    let (unis, uniDecls) = unzip $ Map.toAscList (shaderUsedUniformBlocks st)
+        (samps, sampDecls) = unzip $ Map.toAscList (shaderUsedSamplers st)
+        (inps, inpDescs) = unzip $ Map.toAscList (shaderUsedInput st)
+        (inpDecls, prevDesc) = unzip inpDescs
+        (prevSs, prevDecls) = unzip prevDesc
+        decls = do
+            d
+            sequence_ uniDecls
+            sequence_ sampDecls
+            sequence_ inpDecls
+        source = mconcat
+            [ "#version 330\n"
+            , execWriter decls
+            , "void main() {\n"
+            , body
+            , "}\n"
+            ]
+    return (source, unis, samps, inps, sequence_ prevDecls, sequence_ prevSs)
 
 type GlobDeclM = Writer Text
 

@@ -1,6 +1,6 @@
 name:           GPipe
-version:        2.2.4
-cabal-version:  >= 1.8
+version:        2.2.5
+cabal-version:  >= 1.10
 build-type:     Simple
 author:         Tobias Bexelius
 license:        MIT
@@ -21,6 +21,7 @@ data-files:     CHANGELOG.md
 
 library
   hs-source-dirs: src
+  default-language: Haskell2010
   build-depends:
       base < 5
     , Boolean
@@ -61,38 +62,3 @@ library
       Graphics.GPipe.Internal.Texture
       Graphics.GPipe.Internal.Uniform
       Graphics.GPipe.Internal.Orphans
-
-test-suite testsuite
-  default-language: Haskell2010
-  hs-source-dirs:   test
-  type: exitcode-stdio-1.0
-  main-is:          testsuite.hs
-  other-modules:
-      Graphics.GPipe.BufferSpec
-      Graphics.GPipe.ExprSpec
-  ghc-options:
-      -Wall
-      -threaded
-  build-tool-depends:
-      hspec-discover:hspec-discover
-  build-depends:
-      base < 5
-    , GPipe
-    , hspec
-
-benchmark bench
-  default-language: Haskell2010
-  hs-source-dirs:   bench
-  type: exitcode-stdio-1.0
-  main-is:          bench.hs
-  other-modules:
-      Graphics.GPipe.BufferBench
-      Graphics.GPipe.TextureBench
-  ghc-options:
-      -Wall
-      -threaded
-  build-depends:
-      base < 5
-    , GPipe
-    , JuicyPixels
-    , criterion
