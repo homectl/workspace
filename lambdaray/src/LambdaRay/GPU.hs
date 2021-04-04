@@ -15,6 +15,7 @@ import           Control.Monad                     (unless)
 import           Control.Monad.IO.Class            (MonadIO, liftIO)
 import qualified Data.Time.Clock                   as Time
 import           Graphics.GPipe
+import qualified System.Environment as Env
 import qualified Graphics.GPipe.Context.GLFW       as GLFW
 import qualified Graphics.GPipe.Context.GLFW.Input as Input
 import           LambdaRay.Config                  (Config (..), DiskMode (..),
@@ -50,6 +51,7 @@ renderSchwarzschild win (uniformBuffer :: Buffer os (Uniform (B Float, B Float, 
 
 main :: IO ()
 main = do
+    Env.setEnv "GPIPE_DEBUG" "1"
     runContextT GLFW.defaultHandleConfig $ do
       let V2 w h = viewPort
       win <- newWindow (WindowFormatColor RGB8) $ (GLFW.defaultWindowConfig "LambdaRay")

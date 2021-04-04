@@ -49,7 +49,8 @@ data Context a = Context
     { ctxPoint       :: V3 a
     , ctxVelocity    :: V3 a
     , ctxStepsize    :: a
-    , ctxObjectColor :: V4 a
+    , ctxObjectColor :: V3 a
+    , ctxObjectAlpha :: a
     }
 
 -- instance ShaderType (Context FFloat) x where
@@ -58,18 +59,15 @@ data Context a = Context
 --     fromBase x b = undefined
 
 
-blendcolors :: Num a => V4 a -> V4 a -> V4 a
-blendcolors ca cb =
-    V4 (color ^. _x) (color ^. _y) (color ^. _z) alpha
-  where
-    aa = ca ^. _w
-    ba = cb ^. _w
-    color = ca ^. _xyz + cb ^. _xyz ^* (ba * (1 - aa))
-    alpha = aa + ba * (1 - aa)
+blendcolors :: Num a => V3 a -> a -> V3 a -> a -> V3 a
+blendcolors ca aa cb ba = ca + cb ^* (ba * (1 - aa))
+
+blendalpha :: Num a => a -> a -> a
+blendalpha aa ba = aa + ba * (1 - aa)
 
 
-computeSkyColor :: Real' a => SkyMode a -> V3 a -> V4 a
-computeSkyColor SkyBlack _ = V4 0 0 0 1
+computeSkyColor :: Real' a => SkyMode a -> V3 a -> V3 a
+computeSkyColor SkyBlack _ = V3 0 0 0
 computeSkyColor (SkyTexture samp) velocity = skycolor
   where
     vphi = atan2' (velocity ^. _x) (velocity ^. _z)
@@ -78,11 +76,10 @@ computeSkyColor (SkyTexture samp) velocity = skycolor
     u = mod'' (vphi+4.5)(2*pi) / (2*pi)
     v = (vtheta+pi/2)/pi
 
-    skycolor3 = samp (V2 u v)
-    skycolor = V4 (skycolor3 ^. _x) (skycolor3 ^. _y) (skycolor3 ^. _z) 1
+    skycolor = samp (V2 u v)
 
 
-computeDiskColor :: FFloat -> V3 FFloat -> V3 FFloat -> DiskMode FFloat -> V4 FFloat
+computeDiskColor :: FFloat -> V3 FFloat -> V3 FFloat -> DiskMode FFloat -> (V3 FFloat, FFloat)
 computeDiskColor time velocity newpoint = compute
   where
     -- actual collision point by intersection
@@ -92,27 +89,26 @@ computeDiskColor time velocity newpoint = compute
 
     phi = atan2' (colpoint ^. _x) (newpoint ^. _z) + time / 30
 
-    compute DiskSolid = V4 0.5 0.5 0.5 1
+    compute DiskSolid = (V3 0.5 0.5 0.5, 1)
 
-    compute (DiskTexture samp) = diskcolor
+    compute (DiskTexture samp) = (diskcolor, diskalpha)
       where
         u = ((phi + 2*pi) `mod''` 2*pi) / (2*pi)
         v = (sqrt colpointsqr - diskInner) / diskWidth
 
-        diskcolor3 = samp (V2 u v)
-        diskalpha = clip (sqrnorm diskcolor3 / 3.0) 0 1
-        diskcolor = V4 (diskcolor3 ^. _x) (diskcolor3 ^. _y) (diskcolor3 ^. _z) diskalpha
+        diskcolor = samp (V2 u v)
+        diskalpha = clip (sqrnorm diskcolor / 3.0) 0 1
 
-    compute DiskGrid = diskcolor
+    compute DiskGrid = (diskcolor, 1)
       where
         diskcolor = ifThenElse' (phi `mod''` 0.52359 <* 0.261799)
-            (V4 1 1 1 1)
-            (V4 0 0 1 1)
+            (V3 1 1 1)
+            (V3 0 0 1)
 
 
-computeHorizonColor :: HorizonMode -> V3 FFloat -> FFloat -> V3 FFloat -> FFloat -> V4 FFloat
-computeHorizonColor HorizonBlack _ _ _ _ = V4 0 0 0 1
-computeHorizonColor HorizonGrid oldpoint oldpointsqr newpoint newpointsqr = horizoncolor
+computeHorizonColor :: HorizonMode -> V3 FFloat -> FFloat -> V3 FFloat -> FFloat -> (V3 FFloat, FFloat)
+computeHorizonColor HorizonBlack _ _ _ _ = (V3 0 0 0, 1)
+computeHorizonColor HorizonGrid oldpoint oldpointsqr newpoint newpointsqr = (horizoncolor, 1)
   where
     lambdaa = 1 - (1 - oldpointsqr) / (newpointsqr - oldpointsqr)
     colpoint = lambdaa *^ newpoint + (1 - lambdaa) *^ oldpoint
@@ -121,8 +117,8 @@ computeHorizonColor HorizonGrid oldpoint oldpointsqr newpoint newpointsqr = hori
     theta = atan2' (colpoint ^. _y) (norm (newpoint ^. _xz))
 
     horizoncolor = ifThenElse' (((phi `mod''` 1.04719) <* 0.52359) `xorB` ((theta `mod''` 1.04719) <* 0.52359))
-        (V4 1 0 0 1)
-        (V4 0 0 0 1)
+        (V3 1 0 0)
+        (V3 0 0 0)
 
 
 computeVelocity :: Floating a => DistortionMethod -> a -> a -> a -> V3 a -> V3 a -> a -> (V3 a, a)
@@ -153,17 +149,23 @@ iteration Config{distortionMethod,diskMode,horizonMode} RuntimeConfig{..} (h2 ::
     maskDistance = newpointsqr <* diskOuterSqr &&* newpointsqr >* diskInnerSqr
 
     diskMask = maskCrossing &&* maskDistance
-    diskcolor = ifThenElse' diskMask (computeDiskColor time (ctxVelocity ctx) newpoint diskMode) 0
+    (diskcolor, diskalpha) = ifThenElse' diskMask (computeDiskColor time (ctxVelocity ctx) newpoint diskMode) (0, 0)
 
     -- event horizon
     horizonMask = newpointsqr <* 1 &&* oldpointsqr >* 1
-    horizoncolor = ifThenElse' horizonMask (computeHorizonColor horizonMode oldpoint oldpointsqr newpoint newpointsqr) 0
+    (horizoncolor, horizonalpha) = ifThenElse' horizonMask (computeHorizonColor horizonMode oldpoint oldpointsqr newpoint newpointsqr) (0, 0)
+
+    c1 = blendcolors (ctxObjectColor ctx) (ctxObjectAlpha ctx) horizoncolor horizonalpha
+    a1 = blendalpha (ctxObjectAlpha ctx) horizonalpha
+    c2 = blendcolors c1 a1 diskcolor diskalpha
+    a2 = blendalpha a1 diskalpha
 
     nctx = Context
       { ctxPoint = newpoint
       , ctxVelocity = newvelocity
       , ctxStepsize = newstepsize
-      , ctxObjectColor = blendcolors (blendcolors (ctxObjectColor ctx) horizoncolor) diskcolor
+      , ctxObjectColor = c2
+      , ctxObjectAlpha = a2
       }
 
 
@@ -179,14 +181,15 @@ frag cfg@Config{iterations} viewPort rt@RuntimeConfig{..} (V2 x y) = result
 
     h2 = sqrnorm (cross pos view)
 
-    Context{ctxVelocity, ctxObjectColor} =
+    Context{ctxVelocity, ctxObjectColor, ctxObjectAlpha} =
       foldr (const $ iteration cfg rt h2)
         Context { ctxPoint = pos
                 , ctxVelocity = view
                 , ctxStepsize = stepsize
-                , ctxObjectColor = V4 0 0 0 0
+                , ctxObjectColor = V3 0 0 0
+                , ctxObjectAlpha = 0
                 } [0..iterations]
 
     skycolor = computeSkyColor (skyMode cfg) ctxVelocity
 
-    result = blendcolors ctxObjectColor skycolor ^. _xyz
+    result = blendcolors ctxObjectColor ctxObjectAlpha skycolor 1
