@@ -36,7 +36,7 @@ renderSchwarzschild win (uniformBuffer :: Buffer os (Uniform (B Float, B Float, 
     fragmentStream <- rasterize (const (FrontAndBack, ViewPort (V2 0 0) viewPort, DepthRange 0 1)) primitiveStream
 
     let filterMode = SamplerFilter Linear Linear Linear (Just 4)
-    diskSamp <- newSampler2D (const (diskTex, filterMode, (pure Repeat, undefined)))
+    diskSamp <- newSampler2D (const (diskTex, filterMode, (pure ClampToEdge, undefined)))
     skySamp <- newSampler2D (const (skyTex, filterMode, (pure Repeat, undefined)))
 
     let cfg = defaultConfig
@@ -123,6 +123,7 @@ main = do
         timeIt "=> Uploading to GPU" $ do
           tex <- newTexture2D SRGB8 size maxBound -- JPG converts to SRGB
           writeTexture2D tex 0 0 size pixels
+          generateTexture2DMipmap tex
           return tex
 
 

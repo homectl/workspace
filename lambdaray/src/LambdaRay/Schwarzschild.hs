@@ -20,7 +20,7 @@ sqrnorm vec = n * n
   where n = norm vec
 
 clip :: (IfB a, OrdB a) => a -> a -> a -> a
-clip x lo hi = maxB (minB x hi) lo
+clip lo hi x = maxB (minB x hi) lo
 
 xorB :: Boolean b => b -> b -> b
 xorB a b = a &&* notB b ||* b &&* notB a
@@ -84,7 +84,7 @@ computeDiskColor time velocity newpoint = compute
   where
     -- actual collision point by intersection
     lambdaa = -(newpoint ^. _y / (velocity ^. _y))
-    colpoint = newpoint + velocity ^* lambdaa
+    colpoint = newpoint + lambdaa *^ velocity
     colpointsqr = sqrnorm colpoint
 
     phi = atan2' (colpoint ^. _x) (newpoint ^. _z) + time / 30
@@ -97,7 +97,7 @@ computeDiskColor time velocity newpoint = compute
         v = (sqrt colpointsqr - diskInner) / diskWidth
 
         diskcolor = samp (V2 u v)
-        diskalpha = clip (sqrnorm diskcolor / 3.0) 0 1
+        diskalpha = clip 0 1 (sqrnorm diskcolor / 3.0)
 
     compute DiskGrid = (diskcolor, 1)
       where
