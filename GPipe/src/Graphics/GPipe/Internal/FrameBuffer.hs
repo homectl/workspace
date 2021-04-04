@@ -6,7 +6,7 @@
 {-# OPTIONS_GHC -Wno-unused-matches #-}
 module Graphics.GPipe.Internal.FrameBuffer where
 
-import           Control.Monad                           (void, when)
+import           Control.Monad                           (forM_, void, when)
 import           Control.Monad.Trans.Class               (MonadTrans (lift))
 import           Control.Monad.Trans.State.Lazy          (StateT (..), get, put)
 import qualified Control.Monad.Trans.State.Strict        as StrictState
@@ -14,6 +14,7 @@ import           Control.Monad.Trans.Writer.Lazy         (Writer, execWriter,
                                                           tell)
 import           Data.List                               (intercalate)
 import qualified Data.Text                               as Text
+import qualified Data.Text.IO                            as Text
 import           Graphics.GPipe.Internal.Compiler        (Drawcall (Drawcall),
                                                           WinId, getFBOerror)
 import           Graphics.GPipe.Internal.Context         (FBOKey,
@@ -60,34 +61,42 @@ import           Foreign.Storable                        (peek)
 import           Graphics.GL.Core33
 import           Graphics.GL.Types                       (GLenum, GLuint)
 import           Linear.V4                               (V4 (..))
+import qualified System.Environment                      as Env
 
 -- | A monad in which individual color images can be drawn.
 newtype DrawColors os s a = DrawColors (StateT Int (Writer [Int -> (ExprM (), GlobDeclM (), s -> (IO FBOKey, IO (), IO ()))]) a) deriving (Functor, Applicative, Monad)
 
 runDrawColors :: DrawColors os s a -> (ExprM (), GlobDeclM (), s -> (IO [FBOKey], IO (), IO ()))
-runDrawColors (DrawColors m) = foldl sf (return (), return (), const (return [], return (), return ())) $ zip [0..] $ execWriter (runStateT m 0)
-    where sf (ms, mg, mio) (n, f) = let (sh, g, io) = f n in (ms >> sh, mg >> g, sf' mio io )
-          sf' mio io s = let (a,b,c) = mio s
-                             (x,y,z) = io s
-                         in (do ns <- a
-                                n <- x
-                                return $ ns ++ [n]
-                            , b >> y, c >> z)
+runDrawColors (DrawColors m) =
+    foldl sf (return (), return (), const (return [], return (), return ())) $ zip [0..] $ execWriter (runStateT m 0)
+  where
+    sf (ms, mg, mio) (n, f) =
+        let (sh, g, io) = f n in
+        (ms >> sh, mg >> g, sf' mio io )
+    sf' mio io s =
+        let (a,b,c) = mio s
+            (x,y,z) = io s
+        in (do ns <- a
+               n <- x
+               return $ ns ++ [n]
+           , b >> y, c >> z)
 
 -- | Draw color values into a color renderable texture image.
 drawColor :: forall c s os. ColorRenderable c => (s -> (Image (Format c), ColorMask c, UseBlending)) -> FragColor c -> DrawColors os s ()
-drawColor sf c = DrawColors $ do n <- get
-                                 put $ n+1
-                                 lift $ tell [\ix -> make3  (setColor cf ix c) $ \s -> let (i, mask, o) = sf s
-                                                                                           n' = fromIntegral n
-                                                                                           useblend = if o then glEnablei GL_BLEND n' else glDisablei GL_BLEND n'
-                                                                                       in (getImageFBOKey i,
-                                                                                           getImageBinding i (GL_COLOR_ATTACHMENT0 + n'),
-                                                                                            do
-                                                                                             useblend
-                                                                                             setGlColorMask cf n' mask)
-                                                                                       ]
-    where cf = undefined :: c
+drawColor sf c = DrawColors $ do
+    n <- get
+    put $ n+1
+    lift $ tell [\ix -> make3 (setColor cf ix c) $ \s ->
+        let (i, mask, o) = sf s
+            n' = fromIntegral n
+            useblend = if o then glEnablei GL_BLEND n' else glDisablei GL_BLEND n'
+        in (getImageFBOKey i,
+            getImageBinding i (GL_COLOR_ATTACHMENT0 + n'),
+            do
+              useblend
+              setGlColorMask cf n' mask)
+        ]
+  where cf = undefined :: c
 
 -- | Draw all fragments in a 'FragmentStream' using the provided function that passes each fragment value into a 'DrawColors' monad. The first argument is a function
 --   that retrieves a 'Blending' setting from the shader environment, which will be used for all 'drawColor' actions in the 'DrawColors' monad where 'UseBlending' is 'True'.
@@ -176,16 +185,24 @@ type DrawcallInfo s = (ExprM (), GlobDeclM (), s -> (Either WinId (IO FBOKeys, I
 
 tellDrawcalls :: FragmentStream a -> (a -> DrawcallInfo s) -> ShaderM s ()
 tellDrawcalls (FragmentStream xs) f = do
-                               let g (x, fd) = tellDrawcall $ makeDrawcall (f x) fd
-                               mapM_ g xs
+    let g (x, fd) = tellDrawcall $ makeDrawcall (f x) fd
+    mapM_ g xs
+
 
 makeDrawcall :: DrawcallInfo s -> FragmentStreamData -> IO (Drawcall s)
-makeDrawcall (sh, shd, wOrIo) (FragmentStreamData rastN shaderpos (PrimitiveStreamData primN ubuff) keep) =
-       do (fsource, funis, fsamps, _, prevDecls, prevS) <- runExprM shd (discard keep >> sh)
-          (vsource, vunis, vsamps, vinps, _, _) <- runExprM prevDecls (prevS >> shaderpos)
-          writeFile "data/shader.frag" (Text.unpack fsource)
-          writeFile "data/shader.vert" (Text.unpack vsource)
-          return $ Drawcall wOrIo primN rastN vsource fsource vinps vunis vsamps funis fsamps ubuff
+makeDrawcall (sh, shd, wOrIo) (FragmentStreamData rastN shaderpos (PrimitiveStreamData primN ubuff) keep) = do
+    (fsource, funis, fsamps, _, prevDecls, prevS) <- runExprM shd (discard keep >> sh)
+    (vsource, vunis, vsamps, vinps, _, _) <- runExprM prevDecls (prevS >> shaderpos)
+    dumpGeneratedFile "generated-shaders/shader.frag" fsource
+    dumpGeneratedFile "generated-shaders/shader.vert" vsource
+    return $ Drawcall wOrIo primN rastN vsource fsource vinps vunis vsamps funis fsamps ubuff
+
+
+dumpGeneratedFile :: FilePath -> Text.Text -> IO ()
+dumpGeneratedFile file text = do
+    shouldWrite <- ("GPIPE_DEBUG" `elem`) . map fst <$> Env.getEnvironment
+    when shouldWrite $ Text.writeFile file text
+
 
 setColor :: forall c. ColorSampleable c => c -> Int -> FragColor c -> (ExprM (), GlobDeclM ())
 setColor ct n c = let    name = "out" <> tshow n
@@ -520,9 +537,7 @@ clearWindowDepthStencil w d s = inWin w $ do
 
 maybeThrow :: Monad m => ExceptT e m (Maybe e) -> ExceptT e m ()
 maybeThrow m = do mErr <- m
-                  case mErr of
-                     Just err -> throwE err
-                     Nothing  -> return ()
+                  forM_ mErr throwE
 
 ---------------
 glTrue :: Num n => n

@@ -61,7 +61,16 @@ test-suite testsuite
   type: exitcode-stdio-1.0
   main-is:          testsuite.hs
   other-modules:
+      Graphics.GPipe.Context.GLFW.CloseSpec
+      Graphics.GPipe.Context.GLFW.FixedSpec
+      Graphics.GPipe.Context.GLFW.InputSpec
+      Graphics.GPipe.Context.GLFW.ManualSpec
+      Graphics.GPipe.Context.GLFW.MultiSpec
+      Graphics.GPipe.Context.GLFW.SequenceSpec
+      Graphics.GPipe.Context.GLFW.TimedSpec
       Graphics.GPipe.BufferSpec
+      Test.Common
+      Test.Control
   ghc-options:
       -Wall
       -threaded
@@ -71,7 +80,9 @@ test-suite testsuite
       base < 5
     , GPipe
     , GPipe-GLFW
+    , exception-transformers
     , hspec
+    , transformers
 
 benchmark bench
   default-language: Haskell2010

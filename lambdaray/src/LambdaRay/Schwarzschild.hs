@@ -37,7 +37,7 @@ diskOuterSqr = fromIntegral (14 * 14 :: Int)
 viewMatrix :: Floating a => V3 a -> V3 (V3 a)
 viewMatrix cameraPos = V3 leftVec nupVec frontVec
   where
-    lookAt = V3 0 3 0
+    lookAt = V3 0 0 0
     upVec = V3 0.2 1 0
 
     frontVec = signorm (lookAt - cameraPos)
@@ -82,8 +82,8 @@ computeSkyColor (SkyTexture samp) velocity = skycolor
     skycolor = V4 (skycolor3 ^. _x) (skycolor3 ^. _y) (skycolor3 ^. _z) 1
 
 
-computeDiskColor :: FFloat -> V3 FFloat -> V3 FFloat -> FBool -> DiskMode FFloat -> V4 FFloat
-computeDiskColor time velocity newpoint diskMask = compute
+computeDiskColor :: FFloat -> V3 FFloat -> V3 FFloat -> DiskMode FFloat -> V4 FFloat
+computeDiskColor time velocity newpoint = compute
   where
     -- actual collision point by intersection
     lambdaa = -(newpoint ^. _y / (velocity ^. _y))
@@ -100,20 +100,19 @@ computeDiskColor time velocity newpoint diskMask = compute
         v = (sqrt colpointsqr - diskInner) / diskWidth
 
         diskcolor3 = samp (V2 u v)
-        diskalpha = ifThenElse' diskMask 1 0 * clip (sqrnorm diskcolor3 / 3.0) 0 1
+        diskalpha = clip (sqrnorm diskcolor3 / 3.0) 0 1
         diskcolor = V4 (diskcolor3 ^. _x) (diskcolor3 ^. _y) (diskcolor3 ^. _z) diskalpha
 
     compute DiskGrid = diskcolor
       where
-        diskalpha = ifThenElse' diskMask 1 0
         diskcolor = ifThenElse' (phi `mod''` 0.52359 <* 0.261799)
-            (V4 1 1 1 diskalpha)
-            (V4 0 0 1 diskalpha)
+            (V4 1 1 1 1)
+            (V4 0 0 1 1)
 
 
-computeHorizonColor :: HorizonMode -> V3 FFloat -> FFloat -> V3 FFloat -> FFloat -> FBool -> V4 FFloat
-computeHorizonColor HorizonBlack _ _ _ _ _ = V4 0 0 0 1
-computeHorizonColor HorizonGrid oldpoint oldpointsqr newpoint newpointsqr horizonMask = horizoncolor
+computeHorizonColor :: HorizonMode -> V3 FFloat -> FFloat -> V3 FFloat -> FFloat -> V4 FFloat
+computeHorizonColor HorizonBlack _ _ _ _ = V4 0 0 0 1
+computeHorizonColor HorizonGrid oldpoint oldpointsqr newpoint newpointsqr = horizoncolor
   where
     lambdaa = 1 - (1 - oldpointsqr) / (newpointsqr - oldpointsqr)
     colpoint = lambdaa *^ newpoint + (1 - lambdaa) *^ oldpoint
@@ -121,24 +120,23 @@ computeHorizonColor HorizonGrid oldpoint oldpointsqr newpoint newpointsqr horizo
     phi = atan2' (colpoint ^. _x) (newpoint ^. _z)
     theta = atan2' (colpoint ^. _y) (norm (newpoint ^. _xz))
 
-    horizonalpha = ifThenElse' horizonMask 1 0
     horizoncolor = ifThenElse' (((phi `mod''` 1.04719) <* 0.52359) `xorB` ((theta `mod''` 1.04719) <* 0.52359))
-        (V4 1 0 0 horizonalpha)
-        (V4 0 0 0 horizonalpha)
+        (V4 1 0 0 1)
+        (V4 0 0 0 1)
 
 
-computeVelocity :: Floating a => DistortionMethod -> a -> a -> V3 a -> V3 a -> a -> (V3 a, a)
-computeVelocity MethodNone stepsize _ velocity _ _ = (velocity, stepsize)
-computeVelocity MethodLeapFrog stepsize h2 velocity newpoint newpointsqr = (newvelocity, newstepsize)
+computeVelocity :: Floating a => DistortionMethod -> a -> a -> a -> V3 a -> V3 a -> a -> (V3 a, a)
+computeVelocity MethodNone stepsize _ _ velocity _ _ = (velocity, stepsize)
+computeVelocity MethodLeapFrog stepsize stepfactor h2 velocity newpoint newpointsqr = (newvelocity, newstepsize)
   where
     accel = (-1.5) * h2 *^ newpoint ^/ (newpointsqr ** 2.5)
     newvelocity = velocity + accel ^* stepsize
     -- step = abs $ norm velocity - norm newvelocity
-    newstepsize = stepsize -- * 0.97
+    newstepsize = stepsize * stepfactor
 
 
-iteration :: Config FFloat -> FFloat -> FFloat -> Context FFloat -> Context FFloat
-iteration Config{distortionMethod,diskMode,horizonMode} time (h2 :: FFloat) ctx = nctx
+iteration :: Config FFloat -> RuntimeConfig FFloat -> FFloat -> Context FFloat -> Context FFloat
+iteration Config{distortionMethod,diskMode,horizonMode} RuntimeConfig{..} (h2 :: FFloat) ctx = nctx
   where
     oldpoint = ctxPoint ctx -- for intersections
     oldpointsqr = sqrnorm oldpoint
@@ -146,7 +144,8 @@ iteration Config{distortionMethod,diskMode,horizonMode} time (h2 :: FFloat) ctx 
     newpoint = ctxPoint ctx + ctxVelocity ctx ^* ctxStepsize ctx
     newpointsqr = sqrnorm newpoint
 
-    (newvelocity, newstepsize) = computeVelocity distortionMethod (ctxStepsize ctx) h2 (ctxVelocity ctx) newpoint newpointsqr
+    (newvelocity, newstepsize) =
+      computeVelocity distortionMethod (ctxStepsize ctx) stepfactor h2 (ctxVelocity ctx) newpoint newpointsqr
 
     -- whether it just crossed the horizontal plane
     maskCrossing = (oldpoint ^. _y >* 0) `xorB` (newpoint ^. _y >* 0)
@@ -154,11 +153,11 @@ iteration Config{distortionMethod,diskMode,horizonMode} time (h2 :: FFloat) ctx 
     maskDistance = newpointsqr <* diskOuterSqr &&* newpointsqr >* diskInnerSqr
 
     diskMask = maskCrossing &&* maskDistance
-    diskcolor = ifThenElse' diskMask (computeDiskColor time (ctxVelocity ctx) newpoint diskMask diskMode) 0
+    diskcolor = ifThenElse' diskMask (computeDiskColor time (ctxVelocity ctx) newpoint diskMode) 0
 
     -- event horizon
     horizonMask = newpointsqr <* 1 &&* oldpointsqr >* 1
-    horizoncolor = ifThenElse' horizonMask (computeHorizonColor horizonMode oldpoint oldpointsqr newpoint newpointsqr horizonMask) 0
+    horizoncolor = ifThenElse' horizonMask (computeHorizonColor horizonMode oldpoint oldpointsqr newpoint newpointsqr) 0
 
     nctx = Context
       { ctxPoint = newpoint
@@ -168,21 +167,21 @@ iteration Config{distortionMethod,diskMode,horizonMode} time (h2 :: FFloat) ctx 
       }
 
 
-frag :: Config FFloat -> V2 Int -> FFloat -> V2 FFloat -> V3 FFloat
-frag cfg@Config{iterations, stepsize} viewPort time (V2 x y) = result
+frag :: Config FFloat -> V2 Int -> RuntimeConfig FFloat -> V2 FFloat -> V3 FFloat
+frag cfg@Config{iterations} viewPort rt@RuntimeConfig{..} (V2 x y) = result
   where
     tanFov = 1.5
 
-    -- cameraPos = V3 0 1 (-20.0 + time `mod''` 20)
-    cameraPos = V3 0 2 (-15.0)
+    pos = cameraPos + V3 0 0 (time / 3 `mod''` 21)
+    -- pos = V3 0 2 (-15.0)
 
-    view = signorm $ viewMatrix cameraPos !* V3 (tanFov * (x - 0.5)) (tanFov * aspectRatio viewPort * (y - 0.5)) 1
+    view = signorm $ viewMatrix pos !* V3 (tanFov * (x - 0.5)) (tanFov * aspectRatio viewPort * (y - 0.5)) 1
 
-    h2 = sqrnorm (cross cameraPos view)
+    h2 = sqrnorm (cross pos view)
 
     Context{ctxVelocity, ctxObjectColor} =
-      foldr (const $ iteration cfg time h2)
-        Context { ctxPoint = cameraPos
+      foldr (const $ iteration cfg rt h2)
+        Context { ctxPoint = pos
                 , ctxVelocity = view
                 , ctxStepsize = stepsize
                 , ctxObjectColor = V4 0 0 0 0

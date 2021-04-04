@@ -409,7 +409,9 @@ ifThenElse c t e i = fromBase x $ ifThenElse_ c (toBase x . t . fromBase x) (toB
 -- | @ifThen c f x@ will return @f x@ if @c@ evaluates to 'true' or @x@ otherwise.
 --
 --   In most cases functionally equivalent to 'ifThenElse'' but
---   usually generate smaller shader code since the last argument is not inlined into the two branches, which also would affect implicit derivates (e.g. 'dFdx', 'dFdy' or sampling using @SampleAuto@)
+--   usually generate smaller shader code since the last argument is not inlined
+--   into the two branches, which also would affect implicit derivates (e.g.
+--   'dFdx', 'dFdy' or sampling using @SampleAuto@)
 ifThen :: forall a x. (ShaderType a x) => S x Bool -> (a -> a) -> a -> a
 ifThen c t i = fromBase x $ ifThen_ c (toBase x . t . fromBase x) (toBase x i)
     where
@@ -417,13 +419,13 @@ ifThen c t i = fromBase x $ ifThen_ c (toBase x . t . fromBase x) (toBase x i)
         ifThen_ :: S x Bool -> (ShaderBase (ShaderBaseType a) x -> ShaderBase (ShaderBaseType a) x) -> ShaderBase (ShaderBaseType a) x -> ShaderBase (ShaderBaseType a) x
         ifThen_ bool thn a =
             let ifM = memoizeM $ do
-                           boolStr <- unS bool
-                           (lifted, decls) <- runWriterT $ shaderbaseDeclare (toBase x (errShaderType :: a))
-                           void $ evalStateT (shaderbaseAssign a) decls
-                           tellIf boolStr
-                           scopedM $ void $ evalStateT (shaderbaseAssign $ thn lifted) decls
-                           T.lift $ T.lift $ tell "}\n"
-                           return decls
+                    boolStr <- unS bool
+                    (lifted, decls) <- runWriterT $ shaderbaseDeclare (toBase x (errShaderType :: a))
+                    void $ evalStateT (shaderbaseAssign a) decls
+                    tellIf boolStr
+                    scopedM $ void $ evalStateT (shaderbaseAssign $ thn lifted) decls
+                    T.lift $ T.lift $ tell "}\n"
+                    return decls
             in evalState (runReaderT (shaderbaseReturn (toBase x (errShaderType :: a))) ifM) 0
 
 tellIf :: RValue -> ExprM ()

@@ -20,6 +20,7 @@ ContextHandlerParameters(HandleConfig, configErrorCallback, configEventPolicy),
 --
 -- [@'configEventPolicy' :: Maybe 'EventPolicy'@] Specify the 'EventPolicy' to use for automatic GLFW event processing. If 'Nothing' then automatic event processing is disabled and you'll need to call 'mainloop' or 'mainstep' somewhere.
 WindowConfig(..),
+WindowHint(..),
 EventPolicy(..),
 -- ** Exceptions
 InitException(..),
@@ -42,3 +43,5 @@ import           Graphics.GPipe.Context.GLFW.Resource
 import           Graphics.GPipe.Context.GLFW.Input
 import           Graphics.GPipe.Context.GLFW.Misc
 import           Graphics.GPipe.Context.GLFW.Window
+-- GLFW reexports
+import           Graphics.UI.GLFW                     (WindowHint (..))

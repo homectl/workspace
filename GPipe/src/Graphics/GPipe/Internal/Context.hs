@@ -116,7 +116,7 @@ class ContextHandler ctx where
 --
 newtype ContextT ctx os m a =
     ContextT (ReaderT (ContextEnv ctx) (StateT (ContextState ctx) m) a)
-    deriving (Functor, Applicative, Monad, MonadIO, MonadException, MonadAsyncException)
+    deriving (Functor, Applicative, Monad, MonadIO, MonadFail, MonadException, MonadAsyncException)
 
 data ContextEnv ctx = ContextEnv {
     context           :: ctx,

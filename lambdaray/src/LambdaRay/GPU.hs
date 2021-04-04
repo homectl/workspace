@@ -1,30 +1,36 @@
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE NamedFieldPuns      #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
+{-# OPTIONS_GHC -Wno-type-defaults #-}
 module LambdaRay.GPU (main) where
 
-import qualified Codec.Picture               as Pic
-import qualified Codec.Picture.Types         as Pic
-import           Control.Concurrent          (threadDelay)
-import           Control.Monad               (unless)
-import           Control.Monad.IO.Class      (MonadIO, liftIO)
-import qualified Data.Time.Clock             as Time
+import qualified Codec.Picture                     as Pic
+import qualified Codec.Picture.Types               as Pic
+import           Control.Concurrent                (threadDelay)
+import           Control.Concurrent.MVar
+import           Control.Monad                     (unless)
+import           Control.Monad.IO.Class            (MonadIO, liftIO)
+import qualified Data.Time.Clock                   as Time
 import           Graphics.GPipe
-import qualified Graphics.GPipe.Context.GLFW as GLFW
-import           LambdaRay.Config            (Config (..), DiskMode (..),
-                                              SkyMode (..), defaultConfig)
-import qualified LambdaRay.Schwarzschild     as Schwarzschild
-import           Prelude                     hiding ((<*))
-import           System.IO                   (hFlush, stdout)
+import qualified Graphics.GPipe.Context.GLFW       as GLFW
+import qualified Graphics.GPipe.Context.GLFW.Input as Input
+import           LambdaRay.Config                  (Config (..), DiskMode (..),
+                                                    RuntimeConfig (..),
+                                                    SkyMode (..), defaultConfig,
+                                                    defaultRuntimeConfig)
+import qualified LambdaRay.Schwarzschild           as Schwarzschild
+import           Prelude                           hiding ((<*))
+import           System.IO                         (hFlush, stdout)
 
 viewPort :: V2 Int
 viewPort = V2 1500 1000
 
 
-renderSchwarzschild win (uniformBuffer :: Buffer os (Uniform (B Float))) diskTex skyTex = compileShader $ do
-    time <- getUniform (const (uniformBuffer, 0))
+renderSchwarzschild win (uniformBuffer :: Buffer os (Uniform (B Float, B Float, B Float))) diskTex skyTex = compileShader $ do
+    (time, stepfactor, stepsize) <- getUniform (const (uniformBuffer, 0))
     primitiveStream <- toPrimitiveStream id
     fragmentStream <- rasterize (const (FrontAndBack, ViewPort (V2 0 0) viewPort, DepthRange 0 1)) primitiveStream
 
@@ -36,7 +42,8 @@ renderSchwarzschild win (uniformBuffer :: Buffer os (Uniform (B Float))) diskTex
                 { diskMode = DiskTexture (sample2D diskSamp SampleAuto Nothing Nothing)
                 , skyMode = SkyTexture (sample2D skySamp SampleAuto Nothing Nothing)
                 }
-        result = Schwarzschild.frag cfg viewPort time <$> fragmentStream
+        rt = defaultRuntimeConfig{stepsize, stepfactor, time}
+        result = Schwarzschild.frag cfg viewPort rt <$> fragmentStream
 
     drawWindowColor (const (win, ContextColorOption NoBlending (V3 True True True))) result
 
@@ -48,6 +55,7 @@ main = do
       win <- newWindow (WindowFormatColor RGB8) $ (GLFW.defaultWindowConfig "LambdaRay")
           { GLFW.configWidth = w
           , GLFW.configHeight = h
+          , GLFW.configHints = [GLFW.WindowHint'Samples (Just 4)]
           }
 
       vertexBuffer :: Buffer os (B4 Float, B2 Float) <- newBuffer 6
@@ -60,7 +68,35 @@ main = do
                                  ]
 
       uniformBuffer <- newBuffer 1
-      writeBuffer uniformBuffer 0 [0]
+      writeBuffer uniformBuffer 0 [(0, 0.9884, 0.58)]
+
+      mvStepfactor <- liftIO $ newMVar 1
+      mvStepsize <- liftIO $ newMVar 0.4
+
+      _ <- Input.setKeyCallback win $ Just $ \k i s m -> do
+        putStrLn $ "Key: " ++ show k ++ " " ++ show i ++ " " ++ show s
+        case (k, s) of
+          (Input.Key'A, Input.KeyState'Pressed) ->
+            modifyMVar_ mvStepfactor $ \sf -> do
+              let newSf = sf + 0.0001
+              putStrLn $ "stepfactor: " ++ show newSf
+              return newSf
+          (Input.Key'Z, Input.KeyState'Pressed) ->
+            modifyMVar_ mvStepfactor $ \sf -> do
+              let newSf = sf - 0.0001
+              putStrLn $ "stepfactor: " ++ show newSf
+              return newSf
+          (Input.Key'S, Input.KeyState'Pressed) ->
+            modifyMVar_ mvStepsize $ \ss -> do
+              let newSs = ss + 0.01
+              putStrLn $ "stepsize: " ++ show newSs
+              return newSs
+          (Input.Key'X, Input.KeyState'Pressed) ->
+            modifyMVar_ mvStepsize $ \ss -> do
+              let newSs = ss - 0.01
+              putStrLn $ "stepsize: " ++ show newSs
+              return newSs
+          _ -> return ()
 
       -- Load image into texture
       diskTex <- loadTexture "disk"
@@ -69,7 +105,7 @@ main = do
       shader <- timeIt "Compiling..." $ renderSchwarzschild win uniformBuffer diskTex skyTex
 
       startTime <- liftIO Time.getCurrentTime
-      loop startTime vertexBuffer uniformBuffer shader win
+      loop startTime vertexBuffer uniformBuffer mvStepfactor mvStepsize shader win
   where
     loadTexture name =
       let file = "data/textures/" ++ name ++ ".jpg" in do
@@ -93,10 +129,12 @@ getJuicyPixel xs _x _y pix =
   let Pic.PixelRGB8 r g b = Pic.convertPixel pix in V3 r g b : xs
 
 
-loop startTime vertexBuffer (uniformBuffer :: Buffer os (Uniform (B Float))) shader win = do
+loop startTime vertexBuffer (uniformBuffer :: Buffer os (Uniform (B Float, B Float, B Float))) mvStepfactor mvStepsize shader win = do
     closeRequested <- timeIt "Rendering..." $ do
       now <- liftIO Time.getCurrentTime
-      writeBuffer uniformBuffer 0 [fromRational $ toRational $ Time.diffUTCTime now startTime]
+      stepfactor <- liftIO $ readMVar mvStepfactor
+      stepsize <- liftIO $ readMVar mvStepsize
+      writeBuffer uniformBuffer 0 [(fromRational $ toRational $ Time.diffUTCTime now startTime, stepfactor, stepsize)]
 
       render $ do
         clearWindowColor win (V3 0 0 0.8)
@@ -109,7 +147,7 @@ loop startTime vertexBuffer (uniformBuffer :: Buffer os (Uniform (B Float))) sha
 
     liftIO $ threadDelay 10000
     unless (closeRequested == Just True) $
-      loop startTime vertexBuffer uniformBuffer shader win
+      loop startTime vertexBuffer uniformBuffer mvStepfactor mvStepsize shader win
 
 
 timeIt :: (Info a, MonadIO m) => String -> m a -> m a
