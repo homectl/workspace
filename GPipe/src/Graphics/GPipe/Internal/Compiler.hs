@@ -282,12 +282,12 @@ linkProgram name = do
     glLinkProgram name
     linkStatus <- alloca $ \ ptr -> glGetProgramiv name GL_LINK_STATUS ptr >> peek ptr
     if linkStatus /= GL_FALSE
-    then return Nothing
-    else do logLen <- alloca $ \ ptr -> glGetProgramiv name GL_INFO_LOG_LENGTH ptr >> peek ptr
-            let logLen' = fromIntegral logLen
-            fmap Just $ allocaArray logLen' $ \ ptr -> do
-                glGetProgramInfoLog name logLen nullPtr ptr
-                Text.pack <$> peekCString ptr
+        then return Nothing
+        else do logLen <- alloca $ \ ptr -> glGetProgramiv name GL_INFO_LOG_LENGTH ptr >> peek ptr
+                let logLen' = fromIntegral logLen
+                fmap Just $ allocaArray logLen' $ \ ptr -> do
+                    glGetProgramInfoLog name logLen nullPtr ptr
+                    Text.pack <$> peekCString ptr
 
 createUBuffer :: (ContextHandler ctx, MonadIO m, Integral a) => a -> ContextT ctx os m GLuint
 createUBuffer 0 = return undefined
