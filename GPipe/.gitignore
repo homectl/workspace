@@ -1,0 +1,9 @@
+/.dist-buildwrapper
+
+/dist
+/bld.log
+
+cabal.sandbox.config
+.stack-work/
+dist/
+

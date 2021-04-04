@@ -1,28 +1,36 @@
-name:                lambdaray
-version:             0.0.1
-synopsis:            GPU Ray Tracer
-description:         GPU Ray Tracer
-homepage:            https://homectl.org/lambdaray
-license:             BSD3
-license-file:        LICENSE
-author:              pippijn
-maintainer:          pippijn@users.noreply.github.com
-category:            Development
-build-type:          Simple
-cabal-version:       >=1.10
-
-source-repository head
-  type: git
-  location: https://github.com/homectl/lambdaray
+name:           GPipe
+version:        2.2.4
+cabal-version:  >= 1.8
+build-type:     Simple
+author:         Tobias Bexelius
+license:        MIT
+license-file:   LICENSE
+copyright:      Tobias Bexelius
+category:       Graphics
+stability:      Experimental
+synopsis:       Typesafe functional GPU graphics programming
+homepage:       https://github.com/tobbebex/GPipe-Core#readme
+bug-reports:    https://github.com/tobbebex/GPipe-Core/issues
+description:
+                A typesafe API based on the conceptual model of OpenGl, but without the imperative state machine.
+                Aims to be as close to the raw OpenGl performance as possible, without compromising type safety or functional style.
+                Includes DSL for shaders to provide type safety even when crossing into that domain.
+                Uses OpenGl 3.3 core profile under the hood.
+maintainer:     Tobias Bexelius
+data-files:     CHANGELOG.md
 
 library
-  default-language:    Haskell2010
-  hs-source-dirs: src, src-static
+  hs-source-dirs: src
+  build-depends:
+      base < 5
+    , Boolean
+    , containers
+    , exception-transformers
+    , gl
+    , hashtables
+    , linear
+    , transformers
   exposed-modules:
-      Graphics.GPipe.Context.GLFW
-      Graphics.GPipe.Context.GLFW.Input
-      Graphics.GPipe.Context.GLFW.Window
-      Graphics.GPipe.Context.GLFW.Misc
       Graphics.GPipe
       Graphics.GPipe.Buffer
       Graphics.GPipe.Context
@@ -37,19 +45,8 @@ library
       Graphics.GPipe.Texture
       Graphics.GPipe.Uniform
       Graphics.GPipe.Orphans
-      LambdaRay.Config
-      LambdaRay.GPU
-      LambdaRay.Schwarzschild
-      -- Internal, don't use except in tests.
   -- other-modules:
       Data.SNMap
-      Graphics.GPipe.Context.GLFW.Calls
-      Graphics.GPipe.Context.GLFW.Resource
-      Graphics.GPipe.Context.GLFW.Wrappers
-      Graphics.GPipe.Context.GLFW.Format
-      Graphics.GPipe.Context.GLFW.Handler
-      Graphics.GPipe.Context.GLFW.RPC
-      Graphics.GPipe.Context.GLFW.Logger
       Graphics.GPipe.Internal.Buffer
       Graphics.GPipe.Internal.Compiler
       Graphics.GPipe.Internal.Context
@@ -63,37 +60,6 @@ library
       Graphics.GPipe.Internal.Texture
       Graphics.GPipe.Internal.Uniform
       Graphics.GPipe.Internal.Orphans
-  ghc-options:
-      -Wall
-  build-depends:
-      base              >= 4 && < 5
-    , Boolean
-    , GLFW-b
-    , JuicyPixels
-    , async
-    , containers
-    , exception-transformers
-    , gl
-    , hashtables
-    , lens
-    , linear
-    , stm
-    , text
-    , time
-    , transformers
-
-executable lambdaray
-  default-language: Haskell2010
-  hs-source-dirs:   tools
-  main-is:          lambdaray.hs
-  ghc-options:
-      -Wall
-      -threaded
-  build-depends:
-      base < 5
-    , ghc
-    , ghc-paths
-    , lambdaray
 
 test-suite testsuite
   default-language: Haskell2010
@@ -110,8 +76,8 @@ test-suite testsuite
       hspec-discover:hspec-discover
   build-depends:
       base < 5
+    , GPipe
     , hspec
-    , lambdaray
 
 benchmark bench
   default-language: Haskell2010
@@ -126,6 +92,6 @@ benchmark bench
       -threaded
   build-depends:
       base < 5
+    , GPipe
     , JuicyPixels
     , criterion
-    , lambdaray
