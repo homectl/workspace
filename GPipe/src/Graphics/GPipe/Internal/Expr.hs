@@ -832,8 +832,9 @@ dFdy = fun1f "dFdy"
 fwidth = fun1f "fwidth"
 
 ---------------------------------
-fromV f s v = S $ do params <- mapM (unS . f) $ toList v
-                     return $ s <> "(" <> Text.intercalate "," params <> ")"
+fromV f s v = S $ do
+    params <- mapM (unS . f) $ toList v
+    return $ s <> "(" <> Text.intercalate "," params <> ")"
 
 fromVec4 :: V4 (S x Float) -> S x (V4 Float)
 fromVec4 = fromV id "vec4"
@@ -943,7 +944,7 @@ maxS = fun2f "max"
 -- Matrix*Matrix, Vector*Matrix, Matrix*Vextor and outer Vector*Vector multiplications have operands in flipped order since glsl is column major
 -- inner products are not flipped since why bother :)
 
--- Also, special verions when explicit V1 matrices are used (so eg 4 version of each dot function: v*v, v*m, m*v, m*m )
+-- Also, special versions when explicit V1 matrices are used (so eg 4 version of each dot function: v*v, v*m, m*v, m*m )
 
 -- No rules for scalar products with vectors or matrices (eg scalar * matrix), we hope the glsl compiler will manage to optimize that...
 

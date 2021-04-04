@@ -62,7 +62,6 @@ test-suite testsuite
   main-is:          testsuite.hs
   other-modules:
       Graphics.GPipe.BufferSpec
-      Graphics.GPipe.ExprSpec
   ghc-options:
       -Wall
       -threaded
