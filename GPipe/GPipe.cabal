@@ -29,6 +29,7 @@ library
     , gl
     , hashtables
     , linear
+    , text
     , transformers
   exposed-modules:
       Graphics.GPipe
