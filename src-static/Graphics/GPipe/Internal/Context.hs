@@ -56,6 +56,7 @@ import           Control.Monad.Trans.State.Strict (StateT (runStateT),
 import           Data.IORef                       (IORef, mkWeakIORef,
                                                    readIORef)
 import           Data.IntMap                      ((!))
+import           Data.Text (Text)
 import qualified Data.IntMap.Strict               as IMap
 import qualified Data.IntSet                      as Set
 import qualified Data.Map.Strict                  as Map
@@ -129,7 +130,7 @@ data ContextState ctx = ContextState {
   }
 
 -- | A monad in which shaders are run.
-newtype Render os a = Render { unRender :: ExceptT String (ReaderT RenderEnv (StateT RenderState IO)) a } deriving (Monad, Applicative, Functor)
+newtype Render os a = Render { unRender :: ExceptT Text (ReaderT RenderEnv (StateT RenderState IO)) a } deriving (Monad, Applicative, Functor)
 
 data RenderEnv = RenderEnv {
     renderSharedContextData :: SharedContextDatas,
@@ -314,7 +315,7 @@ withContextWindow (Window wid) m = ContextT $ do
   liftIO $ m (snd <$> IMap.lookup wid wmap)
 
 -- | This kind of exception may be thrown from GPipe when a GPU hardware limit is reached (for instance, too many textures are drawn to from the same 'FragmentStream')
-data GPipeException = GPipeException String
+newtype GPipeException = GPipeException Text
      deriving (Show, Typeable)
 
 instance Exception GPipeException

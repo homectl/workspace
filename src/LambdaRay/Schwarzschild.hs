@@ -2,7 +2,7 @@
 {-# LANGUAGE NamedFieldPuns      #-}
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module LambdaRay.Schwarzschild (frag, fragGPU) where
+module LambdaRay.Schwarzschild (frag) where
 
 import           Control.Lens     ((^.))
 import           Graphics.GPipe   hiding (lookAt, normalize)
@@ -45,7 +45,12 @@ viewMatrix cameraPos = V3 leftVec nupVec frontVec
     nupVec = cross frontVec leftVec
 
 
-type Context a = (a, V3 a, V3 a, V4 a)
+data Context a = Context
+    { ctxPoint       :: V3 a
+    , ctxVelocity    :: V3 a
+    , ctxStepsize :: a
+    , ctxObjectColor :: V4 a
+    }
 
 -- instance ShaderType (Context FFloat) x where
 --     type ShaderBaseType (Context FFloat) = ShaderBaseType FFloat
@@ -77,12 +82,12 @@ computeSkyColor (SkyTexture samp) velocity = skycolor
     skycolor = V4 (skycolor3 ^. _x) (skycolor3 ^. _y) (skycolor3 ^. _z) 1
 
 
-computeDiskColor :: FFloat -> Context FFloat -> V3 FFloat -> FBool -> DiskMode FFloat -> V4 FFloat
-computeDiskColor time (_ctxI, _ctxPoint, ctxVelocity, _ctxObjectColor) newpoint diskMask = compute
+computeDiskColor :: FFloat -> V3 FFloat -> V3 FFloat -> FBool -> DiskMode FFloat -> V4 FFloat
+computeDiskColor time velocity newpoint diskMask = compute
   where
     -- actual collision point by intersection
-    lambdaa = -(newpoint ^. _y / (ctxVelocity ^. _y))
-    colpoint = newpoint + ctxVelocity ^* lambdaa
+    lambdaa = -(newpoint ^. _y / (velocity ^. _y))
+    colpoint = newpoint + velocity ^* lambdaa
     colpointsqr = sqrnorm colpoint
 
     phi = atan2' (colpoint ^. _x) (newpoint ^. _z) + time / 30
@@ -122,27 +127,26 @@ computeHorizonColor HorizonGrid oldpoint oldpointsqr newpoint newpointsqr horizo
         (V4 0 0 0 horizonalpha)
 
 
-computeVelocity :: Floating a => DistortionMethod -> a -> a -> V3 a -> V3 a -> a -> V3 a
-computeVelocity MethodNone _ _ velocity _ _ = velocity
-computeVelocity MethodLeapFrog stepsize h2 velocity newpoint newpointsqr = newvelocity
+computeVelocity :: Floating a => DistortionMethod -> a -> a -> V3 a -> V3 a -> a -> (V3 a, a)
+computeVelocity MethodNone stepsize _ velocity _ _ = (velocity, stepsize)
+computeVelocity MethodLeapFrog stepsize h2 velocity newpoint newpointsqr = (newvelocity, newstepsize)
   where
     accel = (-1.5) * h2 *^ newpoint ^/ (newpointsqr ** 2.5)
     newvelocity = velocity + accel ^* stepsize
+    -- step = abs $ norm velocity - norm newvelocity
+    newstepsize = stepsize * 0.97
 
 
-isDone :: (EqB a, Num a) => Context a -> BooleanOf a
-isDone (ctxI, _, _, _) = ctxI /=* 0
-
-iteration :: Config FFloat -> FFloat -> FFloat -> (FFloat, V3 FFloat, V3 FFloat, V4 FFloat) -> (FFloat, V3 FFloat, V3 FFloat, V4 FFloat)
-iteration Config{..} time (h2 :: FFloat) ctx@(ctxI, ctxPoint, ctxVelocity, ctxObjectColor) = nctx
+iteration :: Config FFloat -> FFloat -> FFloat -> Context FFloat -> Context FFloat
+iteration Config{distortionMethod,diskMode,horizonMode} time (h2 :: FFloat) ctx = nctx
   where
-    oldpoint = ctxPoint -- for intersections
+    oldpoint = ctxPoint ctx -- for intersections
     oldpointsqr = sqrnorm oldpoint
 
-    newpoint = ctxPoint + ctxVelocity ^* stepsize
+    newpoint = ctxPoint ctx + ctxVelocity ctx ^* ctxStepsize ctx
     newpointsqr = sqrnorm newpoint
 
-    newvelocity = computeVelocity distortionMethod stepsize h2 ctxVelocity newpoint newpointsqr
+    (newvelocity, newstepsize) = computeVelocity distortionMethod (ctxStepsize ctx) h2 (ctxVelocity ctx) newpoint newpointsqr
 
     -- whether it just crossed the horizontal plane
     maskCrossing = (oldpoint ^. _y >* 0) `xorB` (newpoint ^. _y >* 0)
@@ -150,22 +154,22 @@ iteration Config{..} time (h2 :: FFloat) ctx@(ctxI, ctxPoint, ctxVelocity, ctxOb
     maskDistance = newpointsqr <* diskOuterSqr &&* newpointsqr >* diskInnerSqr
 
     diskMask = maskCrossing &&* maskDistance
-    diskcolor = ifThenElse' diskMask (computeDiskColor time ctx newpoint diskMask diskMode) 0
+    diskcolor = ifThenElse' diskMask (computeDiskColor time (ctxVelocity ctx) newpoint diskMask diskMode) 0
 
     -- event horizon
     horizonMask = newpointsqr <* 1 &&* oldpointsqr >* 1
     horizoncolor = ifThenElse' horizonMask (computeHorizonColor horizonMode oldpoint oldpointsqr newpoint newpointsqr horizonMask) 0
 
-    nctx =
-      ( ctxI - 1
-      , newpoint
-      , newvelocity
-      , blendcolors (blendcolors ctxObjectColor horizoncolor) diskcolor
-      )
+    nctx = Context
+      { ctxPoint = newpoint
+      , ctxVelocity = newvelocity
+      , ctxStepsize = newstepsize
+      , ctxObjectColor = blendcolors (blendcolors (ctxObjectColor ctx) horizoncolor) diskcolor
+      }
 
 
 frag :: Config FFloat -> V2 Int -> FFloat -> V2 FFloat -> V3 FFloat
-frag cfg@Config{iterations} viewPort time (V2 x y) = result
+frag cfg@Config{iterations, stepsize} viewPort time (V2 x y) = result
   where
     tanFov = 1.5
 
@@ -176,38 +180,13 @@ frag cfg@Config{iterations} viewPort time (V2 x y) = result
 
     h2 = sqrnorm (cross cameraPos view)
 
-    (_ctxI, _ctxPoint, ctxVelocity, ctxObjectColor) =
+    Context{ctxVelocity, ctxObjectColor} =
       foldr (const $ iteration cfg time h2)
-        ( fromIntegral iterations
-        , cameraPos
-        , view
-        , V4 0 0 0 0
-        ) [0..iterations]
-
-    skycolor = computeSkyColor (skyMode cfg) ctxVelocity
-
-    result = blendcolors ctxObjectColor skycolor ^. _xyz
-
-
-fragGPU :: Config FFloat -> V2 Int -> FFloat -> V2 FFloat -> V3 FFloat
-fragGPU cfg@Config{iterations} viewPort time (V2 x y) = result
-  where
-    tanFov = 1.5
-
-    -- cameraPos = V3 0 1 (-20.0 + time `mod''` 21)
-    cameraPos = V3 0 2 (-15.0)
-
-    view = signorm $ viewMatrix cameraPos !* V3 (tanFov * (x - 0.5)) (tanFov * aspectRatio viewPort * (y - 0.5)) 1
-
-    h2 = sqrnorm (cross cameraPos view)
-
-    (_ctxI, _ctxPoint, ctxVelocity, ctxObjectColor) =
-      while isDone (iteration cfg time h2)
-        ( fromIntegral iterations
-        , cameraPos
-        , view
-        , V4 0 0 0 0
-        )
+        Context { ctxPoint = cameraPos
+                , ctxVelocity = view
+                , ctxStepsize = stepsize
+                , ctxObjectColor = V4 0 0 0 0
+                } [0..iterations]
 
     skycolor = computeSkyColor (skyMode cfg) ctxVelocity
 

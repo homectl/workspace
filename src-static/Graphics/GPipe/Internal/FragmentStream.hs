@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeSynonymInstances       #-}
@@ -18,6 +19,7 @@ import           Data.Boolean                            (Boolean (true, (&&*)),
                                                           EqB ((==*)),
                                                           IfB (ifB))
 import           Data.IntMap.Lazy                        (insert)
+import           Data.Text                               (Text)
 import           Graphics.GPipe.Internal.Compiler        (RenderIOState (rasterizationNameToRenderIO))
 import           Graphics.GPipe.Internal.Expr
 import           Graphics.GPipe.Internal.PrimitiveStream (PrimitiveStream (..),
@@ -82,7 +84,7 @@ rasterize sf (PrimitiveStream xs) = Shader $ do
                                        y' <- y
                                        z' <- z
                                        w' <- w
-                                       tellAssignment' "gl_Position" $ "vec4("++x'++',':y'++',':z'++',':w'++")"
+                                       tellAssignment' "gl_Position" $ "vec4("<>x'<>","<>y'<>","<>z'<>","<>w'<>")"
         makePointSize Nothing       = return ()
         makePointSize (Just (S ps)) = ps >>= tellAssignment' "gl_PointSize"
         io s = let (side, ViewPort (V2 x y) (V2 w h), DepthRange dmin dmax) = sf s in if w < 0 || h < 0
@@ -121,11 +123,11 @@ withRasterizedInfo :: (a -> RasterizedInfo -> b) -> FragmentStream a -> Fragment
 withRasterizedInfo f = fmap (\a -> f a (RasterizedInfo (vec4S' "gl_FragCoord") (scalarS' "gl_FrontFacing") (vec2S' "gl_PointCoord")))
 
 -- | A float value that is not interpolated (like integers), and all fragments will instead get the value of the primitive's last vertex
-data FlatVFloat = Flat VFloat
+newtype FlatVFloat = Flat VFloat
 -- | A float value that doesn't get divided by the interpolated position's w-component during interpolation.
-data NoPerspectiveVFloat = NoPerspective VFloat
+newtype NoPerspectiveVFloat = NoPerspective VFloat
 
-makeFragment :: String -> SType -> (a -> ExprM String) -> ToFragment a (S c a1)
+makeFragment :: Text -> SType -> (a -> ExprM Text) -> ToFragment a (S c a1)
 makeFragment qual styp f = ToFragment $ Kleisli $ \ x -> do n <- get
                                                             put (n+1)
                                                             return $ S $ useFInput qual "vf" styp n $ f x

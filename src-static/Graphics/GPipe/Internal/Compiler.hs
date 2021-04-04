@@ -1,5 +1,6 @@
-{-# LANGUAGE PatternGuards   #-}
-{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternGuards     #-}
+{-# LANGUAGE PatternSynonyms   #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 {-# OPTIONS_GHC -Wno-unused-matches #-}
 module Graphics.GPipe.Internal.Compiler where
@@ -22,6 +23,8 @@ import           Data.Either                      (partitionEithers)
 import           Data.IORef                       (mkWeakIORef, newIORef,
                                                    readIORef)
 import           Data.List                        (zip5)
+import           Data.Text                        (Text)
+import qualified Data.Text                        as Text
 import           Data.Word                        (Word32)
 import           Foreign.C.String                 (peekCString, withCString,
                                                    withCStringLen)
@@ -39,8 +42,8 @@ data Drawcall s = Drawcall
     { drawcallFBO        :: s -> (Either WinId (IO FBOKeys, IO ()), IO ())
     , drawcallName       :: Int
     , rasterizationName  :: Int
-    , vertexsSource      :: String
-    , fragmentSource     :: String
+    , vertexsSource      :: Text
+    , fragmentSource     :: Text
     , usedInputs         :: [Int]
     , usedVUniforms      :: [Int]
     , usedVSamplers      :: [Int]
@@ -125,11 +128,11 @@ compile drawcalls s = do
             return fr
         else do
             liftNonWinContextAsyncIO $ mapM_ (\(pNameRef, pStrUDeleter) -> readIORef pNameRef >>= glDeleteProgram >> pStrUDeleter) pnames
-            liftIO $ throwIO $ GPipeException $ concat allErrs
+            liftIO $ throwIO $ GPipeException $ Text.concat allErrs
 
 type CompInput s = (Drawcall s, [Int], [Int], [Int], [Int])
 
-comp :: (ContextHandler ctx, MonadIO m) => RenderIOState s -> CompInput s -> ContextT ctx os m (Either [Char] ((IORef GLuint, IO ()), s -> Render os ()))
+comp :: (ContextHandler ctx, MonadIO m) => RenderIOState s -> CompInput s -> ContextT ctx os m (Either Text ((IORef GLuint, IO ()), s -> Render os ()))
 comp s dc@(Drawcall fboSetup primN rastN vsource fsource inps _ _ _ _ pstrUSize', unis, samps, ubinds, sbinds) = do
     let pstrUSize = if 0 `elem` unis then pstrUSize' else 0
     let uNameToRenderIOmap = uniformNameToRenderIO s
@@ -156,14 +159,14 @@ comp s dc@(Drawcall fboSetup primN rastN vsource fsource inps _ _ _ _ pstrUSize'
                     Just errP -> do
                         glDeleteProgram pName
                         pStrUDeleter
-                        return $ Left $ "Linking a GPU progam failed:\n" ++ errP ++ "\nVertex source:\n" ++ vsource ++ "\nFragment source:\n" ++ fsource
+                        return $ Left $ "Linking a GPU progam failed:\n" <> errP <> "\nVertex source:\n" <> vsource <> "\nFragment source:\n" <> fsource
                     Nothing -> return $ Right pName
             else do
                 glDeleteShader vShader
                 glDeleteShader fShader
                 pStrUDeleter
-                let err = maybe "" (\e -> "A vertex shader compilation failed:\n" ++ e ++ "\nSource:\n" ++ vsource) mErrV
-                       ++ maybe "" (\e -> "A fragment shader compilation failed:\n" ++ e ++ "\nSource:\n" ++ fsource) mErrF
+                let err = maybe "" (\e -> "A vertex shader compilation failed:\n" <> e <> "\nSource:\n" <> vsource) mErrV
+                       <> maybe "" (\e -> "A fragment shader compilation failed:\n" <> e <> "\nSource:\n" <> fsource) mErrF
                 return $ Left err
     case ePname of
         Left err -> return $ Left err
@@ -207,8 +210,8 @@ renderer s (Drawcall fboSetup primN rastN vsource fsource inps _ _ _ _ pstrUSize
     wid <- case mfbokeyio of
         Left wid -> do -- Bind correct context
             inwin wid $ do
-                    glBindFramebuffer GL_DRAW_FRAMEBUFFER 0
-                    return Nothing
+                glBindFramebuffer GL_DRAW_FRAMEBUFFER 0
+                return Nothing
             return wid
         Right (fbokeyio, fboio) -> do
             -- Off-screen draw call, continue with last context
@@ -256,24 +259,25 @@ renderer s (Drawcall fboSetup primN rastN vsource fsource inps _ _ _ _ pstrUSize
                     drawio
 
 
-compileShader :: GLuint -> String -> IO (Maybe String)
+compileShader :: GLuint -> Text -> IO (Maybe Text)
 compileShader name source = do
-    withCStringLen source $ \ (ptr, len) ->
-                                with ptr $ \ pptr ->
-                                    with (fromIntegral len) $ \ plen ->
-                                        glShaderSource name 1 pptr plen
+    withCStringLen (Text.unpack source) $ \(ptr, len) ->
+        with ptr $ \pptr ->
+            with (fromIntegral len) $ \plen ->
+                glShaderSource name 1 pptr plen
     glCompileShader name
-    compStatus <- alloca $ \ ptr -> glGetShaderiv name GL_COMPILE_STATUS ptr >> peek ptr
+    compStatus <- alloca $ \ptr -> glGetShaderiv name GL_COMPILE_STATUS ptr >> peek ptr
     if compStatus /= GL_FALSE
         then return Nothing
-        else do logLen <- alloca $ \ ptr -> glGetShaderiv name GL_INFO_LOG_LENGTH ptr >> peek ptr
-                let logLen' = fromIntegral logLen
-                fmap Just $ allocaArray logLen' $ \ ptr -> do
-                                glGetShaderInfoLog name logLen nullPtr ptr
-                                peekCString ptr
+        else do
+            logLen <- alloca $ \ptr -> glGetShaderiv name GL_INFO_LOG_LENGTH ptr >> peek ptr
+            let logLen' = fromIntegral logLen
+            fmap Just $ allocaArray logLen' $ \ptr -> do
+                glGetShaderInfoLog name logLen nullPtr ptr
+                Text.pack <$> peekCString ptr
 
 
-linkProgram :: GLuint -> IO (Maybe String)
+linkProgram :: GLuint -> IO (Maybe Text)
 linkProgram name = do
     glLinkProgram name
     linkStatus <- alloca $ \ ptr -> glGetProgramiv name GL_LINK_STATUS ptr >> peek ptr
@@ -283,7 +287,7 @@ linkProgram name = do
             let logLen' = fromIntegral logLen
             fmap Just $ allocaArray logLen' $ \ ptr -> do
                 glGetProgramInfoLog name logLen nullPtr ptr
-                peekCString ptr
+                Text.pack <$> peekCString ptr
 
 createUBuffer :: (ContextHandler ctx, MonadIO m, Integral a) => a -> ContextT ctx os m GLuint
 createUBuffer 0 = return undefined
@@ -329,9 +333,11 @@ allocate mx = allocate' Map.empty []
                                             in findLastUsed m' n' xs
           findLastUsed m _ _ = head $ Map.toList m
 
-getFBOerror :: MonadIO m => m (Maybe String)
-getFBOerror = do status <- glCheckFramebufferStatus GL_DRAW_FRAMEBUFFER
-                 return $ case status of
-                    GL_FRAMEBUFFER_COMPLETE -> Nothing
-                    GL_FRAMEBUFFER_UNSUPPORTED -> Just "The combination of draw images (FBO) used in the render call is unsupported by this graphics driver\n"
-                    _ -> error "GPipe internal FBO error"
+
+getFBOerror :: MonadIO m => m (Maybe Text)
+getFBOerror = do
+    status <- glCheckFramebufferStatus GL_DRAW_FRAMEBUFFER
+    return $ case status of
+        GL_FRAMEBUFFER_COMPLETE -> Nothing
+        GL_FRAMEBUFFER_UNSUPPORTED -> Just "The combination of draw images (FBO) used in the render call is unsupported by this graphics driver\n"
+        _ -> error "GPipe internal FBO error"

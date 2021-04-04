@@ -5,6 +5,7 @@
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeSynonymInstances       #-}
@@ -22,6 +23,7 @@ import           Control.Monad.Trans.Reader       (Reader, ask, runReader)
 import           Control.Monad.Trans.Writer       (WriterT (runWriterT), tell)
 import qualified Data.IntMap                      as Map
 import           Data.IntMap.Lazy                 (insert)
+import           Data.Text                        (Text)
 import           Data.Word                        (Word32)
 import           Graphics.GPipe.Internal.Buffer   (B (..), B2 (..), B3 (..),
                                                    B4 (..), BInput (BInput),
@@ -63,7 +65,7 @@ getUniform sf = Shader $ do
                    blockId <- getName
                    let (u, offToStype) = shaderGen (useUniform (buildUDecl offToStype) blockId)
                        sampleBuffer = makeBuffer undefined undefined uniAl :: Buffer os (Uniform b)
-                       shaderGen :: (Int -> ExprM String) -> (UniformFormat b x, OffsetToSType) -- Int is name of uniform block
+                       shaderGen :: (Int -> ExprM Text) -> (UniformFormat b x, OffsetToSType) -- Int is name of uniform block
                        shaderGen = runReader $ runWriterT $ shaderGenF $ fromBUnifom $ bufBElement sampleBuffer $ BInput 0 0
                    doForUniform blockId $ \s bind -> let (ub, i) = sf s
                                                      in if i < 0 || i >= bufferLength ub
@@ -83,10 +85,10 @@ buildUDecl :: OffsetToSType -> GlobDeclM ()
 buildUDecl = buildUDecl' 0 . Map.toAscList
     where buildUDecl' p xxs@((off, stype):xs) | off == p = do tellGlobal $ stypeName stype
                                                               tellGlobal " u"
-                                                              tellGlobalLn $ show off
+                                                              tellGlobalLn $ tshow off
                                                               buildUDecl' (p + stypeSize stype) xs
                                               | off > p = do tellGlobal "float pad"
-                                                             tellGlobalLn $ show p
+                                                             tellGlobalLn $ tshow p
                                                              buildUDecl' (p + 4) xxs
                                               | otherwise = error "buildUDecl: Expected all offsets to be multiple of 4"
           buildUDecl' _ [] = return ()
@@ -94,7 +96,7 @@ buildUDecl = buildUDecl' 0 . Map.toAscList
 type OffsetToSType = Map.IntMap SType
 
 -- | The arrow type for 'toUniform'.
-newtype ToUniform x a b = ToUniform (Kleisli (WriterT OffsetToSType (Reader (Int -> ExprM String))) a b) deriving (Category, Arrow)
+newtype ToUniform x a b = ToUniform (Kleisli (WriterT OffsetToSType (Reader (Int -> ExprM Text))) a b) deriving (Category, Arrow)
 
 makeUniform :: SType -> ToUniform x (B a) (S x b)
 makeUniform styp = ToUniform $ Kleisli $ \bIn -> do let offset = bOffset bIn

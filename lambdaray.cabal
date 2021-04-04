@@ -78,6 +78,7 @@ library
     , lens
     , linear
     , stm
+    , text
     , time
     , transformers
 

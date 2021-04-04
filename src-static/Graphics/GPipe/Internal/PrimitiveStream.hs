@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeFamilies               #-}
@@ -27,6 +28,7 @@ import           Control.Monad.Trans.State.Strict       (State,
 import           Data.Int                               (Int16, Int32, Int8)
 import qualified Data.IntMap                            as Map
 import           Data.IntMap.Lazy                       (insert)
+import           Data.Text                              (Text)
 import           Data.Word                              (Word16, Word32, Word8)
 import           Foreign.Ptr                            (Ptr, castPtr,
                                                          intPtrToPtr, plusPtr)
@@ -95,7 +97,7 @@ type UniOffset = Int
 -- | The arrow type for 'toVertex'.
 data ToVertex a b = ToVertex
     !(Kleisli (StateT (Ptr ()) IO) a b)
-    !(Kleisli (StateT (Int, UniOffset, OffsetToSType) (Reader (Int -> ExprM String))) a b)
+    !(Kleisli (StateT (Int, UniOffset, OffsetToSType) (Reader (Int -> ExprM Text))) a b)
     !(Kleisli (State [Binding -> (IO VAOKey, IO ())]) a b)
 
 instance Category ToVertex where

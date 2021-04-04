@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TupleSections              #-}
 {-# OPTIONS_GHC -Wno-unused-foralls #-}
@@ -12,6 +13,7 @@ import qualified Control.Monad.Trans.State.Strict        as StrictState
 import           Control.Monad.Trans.Writer.Lazy         (Writer, execWriter,
                                                           tell)
 import           Data.List                               (intercalate)
+import qualified Data.Text                               as Text
 import           Graphics.GPipe.Internal.Compiler        (Drawcall (Drawcall),
                                                           WinId, getFBOerror)
 import           Graphics.GPipe.Internal.Context         (FBOKey,
@@ -27,7 +29,7 @@ import           Graphics.GPipe.Internal.Expr            (ExprM, F, FFloat,
                                                           discard, runExprM,
                                                           tellAssignment',
                                                           tellGlobal,
-                                                          tellGlobalLn)
+                                                          tellGlobalLn, tshow)
 import           Graphics.GPipe.Internal.Format          (ColorRenderable (clearColor),
                                                           ColorSampleable (Color, ColorElement, fromColor, typeStr),
                                                           ContextColorFormat,
@@ -181,18 +183,18 @@ makeDrawcall :: DrawcallInfo s -> FragmentStreamData -> IO (Drawcall s)
 makeDrawcall (sh, shd, wOrIo) (FragmentStreamData rastN shaderpos (PrimitiveStreamData primN ubuff) keep) =
        do (fsource, funis, fsamps, _, prevDecls, prevS) <- runExprM shd (discard keep >> sh)
           (vsource, vunis, vsamps, vinps, _, _) <- runExprM prevDecls (prevS >> shaderpos)
-          writeFile "data/shader.frag" fsource
-          writeFile "data/shader.vert" vsource
+          writeFile "data/shader.frag" (Text.unpack fsource)
+          writeFile "data/shader.vert" (Text.unpack vsource)
           return $ Drawcall wOrIo primN rastN vsource fsource vinps vunis vsamps funis fsamps ubuff
 
 setColor :: forall c. ColorSampleable c => c -> Int -> FragColor c -> (ExprM (), GlobDeclM ())
-setColor ct n c = let    name = "out" ++ show n
+setColor ct n c = let    name = "out" <> tshow n
                          typeS = typeStr ct
                   in (do xs <- mapM unS (fromColor ct c :: [S F (ColorElement c)])
-                         tellAssignment' name (typeS ++ "(" ++ intercalate "," xs ++ ")")
+                         tellAssignment' name (typeS <> "(" <> Text.intercalate "," xs <> ")")
                          ,
                       do tellGlobal "layout(location = "
-                         tellGlobal $ show n
+                         tellGlobal $ tshow n
                          tellGlobal ") out "
                          tellGlobal typeS
                          tellGlobal " "
