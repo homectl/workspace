@@ -3,13 +3,16 @@
 module LambdaCnc.Config where
 
 import           Control.Arrow  (returnA)
-import           Graphics.GPipe (BufferFormat (..), UniformInput (..), V3 (..))
+import           Graphics.GPipe (B, Buffer, BufferFormat (..), Uniform,
+                                 UniformInput (..), V3 (..))
 
 
 data RuntimeConfig a = RuntimeConfig
     { time      :: a
     , cameraPos :: V3 a
     }
+
+type UniformBuffer os = Buffer os (Uniform (RuntimeConfig (B Float)))
 
 instance UniformInput a => UniformInput (RuntimeConfig a) where
     type UniformFormat (RuntimeConfig a) x = (RuntimeConfig (UniformFormat a x))

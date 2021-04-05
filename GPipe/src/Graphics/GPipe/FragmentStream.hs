@@ -26,6 +26,7 @@ module Graphics.GPipe.FragmentStream (
     rasterize,
     VPos,
     Side(..),
+    PolygonMode(..),
     ViewPort(..),
     DepthRange(..),
 

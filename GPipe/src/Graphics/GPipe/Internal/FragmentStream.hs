@@ -69,7 +69,7 @@ class FragmentInput a where
 --   Primitives will be transformed from canonical view space, i.e. [(-1,-1,-1),(1,1,1)], to the 2D space defined by the 'ViewPort' parameter and the depth range
 --   defined by the 'DepthRange' parameter.
 rasterize:: forall p a s os f. FragmentInput a
-          => (s -> (Side, ViewPort, DepthRange))
+          => (s -> (Side, PolygonMode, ViewPort, DepthRange))
           -> PrimitiveStream p (VPos, a)
           -> Shader os s (FragmentStream (FragmentFormat a))
 rasterize sf (PrimitiveStream xs) = Shader $ do
@@ -88,24 +88,31 @@ rasterize sf (PrimitiveStream xs) = Shader $ do
         makePointSize Nothing       = return ()
         makePointSize (Just (S ps)) = ps >>= tellAssignment' "gl_PointSize"
         io s =
-            let (side, ViewPort (V2 x y) (V2 w h), DepthRange dmin dmax) = sf s in
+            let (side, polygonMode, ViewPort (V2 x y) (V2 w h), DepthRange dmin dmax) = sf s in
             if w < 0 || h < 0
                 then error "ViewPort, negative size"
                 else do setGlCullFace side
+                        setGlPolygonMode polygonMode
                         glScissor (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h)
                         glViewport (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h)
                         glDepthRange (realToFrac dmin) (realToFrac dmax)
                         setGLPointSize
 
-        setGlCullFace Front = glEnable GL_CULL_FACE >> glCullFace GL_BACK -- Back is culled when front is rasterized
-        setGlCullFace Back  = glEnable GL_CULL_FACE >> glCullFace GL_FRONT
-        setGlCullFace _     = glDisable GL_CULL_FACE
-        -- TODO(pippijn): Implement wireframe mode.
-        -- >> glPolygonMode GL_FRONT_AND_BACK GL_LINE
+        setGlCullFace Front        = glEnable GL_CULL_FACE >> glCullFace GL_BACK -- Back is culled when front is rasterized
+        setGlCullFace Back         = glEnable GL_CULL_FACE >> glCullFace GL_FRONT
+        setGlCullFace FrontAndBack = glDisable GL_CULL_FACE
+
+        setGlPolygonMode PolygonFill = glPolygonMode GL_FRONT_AND_BACK GL_FILL
+        setGlPolygonMode (PolygonLine lw) = do
+            glLineWidth (realToFrac lw)
+            glPolygonMode GL_FRONT_AND_BACK GL_LINE
+
         setGLPointSize = if any (isJust.fst.snd) xs then glEnable GL_PROGRAM_POINT_SIZE else glDisable GL_PROGRAM_POINT_SIZE
 
 -- | Defines which side to rasterize. Non triangle primitives only has a front side.
 data Side = Front | Back | FrontAndBack
+-- | Defines whether to fill the polygon or to show points or wireframes.
+data PolygonMode = PolygonFill | PolygonLine Float
 -- | The viewport in pixel coordinates (where (0,0) is the lower left corner) in to which the canonical view volume [(-1,-1,-1),(1,1,1)] is transformed and clipped/scissored.
 data ViewPort = ViewPort { viewPortLowerLeft :: V2 Int, viewPortSize :: V2 Int }
 -- | The fragment depth range to map the canonical view volume's z-coordinate to. Depth values are clamped to [0,1], so @DepthRange 0 1@ gives maximum depth resolution.
