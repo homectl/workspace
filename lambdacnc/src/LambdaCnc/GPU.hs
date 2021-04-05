@@ -36,7 +36,7 @@ main = do
     Env.setEnv "GPIPE_DEBUG" "1"
     runContextT GLFW.defaultHandleConfig{GLFW.configEventPolicy = Just $ GLFW.WaitTimeout $ 1 / fps} $ do
         let V2 w h = viewPort
-        win <- newWindow (WindowFormatColor RGB8) $ (GLFW.defaultWindowConfig "LambdaRay")
+        win <- newWindow (WindowFormatColorDepth RGB8 Depth16) $ (GLFW.defaultWindowConfig "LambdaRay")
             { GLFW.configWidth = w
             , GLFW.configHeight = h
             , GLFW.configHints = [GLFW.WindowHint'Samples (Just 4)]
@@ -82,7 +82,7 @@ updateUniforms startTime = do
 
 
 loop
-    :: Window os RGBFloat ()
+    :: Window os RGBFloat Depth
     -> Time.UTCTime
     -> Buffer os Shaders.ObjectShaderInput
     -> Buffer os Shaders.QuadShaderInput
@@ -113,10 +113,11 @@ loop win startTime objVertexBuffer quadVertexBuffer uniformBuffer shadowColorTex
 
         render $ do
             clearWindowColor win (V3 0 0 0.8)
+            clearWindowDepth win 1
             objVertexArray <- toPrimitiveArray TriangleList <$> newVertexArray objVertexBuffer
             quadVertexArray <- toPrimitiveArray TriangleList <$> newVertexArray quadVertexBuffer
             solidsShader objVertexArray
-            wireframeShader objVertexArray
+            -- wireframeShader objVertexArray
             shadowViewShader quadVertexArray
 
         swapWindowBuffers win

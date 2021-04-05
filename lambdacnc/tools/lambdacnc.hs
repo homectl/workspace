@@ -55,10 +55,12 @@ interpret modName = GHC.runGhc (Just libdir) $ do
     target <- GHC.guessTarget ("src/LambdaCnc/" ++ modName ++ ".hs") Nothing
     GHC.setTargets [target]
     whileM $ do
+        let fullModName = "LambdaCnc." ++ modName
+        liftIO $ putStrLn $ "Compiling modules for " ++ fullModName
         ok <- GHC.load GHC.LoadAllTargets
         case ok of
             GHC.Succeeded -> do
-                modSum <- GHC.getModSummary $ GHC.mkModuleName $ "LambdaCnc." ++ modName
+                modSum <- GHC.getModSummary $ GHC.mkModuleName $ fullModName
                 runExpr modSum "main"
             GHC.Failed -> do
                 liftIO $ threadDelay 1000000

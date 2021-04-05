@@ -3,6 +3,7 @@
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns        #-}
+{-# OPTIONS_GHC -Wno-unused-matches #-}
 module LambdaCnc.Shaders
   ( ShadowShader, ShadowShaderEnv (..), compileShadowShader
   , SolidsShader, SolidsShaderEnv, compileSolidsShader
@@ -50,7 +51,7 @@ data ShadowShaderEnv = ShadowShaderEnv
     }
 
 vertLight :: RuntimeConfig VFloat -> (V3 VFloat, V3 VFloat) -> (VPos, VFloat)
-vertLight RuntimeConfig{..} (toV4 1 -> pos, col) =
+vertLight RuntimeConfig{} (toV4 1 -> pos, normal) =
     (screenPos, screenPos^._z * 0.5 + 0.5)
   where
     viewMat = lookAt (V3 100000 50000 50000) (V3 0 0 0) (V3 0 0 1)
@@ -59,7 +60,7 @@ vertLight RuntimeConfig{..} (toV4 1 -> pos, col) =
 
 
 fragShadow :: RuntimeConfig FFloat -> FFloat -> (FFloat, FragDepth)
-fragShadow RuntimeConfig{..} c = (c, c)
+fragShadow RuntimeConfig{} c = (c, c)
 
 
 compileShadowShader
@@ -85,25 +86,44 @@ compileShadowShader uniformBuffer = compileShader $ do
 
 type SolidsShader os = CompiledShader os SolidsShaderEnv
 type SolidsShaderEnv = PrimitiveArray Triangles ObjectShaderInput
+type SolidShaderAttachment x = (V2 (S x Float), V4 (S x Float), V4 (S x Float))
 
 
-vertCamera :: RuntimeConfig VFloat -> (V3 VFloat, V3 VFloat) -> (VPos, (V2 VFloat, V2 VFloat))
-vertCamera RuntimeConfig{..} (toV4 1 -> pos, col) = (screenPos, (uv, col^._xy))
+vertCamera :: RuntimeConfig VFloat -> (V3 VFloat, V3 VFloat) -> (VPos, SolidShaderAttachment V)
+vertCamera RuntimeConfig{} (toV4 1 -> pos, normal) = (screenPos, (uv, fragPos, toV4 1 normal))
   where
     viewMat = lookAt (V3 40000 50000 60000) (V3 0 0 0) (V3 0 0 1)
     projMat = perspective (pi/3) 1 1000 350000
-    screenPos = projMat !*! viewMat !*! modelMat !* pos
+
+    fragPos = modelMat !* pos
+    screenPos = projMat !*! viewMat !* fragPos
     uv = pos^._xy
 
 
-fragSolid :: RuntimeConfig FFloat -> (V2 FFloat -> FFloat) -> (V2 FFloat -> FFloat) -> (V2 FFloat, V2 FFloat) -> V3 FFloat
-fragSolid RuntimeConfig{..} shadowSamp texSamp (V2 u v, _) = V3 c c c
-  where c = texSamp (V2 u v / 80000)
+fragSolid :: RuntimeConfig FFloat -> (V2 FFloat -> FFloat) -> (V2 FFloat -> FFloat) -> SolidShaderAttachment F -> V3 FFloat
+fragSolid RuntimeConfig{..} shadowSamp texSamp (uv, fragPos, normal) = c
+  where
+    objectColor =  V3 0.5 0.5 0.5 -- texSamp (uv / 80000)
+
+    lightPos = rotMatrixZ (time/2) !* V4 60000 0 30000 1
+    diffuse = diffuseLight fragPos normal lightPos (V3 0.8 0.8 0.8)
+
+    c = objectColor * diffuse
+
+
+diffuseLight :: V4 FFloat -> V4 FFloat -> V4 FFloat -> V3 FFloat -> V3 FFloat
+diffuseLight fragPos normal lightPos lightColor =
+    let
+        lightDir = signorm (lightPos - fragPos)
+        diff = maxB (dot normal lightDir) 0
+        diffuse = lightColor ^* diff
+    in
+    diffuse
 
 
 compileSolidsShader
     :: ContextHandler ctx
-    => Window os RGBFloat ()
+    => Window os RGBFloat Depth
     -> V2 Int
     -> UniformBuffer os
     -> ShadowColorTex os
@@ -122,17 +142,17 @@ compileSolidsShader win screenSize uniformBuffer shadowTex tex = compileShader $
     let shadowSamp = sample2D shadowSampler SampleAuto Nothing Nothing
     let texSamp = sample2D texSampler SampleAuto Nothing Nothing
 
-    fragmentStream <- fmap (fragSolid fragCfg shadowSamp texSamp) <$>
+    fragmentStream <- withRasterizedInfo (\a r -> (fragSolid fragCfg shadowSamp texSamp a, rasterizedFragCoord r ^. _z)) <$>
         rasterize (const (Front, PolygonFill, ViewPort (V2 0 0) screenSize, DepthRange 0 1)) primitiveStream
 
-    drawWindowColor (const (win, ContextColorOption NoBlending (pure True))) fragmentStream
+    drawWindowColorDepth (const (win, ContextColorOption NoBlending (pure True), DepthOption Less True)) fragmentStream
 
 
 --------------------------------------------------
 
 compileWireframeShader
     :: ContextHandler ctx
-    => Window os RGBFloat ()
+    => Window os RGBFloat ds
     -> V2 Int
     -> UniformBuffer os
     -> ContextT ctx os IO (SolidsShader os)
@@ -160,7 +180,7 @@ vertQuad pos = (V4 x y 0 1, (pos + 1) / 2)
 
 compileQuadShader
     :: ContextHandler ctx
-    => Window os RGBFloat ()
+    => Window os RGBFloat ds
     -> V2 Int
     -> ShadowColorTex os
     -> ContextT ctx os IO (QuadShader os)
