@@ -10,6 +10,7 @@ module LambdaCnc.GPU
   ( main
   ) where
 
+import Data.Word(Word32)
 import           Control.Concurrent          (threadDelay)
 import           Control.Monad               (unless)
 import           Control.Monad.IO.Class      (MonadIO, liftIO)
@@ -27,9 +28,13 @@ import           System.IO                   (hFlush, stdout)
 
 data ShaderEnvironment = ShaderEnvironment
     { envPrimitives :: PrimitiveArray Triangles ShaderInput
-    , envShadowColor :: Image (Format RGBFloat)
+    , envShadowColor :: Image (Format RFloat)
     , envShadowDepth :: Image (Format Depth)
     }
+
+type ColorTex os = Texture2D os (Format RFloat)
+type ShadowColorTex os = Texture2D os (Format RFloat)
+type ShadowDepthTex os = Texture2D os (Format Depth)
 
 type ShaderInput = (B3 Float, B3 Float)
 type VertexBuffer os = Buffer os ShaderInput
@@ -59,25 +64,30 @@ compileShadowShader uniformBuffer = compileShader $ do
         rasterize (const (Back, ViewPort (V2 0 0) (V2 1000 1000), DepthRange 0 1)) primitiveStream
 
     drawDepth (\s -> (NoBlending, envShadowDepth s, DepthOption Less True)) fragmentStream $
-        drawColor (\s -> (envShadowColor s, pure True, False))
+    -- draw (const NoBlending) (fst <$> fragmentStream) $
+        drawColor (\s -> (envShadowColor s, True, False))
 
 
 compileCameraShader
     :: Window os RGBFloat ()
     -> UniformBuffer os
-    -> Texture2D os (Format RGBFloat)
+    -> ShadowColorTex os
+    -> ColorTex os
     -> ContextT GLFW.Handle os IO (CameraShader os)
-compileCameraShader win uniformBuffer shadowTex = compileShader $ do
+compileCameraShader win uniformBuffer shadowTex tex = compileShader $ do
     vertCfg <- getUniform (const (uniformBuffer, 0))
     fragCfg <- getUniform (const (uniformBuffer, 0))
 
     primitiveStream <- fmap (Shaders.vertCamera vertCfg) <$>
         toPrimitiveStream id
 
-    let filterMode = SamplerFilter Linear Linear Linear (Just 4)
-    shadowSamp <- newSampler2D (const (shadowTex, filterMode, (pure ClampToEdge, undefined)))
+    shadowSampler <- newSampler2D (const (shadowTex, SamplerNearest, (pure Repeat, undefined)))
+    texSampler <- newSampler2D (const (tex, SamplerNearest, (pure Repeat, undefined)))
 
-    fragmentStream <- fmap (Shaders.fragCamera fragCfg (sample2D shadowSamp SampleAuto Nothing Nothing)) <$>
+    let shadowSamp = sample2D shadowSampler SampleAuto Nothing Nothing
+    let texSamp = sample2D texSampler SampleAuto Nothing Nothing
+
+    fragmentStream <- fmap (Shaders.fragCamera fragCfg shadowSamp texSamp) <$>
         rasterize (const (Front, ViewPort (V2 0 0) viewPort, DepthRange 0 1)) primitiveStream
 
     drawWindowColor (const (win, ContextColorOption NoBlending (pure True))) fragmentStream
@@ -103,15 +113,19 @@ main = do
         uniformBuffer <- newBuffer 1
         writeBuffer uniformBuffer 0 [defaultRuntimeConfig]
 
-        shadowColorTex <- newTexture2D RGB16F (V2 1000 1000) 1
+        tex <- newTexture2D R8 (V2 8 8) 1
+        let whiteBlack = cycle [minBound,maxBound] :: [Word32]
+            blackWhite = tail whiteBlack
+        writeTexture2D tex 0 0 (V2 8 8) (cycle (take 8 whiteBlack ++ take 8 blackWhite))
+
+        shadowColorTex <- newTexture2D R8 (V2 1000 1000) 1
         shadowDepthTex <- newTexture2D Depth16 (V2 1000 1000) 1
 
         shadowShader <- timeIt "Compiling shadow shader..." $ compileShadowShader uniformBuffer
-        cameraShader <- timeIt "Compiling camera shader..." $ compileCameraShader win uniformBuffer shadowColorTex
+        cameraShader <- timeIt "Compiling camera shader..." $ compileCameraShader win uniformBuffer shadowColorTex tex
 
         startTime <- liftIO Time.getCurrentTime
         loop win startTime vertexBuffer uniformBuffer shadowColorTex shadowDepthTex shadowShader cameraShader
-
 
 
 updateUniforms :: Floating a => Time.UTCTime -> IO (RuntimeConfig a)
@@ -125,40 +139,40 @@ loop
     -> Time.UTCTime
     -> VertexBuffer os
     -> UniformBuffer os
-    -> Texture2D os (Format RGBFloat)
-    -> Texture2D os (Format Depth)
+    -> ShadowColorTex os
+    -> ShadowDepthTex os
     -> ShadowShader os
     -> CameraShader os
     -> ContextT GLFW.Handle os IO ()
 loop win startTime vertexBuffer uniformBuffer shadowColorTex shadowDepthTex shadowShader cameraShader = do
     closeRequested <- timeIt "Rendering..." $ do
-      cfg <- liftIO $ updateUniforms startTime
-      writeBuffer uniformBuffer 0 [cfg]
+        cfg <- liftIO $ updateUniforms startTime
+        writeBuffer uniformBuffer 0 [cfg]
+  
+        render $ do
+            vertexArray <- newVertexArray vertexBuffer
+            shadowColor <- getTexture2DImage shadowColorTex 0
+            shadowDepth <- getTexture2DImage shadowDepthTex 0
+            clearImageColor shadowColor 0
+            clearImageDepth shadowDepth 1
+            shadowShader ShaderEnvironment
+                { envPrimitives = toPrimitiveArray TriangleList vertexArray
+                , envShadowColor = shadowColor
+                , envShadowDepth = shadowDepth
+                }
 
-      render $ do
-        vertexArray <- newVertexArray vertexBuffer
-        shadowColor <- getTexture2DImage shadowColorTex 0
-        shadowDepth <- getTexture2DImage shadowDepthTex 0
-        clearImageColor shadowColor (V3 0.8 0 0)
-        clearImageDepth shadowDepth 1
-        shadowShader ShaderEnvironment
-            { envPrimitives = toPrimitiveArray TriangleList vertexArray
-            , envShadowColor = shadowColor
-            , envShadowDepth = shadowDepth
-            }
-
-      render $ do
-        clearWindowColor win (V3 0 0 0.8)
-        vertexArray <- newVertexArray vertexBuffer
-        cameraShader $ toPrimitiveArray TriangleList vertexArray
-
-      swapWindowBuffers win
-
-      GLFW.windowShouldClose win
+        render $ do
+            clearWindowColor win (V3 0 0 0.8)
+            vertexArray <- newVertexArray vertexBuffer
+            cameraShader $ toPrimitiveArray TriangleList vertexArray
+  
+        swapWindowBuffers win
+  
+        GLFW.windowShouldClose win
 
     liftIO $ threadDelay 10000
     unless (closeRequested == Just True) $
-      loop win startTime vertexBuffer uniformBuffer shadowColorTex shadowDepthTex shadowShader cameraShader
+        loop win startTime vertexBuffer uniformBuffer shadowColorTex shadowDepthTex shadowShader cameraShader
 
 
 timeIt :: (Info a, MonadIO m) => String -> m a -> m a

@@ -111,7 +111,7 @@ continue _ = return False
 
 mainloop win controller resources@(_, projMatB, _) hook = do
     stop <- hook controller
-    Just now <- liftIO $ GLFW.getTime
+    Just now <- liftIO GLFW.getTime
     if done now controller || stop
     then return ()
     else do

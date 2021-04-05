@@ -65,7 +65,7 @@ test-suite testsuite
       Graphics.GPipe.Context.GLFW.FixedSpec
       Graphics.GPipe.Context.GLFW.InputSpec
       Graphics.GPipe.Context.GLFW.ManualSpec
-      Graphics.GPipe.Context.GLFW.MultiSpec
+      Graphics.GPipe.Context.GLFW.MultiPassSpec
       Graphics.GPipe.Context.GLFW.SequenceSpec
       Graphics.GPipe.Context.GLFW.TimedSpec
       Graphics.GPipe.BufferSpec
@@ -82,6 +82,7 @@ test-suite testsuite
     , GPipe-GLFW
     , exception-transformers
     , hspec
+    , lens
     , transformers
 
 benchmark bench
