@@ -1,5 +1,6 @@
 packages:
   GPipe/
   GPipe-GLFW/
+  STL/
   lambdacnc/
   lambdaray/
