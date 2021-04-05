@@ -105,9 +105,6 @@ loop win startTime vertexBuffer uniformBuffer shadowColorTex shadowDepthTex shad
             clearWindowColor win (V3 0 0 0.8)
             vertexArray <- newVertexArray vertexBuffer
             solidsShader $ toPrimitiveArray TriangleList vertexArray
-
-        render $ do
-            vertexArray <- newVertexArray vertexBuffer
             wireframeShader $ toPrimitiveArray TriangleList vertexArray
 
         swapWindowBuffers win
