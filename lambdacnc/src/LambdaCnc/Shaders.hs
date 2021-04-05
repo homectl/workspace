@@ -78,7 +78,6 @@ compileShadowShader uniformBuffer = compileShader $ do
         rasterize (const (Back, PolygonFill, ViewPort (V2 0 0) (V2 1000 1000), DepthRange 0 1)) primitiveStream
 
     drawDepth (\s -> (NoBlending, envShadowDepth s, DepthOption Less True)) fragmentStream $
-    -- draw (const NoBlending) (fst <$> fragmentStream) $
         drawColor (\s -> (envShadowColor s, True, False))
 
 
@@ -100,6 +99,16 @@ vertCamera RuntimeConfig{} (toV4 1 -> pos, normal) = (screenPos, (uv, fragPos, t
     uv = pos^._xy
 
 
+diffuseLight :: V4 FFloat -> V4 FFloat -> V4 FFloat -> V3 FFloat -> V3 FFloat
+diffuseLight fragPos normal lightPos lightColor =
+    let
+        lightDir = signorm (lightPos - fragPos)
+        diff = maxB (dot normal lightDir) 0
+        diffuse = lightColor ^* diff
+    in
+    diffuse
+
+
 fragSolid :: RuntimeConfig FFloat -> (V2 FFloat -> FFloat) -> (V2 FFloat -> FFloat) -> SolidShaderAttachment F -> V3 FFloat
 fragSolid RuntimeConfig{..} shadowSamp texSamp (uv, fragPos, normal) = c
   where
@@ -109,16 +118,6 @@ fragSolid RuntimeConfig{..} shadowSamp texSamp (uv, fragPos, normal) = c
     diffuse = diffuseLight fragPos normal lightPos (V3 0.8 0.8 0.8)
 
     c = objectColor * diffuse
-
-
-diffuseLight :: V4 FFloat -> V4 FFloat -> V4 FFloat -> V3 FFloat -> V3 FFloat
-diffuseLight fragPos normal lightPos lightColor =
-    let
-        lightDir = signorm (lightPos - fragPos)
-        diff = maxB (dot normal lightDir) 0
-        diffuse = lightColor ^* diff
-    in
-    diffuse
 
 
 compileSolidsShader

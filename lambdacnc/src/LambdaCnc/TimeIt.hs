@@ -13,7 +13,9 @@ timeIt text m = do
     (r, (status, info)) <- getInfo <$> m
     liftIO $ putStr (" " ++ info ++ "\t") >> hFlush stdout
     e <- liftIO Time.getCurrentTime
-    liftIO $ putStr $ show $ Time.nominalDiffTimeToSeconds $ Time.diffUTCTime e s
+    let elapsed = Time.nominalDiffTimeToSeconds $ Time.diffUTCTime e s
+        ops = if elapsed > 0 then 1 / elapsed else -1
+    liftIO $ putStr $ show elapsed ++ " (" ++ show ops ++ "/sec)"
     liftIO $ putStrLn ("\r[" ++ show status)
     return r
 
