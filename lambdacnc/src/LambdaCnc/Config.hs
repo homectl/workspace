@@ -1,14 +1,14 @@
-{-# LANGUAGE Arrows #-}
+{-# LANGUAGE Arrows       #-}
 {-# LANGUAGE TypeFamilies #-}
 module LambdaCnc.Config where
 
 import           Control.Arrow  (returnA)
-import           Graphics.GPipe
+import           Graphics.GPipe (BufferFormat (..), UniformInput (..), V3 (..))
 
 
 data RuntimeConfig a = RuntimeConfig
-    { time       :: a
-    , cameraPos  :: V3 a
+    { time      :: a
+    , cameraPos :: V3 a
     }
 
 instance UniformInput a => UniformInput (RuntimeConfig a) where

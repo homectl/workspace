@@ -1,8 +1,12 @@
 {-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE NamedFieldPuns      #-}
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module LambdaCnc.Shaders (frag, vert) where
+module LambdaCnc.Shaders
+  ( fragShadow, vertShadow
+  , fragCamera, vertCamera
+  ) where
 
 import           Control.Lens     ((^.))
 import           Graphics.GPipe   hiding ( normalize)
@@ -10,17 +14,33 @@ import           LambdaCnc.Config (RuntimeConfig (..))
 import           Prelude          hiding ((<*))
 
 
-vert :: RuntimeConfig VFloat -> (VPos, V2 VFloat) -> (VPos, (V2 VFloat, V2 VFloat))
-vert RuntimeConfig{..} (pos, col) = (screenPos, (col, col))
+toV4 :: R3 t => a -> t a -> V4 a
+toV4 w v = V4 (v^._x) (v^._y) (v^._z) w
+
+--------------------------------------------------
+
+vertShadow :: RuntimeConfig VFloat -> (V3 VFloat, V3 VFloat) -> (VPos, VFloat)
+vertShadow RuntimeConfig{..} (toV4 1 -> pos, col) = (screenPos, screenPos^._z * 0.5 + 0.5)
   where
-    modelMat = rotMatrixX time
-    viewMat = lookAt (V3 1 1 2) (V3 0 0 0) (V3 0 0 1)
-    projMat = perspective (pi/3) 1 1 10
+    modelMat = rotMatrixZ (pi/3) -- time
+    viewMat = lookAt (V3 100000 50000 50000) (V3 0 0 0) (V3 0 0 1)
+    projMat = ortho (-50000) 50000 (-50000) 50000 1000 350000
     screenPos = projMat !*! viewMat !*! modelMat !* pos
 
 
-frag :: RuntimeConfig FFloat -> (V2 FFloat, V2 FFloat) -> V3 FFloat
-frag RuntimeConfig{..} (V2 x y, _) = result
+fragShadow :: RuntimeConfig FFloat -> FFloat -> (V3 FFloat, FragDepth)
+fragShadow RuntimeConfig{..} c = (V3 c c c, c)
+
+--------------------------------------------------
+
+vertCamera :: RuntimeConfig VFloat -> (V3 VFloat, V3 VFloat) -> (VPos, (V2 VFloat, V2 VFloat))
+vertCamera RuntimeConfig{..} (toV4 1 -> pos, col) = (screenPos, (col^._xy, col^._xy))
   where
-    c = time `mod''` 1
-    result = V3 (c + x) (-c + y) c
+    modelMat = rotMatrixZ (pi/3) -- time
+    viewMat = lookAt (V3 100000 50000 40000) (V3 0 0 0) (V3 0 0 1)
+    projMat = perspective (pi/3) 1 1000 350000
+    screenPos = projMat !*! viewMat !*! modelMat !* pos
+
+
+fragCamera :: RuntimeConfig FFloat -> (V2 FFloat -> V3 FFloat) -> (V2 FFloat, V2 FFloat) -> V3 FFloat
+fragCamera RuntimeConfig{..} shadowSamp (V2 u v, _) = shadowSamp (V2 u v)

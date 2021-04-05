@@ -35,9 +35,8 @@ renderSchwarzschild win (uniformBuffer :: Buffer os (Uniform (B Float, B Float, 
     primitiveStream <- toPrimitiveStream id
     fragmentStream <- rasterize (const (FrontAndBack, ViewPort (V2 0 0) viewPort, DepthRange 0 1)) primitiveStream
 
-    let filterMode = SamplerFilter Linear Linear Linear (Just 4)
-    diskSamp <- newSampler2D (const (diskTex, filterMode, (pure ClampToEdge, undefined)))
-    skySamp <- newSampler2D (const (skyTex, filterMode, (pure Repeat, undefined)))
+    diskSamp <- newSampler2D (const (diskTex, SamplerNearest, (pure ClampToEdge, undefined)))
+    skySamp <- newSampler2D (const (skyTex, SamplerNearest, (pure Repeat, undefined)))
 
     let cfg = defaultConfig
                 { diskMode = DiskTexture (sample2D diskSamp SampleAuto Nothing Nothing)

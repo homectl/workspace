@@ -21,6 +21,7 @@ library
   exposed-modules:
       LambdaCnc.Config
       LambdaCnc.GPU
+      LambdaCnc.STL
       LambdaCnc.Shaders
   ghc-options:
       -Wall
@@ -28,6 +29,7 @@ library
       base              >= 4 && < 5
     , GPipe
     , GPipe-GLFW
+    , STL
     , lens
     , time
 

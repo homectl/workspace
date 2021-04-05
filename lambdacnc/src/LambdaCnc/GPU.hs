@@ -6,25 +6,37 @@
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
 {-# OPTIONS_GHC -Wno-type-defaults #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
-module LambdaCnc.GPU (main) where
+module LambdaCnc.GPU
+  ( main
+  ) where
 
 import           Control.Concurrent          (threadDelay)
 import           Control.Monad               (unless)
 import           Control.Monad.IO.Class      (MonadIO, liftIO)
 import qualified Data.Time.Clock             as Time
+import qualified Graphics.Formats.STL        as STL
 import           Graphics.GPipe
 import qualified Graphics.GPipe.Context.GLFW as GLFW
 import           LambdaCnc.Config            (RuntimeConfig (..),
                                               defaultRuntimeConfig)
+import qualified LambdaCnc.STL               as STL
 import qualified LambdaCnc.Shaders           as Shaders
 import           Prelude                     hiding ((<*))
 import qualified System.Environment          as Env
 import           System.IO                   (hFlush, stdout)
 
-type ShaderInput = (B4 Float, B2 Float)
+data ShaderEnvironment = ShaderEnvironment
+    { envPrimitives :: PrimitiveArray Triangles ShaderInput
+    , envShadowColor :: Image (Format RGBFloat)
+    , envShadowDepth :: Image (Format Depth)
+    }
+
+type ShaderInput = (B3 Float, B3 Float)
 type VertexBuffer os = Buffer os ShaderInput
 type UniformBuffer os = Buffer os (Uniform (RuntimeConfig (B Float)))
-type CncShader os = CompiledShader os (PrimitiveArray Triangles ShaderInput)
+
+type ShadowShader os = CompiledShader os ShaderEnvironment
+type CameraShader os = CompiledShader os (PrimitiveArray Triangles ShaderInput)
 
 fps :: Double
 fps = 24
@@ -33,49 +45,73 @@ viewPort :: V2 Int
 viewPort = V2 1500 1000
 
 
+compileShadowShader
+    :: UniformBuffer os
+    -> ContextT GLFW.Handle os IO (ShadowShader os)
+compileShadowShader uniformBuffer = compileShader $ do
+    vertCfg <- getUniform (const (uniformBuffer, 0))
+    fragCfg <- getUniform (const (uniformBuffer, 0))
+
+    primitiveStream <- fmap (Shaders.vertShadow vertCfg) <$>
+        toPrimitiveStream envPrimitives
+
+    fragmentStream <- fmap (Shaders.fragShadow fragCfg) <$>
+        rasterize (const (Back, ViewPort (V2 0 0) (V2 1000 1000), DepthRange 0 1)) primitiveStream
+
+    drawDepth (\s -> (NoBlending, envShadowDepth s, DepthOption Less True)) fragmentStream $
+        drawColor (\s -> (envShadowColor s, pure True, False))
+
+
+compileCameraShader
+    :: Window os RGBFloat ()
+    -> UniformBuffer os
+    -> Texture2D os (Format RGBFloat)
+    -> ContextT GLFW.Handle os IO (CameraShader os)
+compileCameraShader win uniformBuffer shadowTex = compileShader $ do
+    vertCfg <- getUniform (const (uniformBuffer, 0))
+    fragCfg <- getUniform (const (uniformBuffer, 0))
+
+    primitiveStream <- fmap (Shaders.vertCamera vertCfg) <$>
+        toPrimitiveStream id
+
+    let filterMode = SamplerFilter Linear Linear Linear (Just 4)
+    shadowSamp <- newSampler2D (const (shadowTex, filterMode, (pure ClampToEdge, undefined)))
+
+    fragmentStream <- fmap (Shaders.fragCamera fragCfg (sample2D shadowSamp SampleAuto Nothing Nothing)) <$>
+        rasterize (const (Front, ViewPort (V2 0 0) viewPort, DepthRange 0 1)) primitiveStream
+
+    drawWindowColor (const (win, ContextColorOption NoBlending (pure True))) fragmentStream
+
+
 main :: IO ()
 main = do
     Env.setEnv "GPIPE_DEBUG" "1"
     runContextT GLFW.defaultHandleConfig{GLFW.configEventPolicy = Just $ GLFW.WaitTimeout $ 1 / fps} $ do
-      let V2 w h = viewPort
-      win <- newWindow (WindowFormatColor RGB8) $ (GLFW.defaultWindowConfig "LambdaRay")
-          { GLFW.configWidth = w
-          , GLFW.configHeight = h
-          , GLFW.configHints = [GLFW.WindowHint'Samples (Just 4)]
-          }
+        let V2 w h = viewPort
+        win <- newWindow (WindowFormatColor RGB8) $ (GLFW.defaultWindowConfig "LambdaRay")
+            { GLFW.configWidth = w
+            , GLFW.configHeight = h
+            , GLFW.configHints = [GLFW.WindowHint'Samples (Just 4)]
+            }
 
-      vertexBuffer <- newBuffer 6
-      writeBuffer vertexBuffer 0 [ (V4 (-1) (-1) 0 1, V2 0 0)
-                                 , (V4 (-1) 1 0 1, V2 0 1)
-                                 , (V4 1 1 0 1, V2 1 1)
-                                 , (V4 (-1) (-1) 0 1, V2 0 0)
-                                 , (V4 1 (-1) 0 1, V2 1 0)
-                                 , (V4 1 1 0 1, V2 1 1)
-                                 ]
+        vertexBuffer <- timeIt "Loading mesh" $ do
+            mesh <- liftIO $ STL.stlToMesh <$> STL.mustLoadSTL "data/models/Bed.stl"
+            vertexBuffer <- newBuffer $ length mesh
+            writeBuffer vertexBuffer 0 mesh
+            return vertexBuffer
 
-      uniformBuffer <- newBuffer 1
-      writeBuffer uniformBuffer 0 [defaultRuntimeConfig]
+        uniformBuffer <- newBuffer 1
+        writeBuffer uniformBuffer 0 [defaultRuntimeConfig]
 
-      shader <- timeIt "Compiling..." $ compilePipeline win uniformBuffer
+        shadowColorTex <- newTexture2D RGB16F (V2 1000 1000) 1
+        shadowDepthTex <- newTexture2D Depth16 (V2 1000 1000) 1
 
-      startTime <- liftIO Time.getCurrentTime
-      loop win startTime vertexBuffer uniformBuffer shader
+        shadowShader <- timeIt "Compiling shadow shader..." $ compileShadowShader uniformBuffer
+        cameraShader <- timeIt "Compiling camera shader..." $ compileCameraShader win uniformBuffer shadowColorTex
 
+        startTime <- liftIO Time.getCurrentTime
+        loop win startTime vertexBuffer uniformBuffer shadowColorTex shadowDepthTex shadowShader cameraShader
 
-compilePipeline
-    :: Window os RGBFloat ()
-    -> UniformBuffer os
-    -> ContextT GLFW.Handle os IO (CncShader os)
-compilePipeline (win :: Window os RGBFloat ()) (uniformBuffer :: UniformBuffer os) = compileShader $ do
-    vertCfg <- getUniform (const (uniformBuffer, 0))
-    primitiveStream <- fmap (Shaders.vert vertCfg) <$>
-        toPrimitiveStream id
-
-    fragCfg <- getUniform (const (uniformBuffer, 0))
-    fragmentStream <- fmap (Shaders.frag fragCfg) <$>
-        rasterize (const (FrontAndBack, ViewPort (V2 0 0) viewPort, DepthRange 0 1)) primitiveStream
-
-    drawWindowColor (const (win, ContextColorOption NoBlending (V3 True True True))) fragmentStream
 
 
 updateUniforms :: Floating a => Time.UTCTime -> IO (RuntimeConfig a)
@@ -89,25 +125,40 @@ loop
     -> Time.UTCTime
     -> VertexBuffer os
     -> UniformBuffer os
-    -> CncShader os
+    -> Texture2D os (Format RGBFloat)
+    -> Texture2D os (Format Depth)
+    -> ShadowShader os
+    -> CameraShader os
     -> ContextT GLFW.Handle os IO ()
-loop win startTime vertexBuffer uniformBuffer shader = do
+loop win startTime vertexBuffer uniformBuffer shadowColorTex shadowDepthTex shadowShader cameraShader = do
     closeRequested <- timeIt "Rendering..." $ do
       cfg <- liftIO $ updateUniforms startTime
       writeBuffer uniformBuffer 0 [cfg]
 
       render $ do
+        vertexArray <- newVertexArray vertexBuffer
+        shadowColor <- getTexture2DImage shadowColorTex 0
+        shadowDepth <- getTexture2DImage shadowDepthTex 0
+        clearImageColor shadowColor (V3 0.8 0 0)
+        clearImageDepth shadowDepth 1
+        shadowShader ShaderEnvironment
+            { envPrimitives = toPrimitiveArray TriangleList vertexArray
+            , envShadowColor = shadowColor
+            , envShadowDepth = shadowDepth
+            }
+
+      render $ do
         clearWindowColor win (V3 0 0 0.8)
         vertexArray <- newVertexArray vertexBuffer
-        let primitiveArray = toPrimitiveArray TriangleList vertexArray
-        shader primitiveArray
+        cameraShader $ toPrimitiveArray TriangleList vertexArray
+
       swapWindowBuffers win
 
       GLFW.windowShouldClose win
 
     liftIO $ threadDelay 10000
     unless (closeRequested == Just True) $
-      loop win startTime vertexBuffer uniformBuffer shader
+      loop win startTime vertexBuffer uniformBuffer shadowColorTex shadowDepthTex shadowShader cameraShader
 
 
 timeIt :: (Info a, MonadIO m) => String -> m a -> m a
@@ -151,3 +202,6 @@ instance Info (Texture2D a b) where
 
 instance Info (a -> b) where
     getInfo r = (r, (Done, ""))
+
+instance Info (Buffer os a) where
+    getInfo r = (r, (Done, show $ bufferLength r))
