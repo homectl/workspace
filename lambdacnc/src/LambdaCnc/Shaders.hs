@@ -3,7 +3,6 @@
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns        #-}
-{-# OPTIONS_GHC -Wno-deferred-type-errors #-}
 module LambdaCnc.Shaders
   ( ShadowShader, ShadowShaderEnv (..), compileShadowShader
   , SolidsShader, SolidsShaderEnv, compileSolidsShader

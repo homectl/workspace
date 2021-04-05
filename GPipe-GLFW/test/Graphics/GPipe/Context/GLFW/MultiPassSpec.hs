@@ -79,7 +79,7 @@ spec = do
 getProjectedFragments size eye center up sf = do
   primitiveStream <- toPrimitiveStream sf
   let primitiveStream2 = fmap (\pos2d -> (make3d eye center up pos2d, pos2d)) primitiveStream
-  rasterize (const (FrontAndBack, ViewPort (V2 0 0) (V2 size size), DepthRange 0 1)) primitiveStream2
+  rasterize (const (FrontAndBack, PolygonFill, ViewPort (V2 0 0) (V2 size size), DepthRange 0 1)) primitiveStream2
 
 make3d :: Floating a => V3 a -> V3 a -> V3 a -> V2 a -> V4 a
 make3d eye center up (V2 x y) = projMat !*! viewMat !* V4 x y 0 1

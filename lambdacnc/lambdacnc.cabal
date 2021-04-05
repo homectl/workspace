@@ -23,6 +23,7 @@ library
       LambdaCnc.GPU
       LambdaCnc.STL
       LambdaCnc.Shaders
+      LambdaCnc.TimeIt
   ghc-options:
       -Wall
   build-depends:

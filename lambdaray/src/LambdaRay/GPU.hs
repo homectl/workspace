@@ -5,6 +5,7 @@
 {-# LANGUAGE TypeFamilies        #-}
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
 {-# OPTIONS_GHC -Wno-type-defaults #-}
+{-# OPTIONS_GHC -Wno-deferred-type-errors #-}
 module LambdaRay.GPU (main) where
 
 import qualified Codec.Picture                     as Pic
@@ -33,7 +34,7 @@ viewPort = V2 1500 1000
 renderSchwarzschild win (uniformBuffer :: Buffer os (Uniform (B Float, B Float, B Float))) diskTex skyTex = compileShader $ do
     (time, stepfactor, stepsize) <- getUniform (const (uniformBuffer, 0))
     primitiveStream <- toPrimitiveStream id
-    fragmentStream <- rasterize (const (FrontAndBack, ViewPort (V2 0 0) viewPort, DepthRange 0 1)) primitiveStream
+    fragmentStream <- rasterize (const (FrontAndBack, PolygonFill, ViewPort (V2 0 0) viewPort, DepthRange 0 1)) primitiveStream
 
     diskSamp <- newSampler2D (const (diskTex, SamplerNearest, (pure ClampToEdge, undefined)))
     skySamp <- newSampler2D (const (skyTex, SamplerNearest, (pure Repeat, undefined)))

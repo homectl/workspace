@@ -1,11 +1,10 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE Rank2Types       #-}
 {-# LANGUAGE TypeFamilies     #-}
+{-# OPTIONS_GHC -Wno-missing-signatures #-}
 module Test.Common where
 
-import           Control.Concurrent          (threadDelay)
-import           Control.Monad.Exception     (MonadException)
-import           Control.Monad.IO.Class      (MonadIO, liftIO)
+import           Control.Monad.IO.Class      (liftIO)
 import           Data.Traversable            (forM)
 import           GHC.Float                   (double2Float)
 import qualified System.Environment          as Env
@@ -33,7 +32,7 @@ plane = zip (repeat $ V3 1 1 1) -- white
 data ShaderEnv os = ShaderEnv
     { extractProjU    :: (Buffer os (Uniform (V4 (B4 Float))), Int)
     , extractLinePA   :: PrimitiveArray Lines (B3 Float, B3 Float)
-    , extractRastOpts :: (Side, ViewPort, DepthRange)
+    , extractRastOpts :: (Side, PolygonMode, ViewPort, DepthRange)
     }
 
 initBuffers win rawMeshes = do
@@ -46,7 +45,7 @@ initBuffers win rawMeshes = do
     projMatB <- newBuffer 1
     return (meshesB, projMatB)
 
---projectLines :: forall os f. Shader os  (ShaderEnv os) (FragmentStream (V3 FFloat, FFloat))
+projectLines :: Shader os (ShaderEnv os) (FragmentStream (V3 FFloat, FFloat))
 projectLines = do
     projMat <- getUniform extractProjU
     linePS <- toPrimitiveStream extractLinePA
@@ -58,6 +57,7 @@ projectLines = do
     where
         depth RasterizedInfo {rasterizedFragCoord = (V4 _ _ z _)} = z
 
+checkEnv :: IO ()
 checkEnv = do
     val <- Env.lookupEnv "LIBGL_ALWAYS_SOFTWARE"
     let warn = case val of
@@ -101,7 +101,7 @@ renderStep win size (meshesB, projMatB, projShader) = do
     meshPAs <- forM meshesB $ \mesh -> do
         meshVA <- newVertexArray mesh
         return $ toPrimitiveArray LineStrip meshVA
-    projShader $ ShaderEnv (projMatB, 0) (mconcat meshPAs) (Front, ViewPort 0 size, DepthRange 0 1)
+    projShader $ ShaderEnv (projMatB, 0) (mconcat meshPAs) (Front, PolygonFill, ViewPort 0 size, DepthRange 0 1)
 
 runContext :: (ContextHandler ctx) => ContextHandlerParameters ctx -> (forall os. ContextT ctx os IO a) -> IO a
 runContext = runContextT
