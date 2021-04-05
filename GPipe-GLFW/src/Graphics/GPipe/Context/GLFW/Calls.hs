@@ -95,19 +95,25 @@ makeContextCurrent logger reason windowHuh = do
 -- * This function is not called during context creation, leaving the swap interval set to whatever is the default on that platform. This is done because some swap interval extensions used by GLFW do not allow the swap interval to be reset to zero once it has been set to a non-zero value.
 -- * This function may be called from any thread.
 swapInterval :: Int -> IO ()
-swapInterval interval = GLFW.swapInterval interval
+swapInterval = GLFW.swapInterval
 
 -- |
 -- * EGL: The context of the specified window must be current on the calling thread.
 -- * This function may be called from any thread.
 swapBuffers :: GLFW.Window -> IO ()
-swapBuffers window = GLFW.swapBuffers window
+swapBuffers = GLFW.swapBuffers
 
 -- | This function puts the calling thread to sleep until at least one event is available in the event queue.
 -- * ~~This function must not be called from a callback.~~
 -- * This function must only be called from the main thread.
 waitEvents :: EffectMain -> IO ()
 waitEvents onMain = onMain GLFW.waitEvents
+
+-- | This function puts the calling thread to sleep until at least one event is available in the event queue.
+-- * ~~This function must not be called from a callback.~~
+-- * This function must only be called from the main thread.
+waitEventsTimeout :: EffectMain -> Double -> IO ()
+waitEventsTimeout onMain timeout = onMain $ GLFW.waitEventsTimeout timeout
 
 -- | This function processes only those events that are already in the event queue and then returns immediately.
 -- * ~~This function must not be called from a callback.~~
@@ -123,12 +129,12 @@ postEmptyEvent = GLFW.postEmptyEvent
 -- |
 -- * This function may be called from any thread. Access is not synchronized.
 windowShouldClose :: GLFW.Window -> IO Bool
-windowShouldClose window = GLFW.windowShouldClose window
+windowShouldClose = GLFW.windowShouldClose
 
 -- |
 -- * This function may be called from any thread. Access is not synchronized.
 setWindowShouldClose :: GLFW.Window -> Bool -> IO ()
-setWindowShouldClose window bool = GLFW.setWindowShouldClose window bool
+setWindowShouldClose = GLFW.setWindowShouldClose
 
 -- |
 -- * This function must only be called from the main thread.

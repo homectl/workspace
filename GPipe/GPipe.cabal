@@ -29,6 +29,7 @@ library
     , exception-transformers
     , gl
     , hashtables
+    , lens
     , linear
     , text
     , transformers
@@ -40,6 +41,7 @@ library
       Graphics.GPipe.Format
       Graphics.GPipe.FragmentStream
       Graphics.GPipe.FrameBuffer
+      Graphics.GPipe.Linear
       Graphics.GPipe.PrimitiveArray
       Graphics.GPipe.PrimitiveStream
       Graphics.GPipe.Sampler
@@ -56,6 +58,7 @@ library
       Graphics.GPipe.Internal.Format
       Graphics.GPipe.Internal.FragmentStream
       Graphics.GPipe.Internal.FrameBuffer
+      Graphics.GPipe.Internal.Linear
       Graphics.GPipe.Internal.PrimitiveArray
       Graphics.GPipe.Internal.PrimitiveStream
       Graphics.GPipe.Internal.Shader

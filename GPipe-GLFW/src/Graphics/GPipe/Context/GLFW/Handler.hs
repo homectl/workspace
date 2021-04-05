@@ -112,7 +112,7 @@ onMain handle = RPC.fetchResult (handleComm handle)
 -- * Log only context handling activity which represents undesired conditions.
 defaultHandleConfig :: GPipe.ContextHandlerParameters Handle
 defaultHandleConfig = HandleConfig
-    { configErrorCallback = \err desc -> printf "%s: %s\n" (show err) desc
+    { configErrorCallback = printf "%s: %s\n" . show
     , configEventPolicy = pure Poll
     , configLogger = Log.Logger
         { Log.loggerLevel = Log.WARNING
@@ -267,6 +267,7 @@ createWindow logger parentHuh settings = do
 data EventPolicy
     = Poll
     | Wait
+    | WaitTimeout Double
     deriving
     ( Show
     )
@@ -298,6 +299,11 @@ mainstepInternal handle eventPolicy = do
                     (RPC.awaitActions (handleComm handle) >> Call.postEmptyEvent)
                     -- Main sleeps on waitEvents
                     (const $ Call.waitEvents id) -- id RPC because mainstepInternal is called only on mainthread
+        WaitTimeout timeout -> withAsync
+                    -- Async sleeps on RPC chan, waking op main when RPC received
+                    (RPC.awaitActions (handleComm handle) >> Call.postEmptyEvent)
+                    -- Main sleeps on waitEventsTimeout
+                    (const $ Call.waitEventsTimeout id timeout) -- id RPC because mainstepInternal is called only on mainthread
     RPC.processActions $ handleComm handle
 
 -- | Process GLFW and GPipe events according to the given 'EventPolicy' in a
