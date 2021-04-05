@@ -7,11 +7,14 @@ module LambdaCnc.Shaders
   ( ShadowShader, ShadowShaderEnv (..), compileShadowShader
   , SolidsShader, SolidsShaderEnv, compileSolidsShader
   , compileWireframeShader
+  , QuadShader, QuadShaderEnv, compileQuadShader
 
-  , ShaderInput
+  , ObjectShaderInput
+  , QuadShaderInput
 
   , ShadowColorTex
   , ShadowDepthTex
+  , MonochromeTex
   , ColorTex
   ) where
 
@@ -29,17 +32,19 @@ modelMat = rotMatrixZ (pi/8 * 5) -- time
 
 --------------------------------------------------
 
-type ShaderInput = (B3 Float, B3 Float)
+type ObjectShaderInput = (B3 Float, B3 Float)
+type QuadShaderInput = (B2 Float)
 
 type ShadowColorTex os = Texture2D os (Format RFloat)
 type ShadowDepthTex os = Texture2D os (Format Depth)
-type ColorTex os = Texture2D os (Format RFloat)
+type MonochromeTex os = Texture2D os (Format RFloat)
+type ColorTex os = Texture2D os (Format RGBFloat)
 
 --------------------------------------------------
 
 type ShadowShader os = CompiledShader os ShadowShaderEnv
 data ShadowShaderEnv = ShadowShaderEnv
-    { envPrimitives  :: PrimitiveArray Triangles ShaderInput
+    { envPrimitives  :: PrimitiveArray Triangles ObjectShaderInput
     , envShadowColor :: Image (Format RFloat)
     , envShadowDepth :: Image (Format Depth)
     }
@@ -54,7 +59,7 @@ vertLight RuntimeConfig{..} (toV4 1 -> pos, col) =
 
 
 fragShadow :: RuntimeConfig FFloat -> FFloat -> (FFloat, FragDepth)
-fragShadow RuntimeConfig{..} c = (0.5, c)
+fragShadow RuntimeConfig{..} c = (c, c)
 
 
 compileShadowShader
@@ -79,7 +84,7 @@ compileShadowShader uniformBuffer = compileShader $ do
 --------------------------------------------------
 
 type SolidsShader os = CompiledShader os SolidsShaderEnv
-type SolidsShaderEnv = PrimitiveArray Triangles ShaderInput
+type SolidsShaderEnv = PrimitiveArray Triangles ObjectShaderInput
 
 
 vertCamera :: RuntimeConfig VFloat -> (V3 VFloat, V3 VFloat) -> (VPos, (V2 VFloat, V2 VFloat))
@@ -102,7 +107,7 @@ compileSolidsShader
     -> V2 Int
     -> UniformBuffer os
     -> ShadowColorTex os
-    -> ColorTex os
+    -> MonochromeTex os
     -> ContextT ctx os IO (SolidsShader os)
 compileSolidsShader win screenSize uniformBuffer shadowTex tex = compileShader $ do
     vertCfg <- getUniform (const (uniformBuffer, 0))
@@ -139,5 +144,33 @@ compileWireframeShader win screenSize uniformBuffer = compileShader $ do
 
     fragmentStream <- fmap (const 0) <$>
         rasterize (const (Front, PolygonLine 1, ViewPort (V2 0 0) screenSize, DepthRange 0 1)) primitiveStream
+
+    drawWindowColor (const (win, ContextColorOption NoBlending (pure True))) fragmentStream
+
+
+--------------------------------------------------
+
+type QuadShader os = CompiledShader os QuadShaderEnv
+type QuadShaderEnv = PrimitiveArray Triangles QuadShaderInput
+
+vertQuad :: V2 VFloat -> (VPos, V2 VFloat)
+vertQuad pos = (V4 x y 0 1, (pos + 1) / 2)
+  where
+    V2 x y = pos/4 - 0.75
+
+compileQuadShader
+    :: ContextHandler ctx
+    => Window os RGBFloat ()
+    -> V2 Int
+    -> ShadowColorTex os
+    -> ContextT ctx os IO (QuadShader os)
+compileQuadShader win screenSize tex = compileShader $ do
+    primitiveStream <- fmap vertQuad <$> toPrimitiveStream id
+
+    texSampler <- newSampler2D (const (tex, SamplerNearest, (pure Repeat, undefined)))
+    let texSamp = sample2D texSampler SampleAuto Nothing Nothing
+
+    fragmentStream <- fmap (\uv -> let c = texSamp uv in V3 c c c) <$>
+        rasterize (const (FrontAndBack, PolygonFill, ViewPort (V2 0 0) screenSize, DepthRange 0 1)) primitiveStream
 
     drawWindowColor (const (win, ContextColorOption NoBlending (pure True))) fragmentStream

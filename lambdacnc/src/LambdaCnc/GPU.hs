@@ -25,7 +25,7 @@ import qualified System.Environment          as Env
 
 
 fps :: Double
-fps = 24
+fps = 5
 
 viewPort :: V2 Int
 viewPort = V2 1500 1000
@@ -42,11 +42,18 @@ main = do
             , GLFW.configHints = [GLFW.WindowHint'Samples (Just 4)]
             }
 
-        vertexBuffer <- timeIt "Loading mesh" $ do
+        objVertexBuffer <- timeIt "Loading mesh" $ do
             mesh <- liftIO $ STL.stlToMesh <$> STL.mustLoadSTL "data/models/Bed.stl"
-            vertexBuffer <- newBuffer $ length mesh
-            writeBuffer vertexBuffer 0 mesh
-            return vertexBuffer
+            buf <- newBuffer $ length mesh
+            writeBuffer buf 0 mesh
+            return buf
+
+        quadVertexBuffer <- timeIt "Generating quad" $ do
+            buf <- newBuffer 6
+            writeBuffer buf 0 [ V2 (-1) (-1), V2 (-1)   1 , V2 1 1
+                              , V2 (-1) (-1), V2   1  (-1), V2 1 1
+                              ]
+            return buf
 
         uniformBuffer <- newBuffer 1
         writeBuffer uniformBuffer 0 [defaultRuntimeConfig]
@@ -62,9 +69,10 @@ main = do
         shadowShader <- timeIt "Compiling shadow shader..." $ Shaders.compileShadowShader uniformBuffer
         solidsShader <- timeIt "Compiling solids shader..." $ Shaders.compileSolidsShader win viewPort uniformBuffer shadowColorTex tex
         wireframeShader <- timeIt "Compiling wireframe shader..." $ Shaders.compileWireframeShader win viewPort uniformBuffer
+        shadowViewShader <- timeIt "Compiling shadow map view shader..." $ Shaders.compileQuadShader win viewPort shadowColorTex
 
         startTime <- liftIO Time.getCurrentTime
-        loop win startTime vertexBuffer uniformBuffer shadowColorTex shadowDepthTex shadowShader solidsShader wireframeShader
+        loop win startTime objVertexBuffer quadVertexBuffer uniformBuffer shadowColorTex shadowDepthTex shadowShader solidsShader wireframeShader shadowViewShader
 
 
 updateUniforms :: Floating a => Time.UTCTime -> IO (RuntimeConfig a)
@@ -76,36 +84,40 @@ updateUniforms startTime = do
 loop
     :: Window os RGBFloat ()
     -> Time.UTCTime
-    -> Buffer os Shaders.ShaderInput
+    -> Buffer os Shaders.ObjectShaderInput
+    -> Buffer os Shaders.QuadShaderInput
     -> UniformBuffer os
     -> Shaders.ShadowColorTex os
     -> Shaders.ShadowDepthTex os
     -> Shaders.ShadowShader os
     -> Shaders.SolidsShader os
     -> Shaders.SolidsShader os
+    -> Shaders.QuadShader os
     -> ContextT GLFW.Handle os IO ()
-loop win startTime vertexBuffer uniformBuffer shadowColorTex shadowDepthTex shadowShader solidsShader wireframeShader = do
+loop win startTime objVertexBuffer quadVertexBuffer uniformBuffer shadowColorTex shadowDepthTex shadowShader solidsShader wireframeShader shadowViewShader = do
     closeRequested <- timeIt "Rendering..." $ do
         cfg <- liftIO $ updateUniforms startTime
         writeBuffer uniformBuffer 0 [cfg]
 
         render $ do
-            vertexArray <- newVertexArray vertexBuffer
+            objVertexArray <- toPrimitiveArray TriangleList <$> newVertexArray objVertexBuffer
             shadowColor <- getTexture2DImage shadowColorTex 0
             shadowDepth <- getTexture2DImage shadowDepthTex 0
             clearImageColor shadowColor 0
             clearImageDepth shadowDepth 1
             shadowShader Shaders.ShadowShaderEnv
-                { Shaders.envPrimitives = toPrimitiveArray TriangleList vertexArray
+                { Shaders.envPrimitives = objVertexArray
                 , Shaders.envShadowColor = shadowColor
                 , Shaders.envShadowDepth = shadowDepth
                 }
 
         render $ do
             clearWindowColor win (V3 0 0 0.8)
-            vertexArray <- newVertexArray vertexBuffer
-            solidsShader $ toPrimitiveArray TriangleList vertexArray
-            wireframeShader $ toPrimitiveArray TriangleList vertexArray
+            objVertexArray <- toPrimitiveArray TriangleList <$> newVertexArray objVertexBuffer
+            quadVertexArray <- toPrimitiveArray TriangleList <$> newVertexArray quadVertexBuffer
+            solidsShader objVertexArray
+            wireframeShader objVertexArray
+            shadowViewShader quadVertexArray
 
         swapWindowBuffers win
 
@@ -113,4 +125,4 @@ loop win startTime vertexBuffer uniformBuffer shadowColorTex shadowDepthTex shad
 
     liftIO $ threadDelay 10000
     unless (closeRequested == Just True) $
-        loop win startTime vertexBuffer uniformBuffer shadowColorTex shadowDepthTex shadowShader solidsShader wireframeShader
+        loop win startTime objVertexBuffer quadVertexBuffer uniformBuffer shadowColorTex shadowDepthTex shadowShader solidsShader wireframeShader shadowViewShader
