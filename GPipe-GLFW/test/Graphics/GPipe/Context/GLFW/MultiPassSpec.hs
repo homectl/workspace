@@ -33,9 +33,9 @@ spec = do
                 shader1 <- compileShader $ do
                   texMappedFragmentStream <- getProjectedFragments 256 (V3 0.5 (-0.8) (-0.8)) (V3 0.5 0.5 0) (V3 0 1 0)  textureMappedPrimitives
                   solidFragmentStream <- getProjectedFragments 256 (V3 (-0.6) (-0.6) 0.8) (V3 0.25 0.25 0) (V3 0 1 0) solidPrimitives
-                  let filter = SamplerFilter Nearest Nearest Nearest Nothing
+                  let filterMode = SamplerFilter Nearest Nearest Nearest Nothing
                       edge = (pure ClampToEdge, 0)
-                  samp <- newSampler2D (const (tex, filter, edge))
+                  samp <- newSampler2D (const (tex, filterMode, edge))
                   let sampleTexture = sample2D samp SampleAuto Nothing Nothing
                       texMappedFragmentStream2 = filterFragments ((>* 0.5) . sampleTexture) texMappedFragmentStream
                       texMappedFragmentStream3 = fmap (const (V2 1 0)) texMappedFragmentStream2
