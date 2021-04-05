@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-deferred-type-errors #-}
 module Graphics.GPipe.Context.GLFW.ManualSpec (spec) where
 
 import           Test.Hspec                  (Spec, describe, it)

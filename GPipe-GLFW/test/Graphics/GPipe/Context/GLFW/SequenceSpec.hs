@@ -1,8 +1,8 @@
+{-# OPTIONS_GHC -Wno-deferred-type-errors #-}
 module Graphics.GPipe.Context.GLFW.SequenceSpec (spec) where
 
 import           Test.Hspec                  (Spec, describe, it)
 
-import           Control.Monad.IO.Class      (liftIO)
 import           Graphics.GPipe
 import qualified Graphics.GPipe.Context.GLFW as GLFW
 import qualified Test.Common                 as C

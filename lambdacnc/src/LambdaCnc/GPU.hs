@@ -6,6 +6,7 @@
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
 {-# OPTIONS_GHC -Wno-type-defaults #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
+{-# OPTIONS_GHC -Wno-deferred-type-errors #-}
 module LambdaCnc.GPU
   ( main
   ) where

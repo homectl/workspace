@@ -1,6 +1,7 @@
+{-# OPTIONS_GHC -Wno-deferred-type-errors #-}
 module Graphics.GPipe.Context.GLFW.FixedSpec (spec) where
 
-import           Test.Hspec     (Spec, describe, it)
+import           Test.Hspec                  (Spec, describe, it)
 
 import           Graphics.GPipe
 import qualified Graphics.GPipe.Context.GLFW as GLFW

@@ -1,6 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
+{-# OPTIONS_GHC -Wno-deferred-type-errors #-}
 module Graphics.GPipe.Context.GLFW.MultiPassSpec (spec) where
 
 import           Test.Hspec                  (Spec, describe, it)

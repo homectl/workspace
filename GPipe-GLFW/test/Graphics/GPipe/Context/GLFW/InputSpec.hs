@@ -1,7 +1,10 @@
+{-# OPTIONS_GHC -Wno-deferred-type-errors #-}
+{-# OPTIONS_GHC -Wno-unused-matches #-}
 module Graphics.GPipe.Context.GLFW.InputSpec (spec) where
 
-import           Test.Hspec                  (Spec, describe, it)
+import           Test.Hspec                        (Spec, describe, it)
 
+import           Data.Functor                      (void)
 import           Graphics.GPipe
 import qualified Graphics.GPipe.Context.GLFW       as GLFW
 import qualified Graphics.GPipe.Context.GLFW.Input as Input
@@ -16,9 +19,9 @@ spec = do
             C.runContext GLFW.defaultHandleConfig $ do
                 win <- newWindow (WindowFormatColorDepth RGB8 Depth16) (GLFW.defaultWindowConfig "Input")
 
-                Input.setCursorPosCallback win $ Just (\x y -> printf "Cursor pos: %fx%f\n" x y)
-                Input.setMouseButtonCallback win $ Just (\b s m -> printf "Mouse: %s %s\n" (show b) (show s))
-                Input.setKeyCallback win $ Just (\k i s m -> printf "Key: %s %s %s\n" (show k) (show i) (show s))
+                void $ Input.setCursorPosCallback win $ Just (printf "Cursor pos: %fx%f\n")
+                void $ Input.setMouseButtonCallback win $ Just (\b s m -> printf "Mouse: %s %s\n" (show b) (show s))
+                void $ Input.setKeyCallback win $ Just (\k i s m -> printf "Key: %s %s %s\n" (show k) (show i) (show s))
 
                 resources <- C.initRenderContext win [C.plane, C.yAxis]
                 C.mainloop win (A.frames 120) resources C.continue
