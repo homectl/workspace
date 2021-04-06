@@ -10,7 +10,7 @@ import           GHC.Paths              (libdir)
 import           System.Directory       (setCurrentDirectory)
 import           System.Environment     as Env (getArgs)
 
-import qualified LambdaCnc.GPU          as GPU
+import qualified LambdaCNC.GPU          as GPU
 
 
 runExpr :: GHC.GhcMonad m => GHC.ModSummary -> String -> m Bool
@@ -52,10 +52,10 @@ interpret modName = GHC.runGhc (Just libdir) $ do
             ]
         , GHC.importPaths = ["src"]
         })
-    target <- GHC.guessTarget ("src/LambdaCnc/" ++ modName ++ ".hs") Nothing
+    target <- GHC.guessTarget ("src/LambdaCNC/" ++ modName ++ ".hs") Nothing
     GHC.setTargets [target]
     whileM $ do
-        let fullModName = "LambdaCnc." ++ modName
+        let fullModName = "LambdaCNC." ++ modName
         liftIO $ putStrLn $ "Compiling modules for " ++ fullModName
         ok <- GHC.load GHC.LoadAllTargets
         case ok of

@@ -1,6 +1,6 @@
 {-# LANGUAGE Arrows       #-}
 {-# LANGUAGE TypeFamilies #-}
-module LambdaCnc.Config where
+module LambdaCNC.Config where
 
 import           Control.Arrow  (returnA)
 import           Graphics.GPipe (B, Buffer, BufferFormat (..), Uniform,

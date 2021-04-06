@@ -5,7 +5,7 @@
 {-# OPTIONS_GHC -Wno-unused-matches #-}
 module Graphics.GPipe.Internal.Compiler where
 
-import           Control.Monad                    (forM_, void, when)
+import           Control.Monad                    (forM_, void, when, (>=>))
 import           Control.Monad.Exception          (MonadException)
 import           Control.Monad.IO.Class           (MonadIO, liftIO)
 import           Control.Monad.Trans.Class        (MonadTrans (lift))
@@ -31,11 +31,12 @@ import           Foreign.C.String                 (peekCString, withCString,
 import           Foreign.Marshal.Alloc            (alloca)
 import           Foreign.Marshal.Array            (allocaArray, withArray)
 import           Foreign.Marshal.Utils            (with)
-import           Foreign.Ptr                      (nullPtr)
+import           Foreign.Ptr                      (nullPtr, castPtr)
 import           Foreign.Storable                 (peek)
 import           GHC.IORef                        (IORef)
 import           Graphics.GL.Core33
 import           Graphics.GL.Types                (GLuint)
+
 
 type WinId = Int
 data Drawcall s = Drawcall
@@ -73,7 +74,6 @@ mapRenderIOState :: (s -> s') -> RenderIOState s' -> RenderIOState s -> RenderIO
 mapRenderIOState f (RenderIOState a b c d) (RenderIOState i j k l) = let g x = x . f in RenderIOState (Map.union i $ Map.map g a) (Map.union j $ Map.map g b) (Map.union k $ Map.map g c) (Map.union l $ Map.map g d)
 
 
-
 -- | May throw a GPipeException
 compile :: (Monad m, MonadIO m, MonadException m, ContextHandler ctx) => [Drawcall s] -> RenderIOState s -> ContextT ctx os m (s -> Render os ())
 compile drawcalls s = do
@@ -82,20 +82,7 @@ compile drawcalls s = do
      maxVUnis,
      maxVSamplers,
      maxFUnis,
-     maxFSamplers) <- liftNonWinContextIO $ do
-                       maxUnis <- alloca (\ptr -> glGetIntegerv GL_MAX_COMBINED_UNIFORM_BLOCKS ptr >> peek ptr)
-                       maxSamplers <- alloca (\ptr -> glGetIntegerv GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS ptr >> peek ptr)
-                       maxVUnis <- alloca (\ptr -> glGetIntegerv GL_MAX_VERTEX_UNIFORM_BLOCKS ptr >> peek ptr)
-                       maxVSamplers <- alloca (\ptr -> glGetIntegerv GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS ptr >> peek ptr)
-                       maxFUnis <- alloca (\ptr -> glGetIntegerv GL_MAX_FRAGMENT_UNIFORM_BLOCKS ptr >> peek ptr)
-                       maxFSamplers <- alloca (\ptr -> glGetIntegerv GL_MAX_TEXTURE_IMAGE_UNITS ptr >> peek ptr)
-                       return
-                        (fromIntegral maxUnis,
-                         fromIntegral maxSamplers,
-                         fromIntegral maxVUnis,
-                         fromIntegral maxVSamplers,
-                         fromIntegral maxFUnis,
-                         fromIntegral maxFSamplers)
+     maxFSamplers) <- liftNonWinContextIO getLimits
 
     let vUnisPerDc = map usedVUniforms drawcalls
         vSampsPerDc = map usedVSamplers drawcalls
@@ -129,6 +116,24 @@ compile drawcalls s = do
         else do
             liftNonWinContextAsyncIO $ mapM_ (\(pNameRef, pStrUDeleter) -> readIORef pNameRef >>= glDeleteProgram >> pStrUDeleter) pnames
             liftIO $ throwIO $ GPipeException $ Text.concat allErrs
+
+
+getLimits :: IO (Int, Int, Int, Int, Int, Int)
+getLimits = do
+    maxUnis <- alloca (\ptr -> glGetIntegerv GL_MAX_COMBINED_UNIFORM_BLOCKS ptr >> peek ptr)
+    maxSamplers <- alloca (\ptr -> glGetIntegerv GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS ptr >> peek ptr)
+    maxVUnis <- alloca (\ptr -> glGetIntegerv GL_MAX_VERTEX_UNIFORM_BLOCKS ptr >> peek ptr)
+    maxVSamplers <- alloca (\ptr -> glGetIntegerv GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS ptr >> peek ptr)
+    maxFUnis <- alloca (\ptr -> glGetIntegerv GL_MAX_FRAGMENT_UNIFORM_BLOCKS ptr >> peek ptr)
+    maxFSamplers <- alloca (\ptr -> glGetIntegerv GL_MAX_TEXTURE_IMAGE_UNITS ptr >> peek ptr)
+    return
+        ( fromIntegral maxUnis
+        , fromIntegral maxSamplers
+        , fromIntegral maxVUnis
+        , fromIntegral maxVSamplers
+        , fromIntegral maxFUnis
+        , fromIntegral maxFSamplers)
+
 
 type CompInput s = (Drawcall s, [Int], [Int], [Int], [Int])
 
@@ -204,9 +209,7 @@ renderer s (Drawcall fboSetup primN rastN vsource fsource inps _ _ _ _ pstrUSize
                         mErr2 <- m
                         let mErr = if isOk then Nothing else Just "Running shader that samples from texture that currently has an image borrowed from it. Try run this shader from a separate render call where no images from the same texture are drawn to or cleared.\n"
                         return $ mErr <> mErr2
-                    case mErr of
-                        Just e  -> throwE e
-                        Nothing -> return ()
+                    forM_ mErr throwE
     wid <- case mfbokeyio of
         Left wid -> do -- Bind correct context
             inwin wid $ do
@@ -341,3 +344,12 @@ getFBOerror = do
         GL_FRAMEBUFFER_COMPLETE -> Nothing
         GL_FRAMEBUFFER_UNSUPPORTED -> Just "The combination of draw images (FBO) used in the render call is unsupported by this graphics driver\n"
         _ -> error "GPipe internal FBO error"
+
+
+getGPUInfo :: IO (Text, Text)
+getGPUInfo = do
+    vendor <- getString GL_VENDOR
+    renderer <- getString GL_RENDERER
+    return (vendor, renderer)
+  where
+    getString = glGetString >=> fmap Text.pack . peekCString . castPtr

@@ -1,4 +1,4 @@
-module LambdaCnc.TimeIt (timeIt) where
+module LambdaCNC.TimeIt (timeIt) where
 
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Data.Time.Clock        as Time

@@ -201,7 +201,8 @@ makeDrawcall (sh, shd, wOrIo) (FragmentStreamData rastN shaderpos (PrimitiveStre
 dumpGeneratedFile :: FilePath -> Text.Text -> IO ()
 dumpGeneratedFile file text = do
     shouldWrite <- ("GPIPE_DEBUG" `elem`) . map fst <$> Env.getEnvironment
-    when shouldWrite $ Text.writeFile file text
+    when shouldWrite $ do
+      Text.writeFile file text
 
 
 setColor :: forall c. ColorSampleable c => c -> Int -> FragColor c -> (ExprM (), GlobDeclM ())

@@ -3,7 +3,7 @@
 {-# LANGUAGE NamedFieldPuns      #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies        #-}
-module LambdaCnc.GPU
+module LambdaCNC.GPU
   ( main
   ) where
 
@@ -15,11 +15,11 @@ import           Data.Word                   (Word32)
 import qualified Graphics.Formats.STL        as STL
 import           Graphics.GPipe
 import qualified Graphics.GPipe.Context.GLFW as GLFW
-import           LambdaCnc.Config            (RuntimeConfig (..), UniformBuffer,
+import           LambdaCNC.Config            (RuntimeConfig (..), UniformBuffer,
                                               defaultRuntimeConfig)
-import qualified LambdaCnc.STL               as STL
-import qualified LambdaCnc.Shaders           as Shaders
-import           LambdaCnc.TimeIt            (timeIt)
+import qualified LambdaCNC.STL               as STL
+import qualified LambdaCNC.Shaders           as Shaders
+import           LambdaCNC.TimeIt            (timeIt)
 import           Prelude                     hiding ((<*))
 import qualified System.Environment          as Env
 

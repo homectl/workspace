@@ -4,7 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns        #-}
 {-# OPTIONS_GHC -Wno-unused-matches #-}
-module LambdaCnc.Shaders
+module LambdaCNC.Shaders
   ( ShadowShader, ShadowShaderEnv (..), compileShadowShader
   , SolidsShader, SolidsShaderEnv, compileSolidsShader
   , compileWireframeShader
@@ -21,7 +21,7 @@ module LambdaCnc.Shaders
 
 import           Control.Lens     ((^.))
 import           Graphics.GPipe   hiding (normalize)
-import           LambdaCnc.Config (RuntimeConfig (..), UniformBuffer)
+import           LambdaCNC.Config (RuntimeConfig (..), UniformBuffer)
 import           Prelude          hiding ((<*))
 
 

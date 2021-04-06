@@ -252,7 +252,7 @@ createWindow logger parentHuh settings = do
     -- done
     return window
     where
-        config = fromMaybe (defaultWindowConfig "") (snd <$> settings)
+        config = maybe (defaultWindowConfig "") snd settings
         Resource.WindowConfig {Resource.configWidth=width, Resource.configHeight=height} = config
         Resource.WindowConfig _ _ title monitor _ intervalHuh = config
         (userHints, disallowedHints) = partition Format.allowedHint $ Resource.configHints config
@@ -351,7 +351,7 @@ instance Exception CreateWindowException
 
 -- | IO Exception thrown when application code calls a GPipe-GLFW incorrectly
 -- (eg. on the wrong thread).
-data UsageException
+newtype UsageException
     = MainstepOffMainException String
     deriving Show
 instance Exception UsageException

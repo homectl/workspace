@@ -1,6 +1,6 @@
 {-# LANGUAGE LambdaCase     #-}
 {-# LANGUAGE NamedFieldPuns #-}
-module LambdaCnc.STL where
+module LambdaCNC.STL where
 
 import qualified Graphics.Formats.STL       as STL
 import           Graphics.Formats.STL.Types (STL (..))
