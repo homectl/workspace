@@ -87,3 +87,23 @@ defaultObjectUniforms :: Default a => ObjectUniforms a
 defaultObjectUniforms = ObjectUniforms
     { objectPos = pure def
     }
+
+-------------------------------------------------
+
+newtype LightUniforms a = LightUniforms
+    { lightPos :: V3 a
+    }
+
+type LightUniformBuffer os = Buffer os (Uniform (LightUniforms (B Float)))
+
+instance UniformInput a => UniformInput (LightUniforms a) where
+    type UniformFormat (LightUniforms a) x = (LightUniforms (UniformFormat a x))
+    toUniform = proc ~(LightUniforms a) -> do
+        a' <- toUniform -< a
+        returnA -< LightUniforms a'
+
+instance BufferFormat a => BufferFormat (LightUniforms a) where
+    type HostFormat (LightUniforms a) = LightUniforms (HostFormat a)
+    toBuffer = proc ~(LightUniforms a) -> do
+        a' <- toBuffer -< a
+        returnA -< LightUniforms a'

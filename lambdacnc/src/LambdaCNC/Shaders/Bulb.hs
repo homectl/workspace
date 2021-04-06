@@ -9,9 +9,9 @@ module LambdaCNC.Shaders.Bulb where
 import           Control.Lens             ((^.))
 import           Graphics.GPipe           hiding (normalize)
 import           LambdaCNC.Config         (GlobalUniformBuffer,
-                                           GlobalUniforms (..))
+                                           GlobalUniforms (..), LightUniformBuffer, LightUniforms(..))
 import           LambdaCNC.Shaders.Common (Shader3DInput, cameraMat,
-                                           getLightPos, toV4)
+                                            toV4)
 import           Prelude                  hiding ((<*))
 
 --------------------------------------------------
@@ -30,10 +30,10 @@ bulbOffset :: V4 VFloat
 bulbOffset = V4 0 0 4200 0
 
 
-vert :: GlobalUniforms VFloat -> (V3 VFloat, V3 VFloat) -> (V4 VFloat, V3 VFloat)
-vert GlobalUniforms{..} (vertPos, n) = (pos, n)
+vert :: GlobalUniforms VFloat -> LightUniforms VFloat -> (V3 VFloat, V3 VFloat) -> (V4 VFloat, V3 VFloat)
+vert GlobalUniforms{..} LightUniforms{..} (vertPos, n) = (pos, n)
   where
-    objPos = rotMatrixX (-pi/2) !*! scaled 200 !* toV4 0 vertPos + getLightPos time + bulbOffset
+    objPos = rotMatrixX (-pi/2) !*! scaled 200 !* toV4 0 vertPos + bulbOffset + toV4 1 lightPos
     pos = cameraMat screenSize cameraPos !* objPos
 
 --------------------------------------------------
@@ -46,12 +46,14 @@ frag _ = 1
 solidShader
     :: ContextHandler ctx
     => GlobalUniformBuffer os
+    -> LightUniformBuffer os
     -> Window os RGBFloat Depth
     -> ContextT ctx os IO (Compiled os)
-solidShader globalUni win = compileShader $ do
+solidShader globalUni lightUni win = compileShader $ do
     vertGlobal <- getUniform (const (globalUni, 0))
+    vertLight <- getUniform (const (lightUni, 0))
 
-    primitiveStream <- fmap (vert vertGlobal) <$> toPrimitiveStream envPrimitives
+    primitiveStream <- fmap (vert vertGlobal vertLight) <$> toPrimitiveStream envPrimitives
 
     fragmentStream <- withRasterizedInfo (\a r -> (frag a, rasterizedFragCoord r ^. _z)) <$>
         rasterize (\env -> (Front, PolygonFill, ViewPort (V2 0 0) (envScreenSize env), DepthRange 0 1)) primitiveStream
@@ -63,12 +65,14 @@ solidShader globalUni win = compileShader $ do
 wireframeShader
     :: ContextHandler ctx
     => GlobalUniformBuffer os
+    -> LightUniformBuffer os
     -> Window os RGBFloat Depth
     -> ContextT ctx os IO (Compiled os)
-wireframeShader globalUni win = compileShader $ do
+wireframeShader globalUni lightUni win = compileShader $ do
     vertGlobal <- getUniform (const (globalUni, 0))
+    vertLight <- getUniform (const (lightUni, 0))
 
-    primitiveStream <- fmap (vert vertGlobal) <$> toPrimitiveStream envPrimitives
+    primitiveStream <- fmap (vert vertGlobal vertLight) <$> toPrimitiveStream envPrimitives
 
     fragmentStream <- withRasterizedInfo (\_ r -> (0, rasterizedFragCoord r ^. _z)) <$>
         rasterize (\env -> (FrontAndBack, PolygonLine 1, ViewPort (V2 0 0) (envScreenSize env), DepthRange 0 1)) primitiveStream

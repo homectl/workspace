@@ -4,23 +4,22 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns        #-}
 {-# OPTIONS_GHC -Wno-unused-matches #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeFamilies        #-}
 module LambdaCNC.Shaders.Solids where
 
-import           Control.Lens     ((^.))
-import           Graphics.GPipe   hiding (normalize)
-import           LambdaCNC.Config (GlobalUniforms (..), GlobalUniformBuffer, ObjectUniforms(..), ObjectUniformBuffer)
-import           Prelude          hiding ((<*))
-import LambdaCNC.Shaders.Common
-    ( MonochromeTex,
-      ShadowColorTex,
-      Shader3DInput,
-      toV4,
-      modelMat,
-      shadowMapSize,
-      lightMat,
-      getLightPos,
-      cameraMat )
+import           Control.Lens             ((^.))
+import           Control.Monad            (zipWithM)
+import           Graphics.GPipe           hiding (normalize)
+import           LambdaCNC.Config         (GlobalUniformBuffer,
+                                           GlobalUniforms (..),
+                                           LightUniformBuffer,
+                                           ObjectUniformBuffer,LightUniforms(..),
+                                           ObjectUniforms (..))
+import           LambdaCNC.Shaders.Common (FragLight (..), MonochromeTex,
+                                           Shader3DInput, ShadowColorTex,
+                                           cameraMat, lightMat,
+                                           modelMat, shadowMapSize, toV4)
+import           Prelude                  hiding ((<*))
 
 --------------------------------------------------
 
@@ -33,14 +32,20 @@ type SolidShaderAttachment x = (V2 (S x Float), V4 (S x Float), V4 (S x Float), 
 
 --------------------------------------------------
 
-vert :: GlobalUniforms VFloat -> ObjectUniforms VFloat -> (V3 VFloat, V3 VFloat) -> (VPos, SolidShaderAttachment V)
-vert GlobalUniforms{..} ObjectUniforms{..} (toV4 1 -> pos, normal) = (screenPos, (uv, fragPos, fragNormal, fragPosLightSpace))
+vert :: GlobalUniforms VFloat -> ObjectUniforms VFloat -> [LightUniforms VFloat] -> (V3 VFloat, V3 VFloat) -> (VPos, SolidShaderAttachment V)
+vert GlobalUniforms{..} ObjectUniforms{..} [LightUniforms{..}] (toV4 1 -> pos, normal) = (screenPos, (uv, fragPos, fragNormal, fragPosLightSpace))
   where
     fragPos = modelMat time !* (pos + toV4 0 objectPos)
     fragNormal = modelMat time !* toV4 1 normal
-    fragPosLightSpace = lightMat (getLightPos time) !* fragPos
+    fragPosLightSpace = lightMat (toV4 1 lightPos) !* fragPos
     screenPos = cameraMat screenSize cameraPos !* fragPos
     uv = pos^._xy
+
+vertWireframe :: GlobalUniforms VFloat -> ObjectUniforms VFloat -> (V3 VFloat, V3 VFloat) -> (VPos, VFloat)
+vertWireframe GlobalUniforms{..} ObjectUniforms{..} (toV4 1 -> pos, normal) = (screenPos, screenPos^._x)
+  where
+    fragPos = modelMat time !* (pos + toV4 0 objectPos)
+    screenPos = cameraMat screenSize cameraPos !* fragPos
 
 --------------------------------------------------
 
@@ -94,14 +99,15 @@ diffuseLight fragPos normal lightPos lightColor =
     diffuse
 
 
-frag :: GlobalUniforms FFloat -> (V2 FFloat -> FFloat) -> (V2 FFloat -> FFloat) -> SolidShaderAttachment F -> V3 FFloat
-frag GlobalUniforms{..} shadowSamp texSamp (uv, fragPos, normal, fragPosLightSpace) = c
+frag :: GlobalUniforms FFloat -> [FragLight] -> (V2 FFloat -> FFloat) -> SolidShaderAttachment F -> V3 FFloat
+frag GlobalUniforms{..} lights texSamp (uv, fragPos, normal, fragPosLightSpace) = c
   where
     objectColor = V3 1 1 1 ^* texSamp (uv ^/ 80000)
-    lightPos = getLightPos time
 
-    diffuse = diffuseLight fragPos normal lightPos (V3 1 1 1)
-            ^* shadowCalculation shadowSamp lightPos fragPos normal fragPosLightSpace
+    diffuse = sum $ map (\FragLight{..} ->
+        let lightPos = toV4 1 fragLightPos in
+        diffuseLight fragPos normal lightPos (V3 1 1 1)
+            ^* shadowCalculation fragLightSampler lightPos fragPos normal fragPosLightSpace) lights
 
     c = diffuse * objectColor
 
@@ -111,22 +117,28 @@ solidShader
     :: ContextHandler ctx
     => GlobalUniformBuffer os
     -> ObjectUniformBuffer os
-    -> ShadowColorTex os
+    -> LightUniformBuffer os
+    -> [ShadowColorTex os]
     -> MonochromeTex os
     -> Window os RGBFloat Depth
     -> ContextT ctx os IO (Compiled os)
-solidShader globalUni objectUni shadowTex tex win = compileShader $ do
+solidShader globalUni objectUni lightUni shadowTexes tex win = compileShader $ do
     vertGlobal <- getUniform (const (globalUni, 0))
     vertObject <- getUniform (const (objectUni, 0))
-    fragGlobal <- getUniform (const (globalUni, 0))
+    vertLight <- zipWithM (\_ i -> getUniform (const (lightUni, i))) shadowTexes [0..]
 
-    primitiveStream <- fmap (vert vertGlobal vertObject) <$>
+    fragGlobal <- getUniform (const (globalUni, 0))
+    fragLight <- zipWithM (\_ i -> getUniform (const (lightUni, i))) shadowTexes [0..]
+
+    primitiveStream <- fmap (vert vertGlobal vertObject vertLight) <$>
         toPrimitiveStream envPrimitives
 
-    shadowSampler <- newSampler2D (const (shadowTex, SamplerFilter Linear Linear Linear Nothing, (pure Repeat, undefined)))
+    shadowSamplers <- mapM (\shadowTex -> newSampler2D (const (shadowTex, SamplerFilter Linear Linear Linear Nothing, (pure Repeat, undefined)))) shadowTexes
     texSampler <- newSampler2D (const (tex, SamplerNearest, (pure Repeat, undefined)))
 
-    let shadowSamp = sample2D shadowSampler SampleAuto Nothing Nothing
+    let shadowSamp = zipWith FragLight
+            (map lightPos fragLight)
+            (map (\sampler -> sample2D sampler SampleAuto Nothing Nothing) shadowSamplers)
     let texSamp = sample2D texSampler SampleAuto Nothing Nothing
 
     fragmentStream <- withRasterizedInfo (\a r -> (frag fragGlobal shadowSamp texSamp a, rasterizedFragCoord r ^. _z)) <$>
@@ -146,10 +158,10 @@ wireframeShader globalUni objectUni win = compileShader $ do
     vertGlobal <- getUniform (const (globalUni, 0))
     vertObject <- getUniform (const (objectUni, 0))
 
-    primitiveStream <- fmap (vert vertGlobal vertObject) <$>
+    primitiveStream <- fmap (vertWireframe vertGlobal vertObject) <$>
         toPrimitiveStream envPrimitives
 
-    fragmentStream <- withRasterizedInfo (\_ r -> (0, rasterizedFragCoord r ^. _z)) <$>
+    fragmentStream <- withRasterizedInfo (const $ \r -> (0, rasterizedFragCoord r ^. _z)) <$>
         rasterize (\env -> (Front, PolygonLine 1, ViewPort (V2 0 0) (envScreenSize env), DepthRange 0 1)) primitiveStream
 
     drawWindowColorDepth (const (win, ContextColorOption NoBlending (pure True), DepthOption Less True)) fragmentStream

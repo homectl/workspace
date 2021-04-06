@@ -36,9 +36,9 @@ cameraMat screenSize cameraPos = projMat !*! viewMat
     viewMat = lookAt cameraPos (V3 0 0 10000) (V3 0 0 1)
     projMat = perspective (30 * pi / 180) (aspectRatio screenSize) nearPlane farPlane
 
-getLightPos :: Floating a => a -> V4 a
+-- getLightPos :: Floating a => a -> V4 a
 -- getLightPos time = rotMatrixZ (time/2) !* V4 120000 0 30000 1
-getLightPos _ = rotMatrixZ (pi/10*(-7)) !* V4 100000 1000 30000 1
+-- getLightPos _ = rotMatrixZ (pi/10*(-7)) !* V4 100000 1000 30000 1
 
 --------------------------------------------------
 
@@ -52,3 +52,13 @@ type ShadowDepthTex os = Texture2D os (Format Depth)
 
 type MonochromeTex os = Texture2D os (Format RFloat)
 type ColorTex os = Texture2D os (Format RGBFloat)
+
+data Light os = Light
+    { shadowColorTex :: ShadowColorTex os
+    , shadowDepthTex :: ShadowDepthTex os
+    }
+
+data FragLight = FragLight
+    { fragLightPos     :: V3 FFloat
+    , fragLightSampler :: V2 FFloat -> FFloat
+    }

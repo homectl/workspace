@@ -12,8 +12,8 @@ import           Graphics.GPipe           hiding (normalize)
 import           LambdaCNC.Config         (GlobalUniformBuffer,
                                            GlobalUniforms (..),
                                            ObjectUniformBuffer,
-                                           ObjectUniforms (..))
-import           LambdaCNC.Shaders.Common (Shader3DInput, getLightPos, lightMat,
+                                           ObjectUniforms (..), LightUniforms(..), LightUniformBuffer)
+import           LambdaCNC.Shaders.Common (Shader3DInput, lightMat,
                                            modelMat, shadowMapSize, toV4)
 import           Prelude                  hiding ((<*))
 
@@ -28,11 +28,11 @@ data Env = Env
 
 --------------------------------------------------
 
-vert :: GlobalUniforms VFloat -> ObjectUniforms VFloat -> (V3 VFloat, V3 VFloat) -> (VPos, VFloat)
-vert GlobalUniforms{..} ObjectUniforms{..} (toV4 1 -> pos, normal) =
+vert :: GlobalUniforms VFloat -> ObjectUniforms VFloat -> [LightUniforms VFloat] -> (V3 VFloat, V3 VFloat) -> (VPos, VFloat)
+vert GlobalUniforms{..} ObjectUniforms{..} [LightUniforms{..}] (toV4 1 -> pos, normal) =
     (screenPos, screenPos^._z * 0.5 + 0.5)
   where
-    screenPos = lightMat (getLightPos time) !*! modelMat time !* (pos + toV4 0 objectPos)
+    screenPos = lightMat (toV4 1 lightPos) !*! modelMat time !* (pos + toV4 0 objectPos)
 
 --------------------------------------------------
 
@@ -45,13 +45,16 @@ solidShader
     :: ContextHandler ctx
     => GlobalUniformBuffer os
     -> ObjectUniformBuffer os
+    -> LightUniformBuffer os
     -> ContextT ctx os IO (Compiled os)
-solidShader globalUni objectUni = compileShader $ do
+solidShader globalUni objectUni lightUni = compileShader $ do
     vertGlobal <- getUniform (const (globalUni, 0))
     vertObject <- getUniform (const (objectUni, 0))
+    vertLight <- getUniform (const (lightUni, 0))
+    
     fragGlobal <- getUniform (const (globalUni, 0))
 
-    primitiveStream <- fmap (vert vertGlobal vertObject) <$>
+    primitiveStream <- fmap (vert vertGlobal vertObject [vertLight]) <$>
         toPrimitiveStream envPrimitives
 
     fragmentStream <- fmap (frag fragGlobal) <$>
