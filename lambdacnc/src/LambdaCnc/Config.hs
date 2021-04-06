@@ -29,5 +29,5 @@ instance BufferFormat a => BufferFormat (RuntimeConfig a) where
 defaultRuntimeConfig :: Fractional a => RuntimeConfig a
 defaultRuntimeConfig = RuntimeConfig
     { time = 0
-    , cameraPos = V3 0 1 (-20)
+    , cameraPos = V3 40000 50000 60000
     }

@@ -89,9 +89,9 @@ type SolidShaderAttachment x = (V2 (S x Float), V4 (S x Float), V4 (S x Float))
 
 
 vertCamera :: RuntimeConfig VFloat -> (V3 VFloat, V3 VFloat) -> (VPos, SolidShaderAttachment V)
-vertCamera RuntimeConfig{} (toV4 1 -> pos, normal) = (screenPos, (uv, fragPos, toV4 1 normal))
+vertCamera RuntimeConfig{..} (toV4 1 -> pos, normal) = (screenPos, (uv, fragPos, toV4 1 normal))
   where
-    viewMat = lookAt (V3 40000 50000 60000) (V3 0 0 0) (V3 0 0 1)
+    viewMat = lookAt cameraPos (V3 0 0 0) (V3 0 0 1)
     projMat = perspective (pi/3) 1 1000 350000
 
     fragPos = modelMat !* pos
