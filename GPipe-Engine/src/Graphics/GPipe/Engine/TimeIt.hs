@@ -1,4 +1,4 @@
-module LambdaCNC.TimeIt (timeIt) where
+module Graphics.GPipe.Engine.TimeIt (timeIt, Status (..), Info (..)) where
 
 import           Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Data.Time.Clock        as Time
@@ -51,4 +51,4 @@ instance Info (a -> b) where
     getInfo r = (r, (Done, ""))
 
 instance Info (Buffer os a) where
-    getInfo r = (r, (Done, show $ bufferLength r))
+    getInfo r = (r, (Done, "(" ++ show (bufferLength r) ++ ")"))

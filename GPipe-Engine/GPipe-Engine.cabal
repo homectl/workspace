@@ -1,0 +1,34 @@
+name:           GPipe-Engine
+version:        0.1
+cabal-version:  >= 1.10
+build-type:     Simple
+author:         Pippijn van Steenhoven
+license:        BSD3
+license-file:   LICENSE
+copyright:      Pippijn van Steenhoven
+category:       Graphics
+stability:      Experimental
+homepage:       https://github.com/homectl/lambdaray
+synopsis:       3D rendering engine based on GPipe
+description:
+                3D rendering engine based on GPipe.
+maintainer:     Pippijn van Steenhoven
+
+source-repository head
+  type:     git
+  location: https://github.com/homectl/lambdaray
+  subdir:   GPipe-Engine
+
+library
+  hs-source-dirs: src
+  build-depends:
+      base
+    , GPipe
+    , STL
+    , time
+  ghc-options:
+      -Wall
+  default-language: Haskell2010
+  exposed-modules:
+      Graphics.GPipe.Engine.STL
+      Graphics.GPipe.Engine.TimeIt

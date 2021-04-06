@@ -21,16 +21,14 @@ library
   exposed-modules:
       LambdaCNC.Config
       LambdaCNC.GPU
-      LambdaCNC.STL
       LambdaCNC.Shaders
-      LambdaCNC.TimeIt
   ghc-options:
       -Wall
   build-depends:
       base              >= 4 && < 5
     , GPipe
+    , GPipe-Engine
     , GPipe-GLFW
-    , STL
     , lens
     , time
 

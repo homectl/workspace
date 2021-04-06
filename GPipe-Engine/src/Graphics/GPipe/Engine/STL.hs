@@ -1,10 +1,14 @@
 {-# LANGUAGE LambdaCase     #-}
 {-# LANGUAGE NamedFieldPuns #-}
-module LambdaCNC.STL where
+module Graphics.GPipe.Engine.STL where
 
 import qualified Graphics.Formats.STL       as STL
 import           Graphics.Formats.STL.Types (STL (..))
 import           Graphics.GPipe             (V3 (..), cross, normalize)
+
+
+mustLoadSTL :: FilePath -> IO [(V3 Float, V3 Float)]
+mustLoadSTL = fmap stlToMesh . STL.mustLoadSTL
 
 
 stlToMesh :: STL -> [(V3 Float, V3 Float)]

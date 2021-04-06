@@ -6,23 +6,24 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
+{-# LANGUAGE DeriveTraversable #-}
 module LambdaCNC.GPU
   ( main
   ) where
 
 import           Control.Concurrent          (threadDelay)
-import           Control.Monad               (unless)
+import           Control.Monad               (unless, forM_, forM)
 import           Control.Monad.IO.Class      (liftIO)
 import qualified Data.Time.Clock             as Time
 import           Data.Word                   (Word32)
-import qualified Graphics.Formats.STL        as STL
 import           Graphics.GPipe
 import qualified Graphics.GPipe.Context.GLFW as GLFW
 import           LambdaCNC.Config            (RuntimeConfig (..), UniformBuffer,
                                               defaultRuntimeConfig)
-import qualified LambdaCNC.STL               as STL
+import qualified Graphics.GPipe.Engine.STL               as STL
 import qualified LambdaCNC.Shaders           as Shaders
-import           LambdaCNC.TimeIt            (timeIt)
+import           Graphics.GPipe.Engine.TimeIt (timeIt)
+import qualified Graphics.GPipe.Engine.TimeIt as TimeIt
 import           Prelude                     hiding ((<*))
 import qualified System.Environment          as Env
 
@@ -34,14 +35,17 @@ viewPort :: V2 Int
 viewPort = V2 1500 1000
 
 
-data Objects a = Objects
+data Solids a = Solids
     { objBed :: a
     , objGround :: a
     , objXAxis :: a
     , objYAxis :: a
     , objZAxis :: a
     }
-    deriving (Functor, Foldable)
+    deriving (Functor, Foldable, Traversable)
+
+instance TimeIt.Info (Solids a) where
+    getInfo r = (r, (TimeIt.Done, "(" ++ show (length r) ++ " solids)"))
 
 
 main :: IO ()
@@ -55,16 +59,17 @@ main = do
             , GLFW.configHints = [GLFW.WindowHint'Samples (Just 4)]
             }
 
-        objVertexBuffer <- timeIt "Loading mesh" $ do
-            meshes <- liftIO $ Objects
-                <$> (STL.stlToMesh <$> STL.mustLoadSTL "data/models/Bed.stl")
-                <*> (STL.stlToMesh <$> STL.mustLoadSTL "data/models/Ground.stl")
-                <*> (STL.stlToMesh <$> STL.mustLoadSTL "data/models/XAxis.stl")
-                <*> (STL.stlToMesh <$> STL.mustLoadSTL "data/models/YAxis.stl")
-                <*> (STL.stlToMesh <$> STL.mustLoadSTL "data/models/ZAxis.stl")
-            buf <- newBuffer $ foldr ((+) . length) 0 meshes
-            writeBuffer buf 0 $ concat meshes
-            return buf
+        objVertexBuffer <- timeIt "Loading meshes" $ do
+            meshes <- liftIO $ Solids
+                <$> STL.mustLoadSTL "data/models/Bed.stl"
+                <*> STL.mustLoadSTL "data/models/Ground.stl"
+                <*> STL.mustLoadSTL "data/models/XAxis.stl"
+                <*> STL.mustLoadSTL "data/models/YAxis.stl"
+                <*> STL.mustLoadSTL "data/models/ZAxis.stl"
+            forM meshes $ \mesh -> do
+                buf <- newBuffer $ length mesh
+                writeBuffer buf 0 mesh
+                return buf
 
         quadVertexBuffer <- timeIt "Generating quad" $ do
             buf <- newBuffer 6
@@ -102,7 +107,7 @@ updateUniforms startTime = do
 loop
     :: Window os RGBFloat Depth
     -> Time.UTCTime
-    -> Buffer os Shaders.ObjectShaderInput
+    -> Solids (Buffer os Shaders.ObjectShaderInput)
     -> Buffer os Shaders.QuadShaderInput
     -> UniformBuffer os
     -> Shaders.ShadowColorTex os
@@ -118,13 +123,13 @@ loop win startTime objVertexBuffer quadVertexBuffer uniformBuffer shadowColorTex
         writeBuffer uniformBuffer 0 [cfg]
 
         render $ do
-            objVertexArray <- toPrimitiveArray TriangleList <$> newVertexArray objVertexBuffer
+            objVertexArray <- mapM (fmap (toPrimitiveArray TriangleList) . newVertexArray) objVertexBuffer
             shadowColor <- getTexture2DImage shadowColorTex 0
             shadowDepth <- getTexture2DImage shadowDepthTex 0
             clearImageColor shadowColor 0
             clearImageDepth shadowDepth 1
-            shadowShader Shaders.ShadowShaderEnv
-                { Shaders.envPrimitives = objVertexArray
+            forM_ objVertexArray $ \prims -> shadowShader Shaders.ShadowShaderEnv
+                { Shaders.envPrimitives = prims
                 , Shaders.envShadowColor = shadowColor
                 , Shaders.envShadowDepth = shadowDepth
                 }
@@ -132,9 +137,9 @@ loop win startTime objVertexBuffer quadVertexBuffer uniformBuffer shadowColorTex
         render $ do
             clearWindowColor win (V3 0 0 0.8)
             clearWindowDepth win 1
-            objVertexArray <- toPrimitiveArray TriangleList <$> newVertexArray objVertexBuffer
+            objVertexArray <- mapM (fmap (toPrimitiveArray TriangleList) . newVertexArray) objVertexBuffer
             quadVertexArray <- toPrimitiveArray TriangleList <$> newVertexArray quadVertexBuffer
-            solidsShader objVertexArray
+            mapM_ solidsShader objVertexArray
             -- wireframeShader objVertexArray
             shadowViewShader quadVertexArray
 
