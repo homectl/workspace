@@ -35,10 +35,10 @@ frag texSamp uv = let c = texSamp uv in V3 c c c
 
 solidShader
     :: ContextHandler ctx
-    => Window os RGBFloat ds
-    -> ShadowColorTex os
+    => ShadowColorTex os
+    -> Window os RGBFloat ds
     -> ContextT ctx os IO (Compiled os)
-solidShader win tex = compileShader $ do
+solidShader tex win = compileShader $ do
     primitiveStream <- fmap vert <$> toPrimitiveStream envPrimitives
 
     texSampler <- newSampler2D (const (tex, SamplerNearest, (pure Repeat, undefined)))

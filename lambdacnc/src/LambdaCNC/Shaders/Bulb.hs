@@ -45,10 +45,10 @@ frag _ = 1
 
 solidShader
     :: ContextHandler ctx
-    => Window os RGBFloat Depth
-    -> GlobalUniformBuffer os
+    => GlobalUniformBuffer os
+    -> Window os RGBFloat Depth
     -> ContextT ctx os IO (Compiled os)
-solidShader win globalUni = compileShader $ do
+solidShader globalUni win = compileShader $ do
     vertGlobal <- getUniform (const (globalUni, 0))
 
     primitiveStream <- fmap (vert vertGlobal) <$> toPrimitiveStream envPrimitives
@@ -62,10 +62,10 @@ solidShader win globalUni = compileShader $ do
 
 wireframeShader
     :: ContextHandler ctx
-    => Window os RGBFloat Depth
-    -> GlobalUniformBuffer os
+    => GlobalUniformBuffer os
+    -> Window os RGBFloat Depth
     -> ContextT ctx os IO (Compiled os)
-wireframeShader win globalUni = compileShader $ do
+wireframeShader globalUni win = compileShader $ do
     vertGlobal <- getUniform (const (globalUni, 0))
 
     primitiveStream <- fmap (vert vertGlobal) <$> toPrimitiveStream envPrimitives

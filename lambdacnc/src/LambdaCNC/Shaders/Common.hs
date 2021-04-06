@@ -20,7 +20,7 @@ nearPlane = 3000
 farPlane = 350000
 
 shadowMapSize :: Num a => V2 a
-shadowMapSize = V2 600 600
+shadowMapSize = V2 1200 1200
 
 lightMat :: Floating a => V4 a -> M44 a
 lightMat lightPos = projMat !*! viewMat

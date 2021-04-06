@@ -103,19 +103,19 @@ frag GlobalUniforms{..} shadowSamp texSamp (uv, fragPos, normal, fragPosLightSpa
     diffuse = diffuseLight fragPos normal lightPos (V3 1 1 1)
             ^* shadowCalculation shadowSamp lightPos fragPos normal fragPosLightSpace
 
-    c = diffuse / 1.2 * objectColor
+    c = diffuse * objectColor
 
 --------------------------------------------------
 
 solidShader
     :: ContextHandler ctx
-    => Window os RGBFloat Depth
-    -> GlobalUniformBuffer os
+    => GlobalUniformBuffer os
     -> ObjectUniformBuffer os
     -> ShadowColorTex os
     -> MonochromeTex os
+    -> Window os RGBFloat Depth
     -> ContextT ctx os IO (Compiled os)
-solidShader win globalUni objectUni shadowTex tex = compileShader $ do
+solidShader globalUni objectUni shadowTex tex win = compileShader $ do
     vertGlobal <- getUniform (const (globalUni, 0))
     vertObject <- getUniform (const (objectUni, 0))
     fragGlobal <- getUniform (const (globalUni, 0))
@@ -138,11 +138,11 @@ solidShader win globalUni objectUni shadowTex tex = compileShader $ do
 
 wireframeShader
     :: ContextHandler ctx
-    => Window os RGBFloat Depth
-    -> GlobalUniformBuffer os
+    => GlobalUniformBuffer os
     -> ObjectUniformBuffer os
+    -> Window os RGBFloat Depth
     -> ContextT ctx os IO (Compiled os)
-wireframeShader win globalUni objectUni = compileShader $ do
+wireframeShader globalUni objectUni win = compileShader $ do
     vertGlobal <- getUniform (const (globalUni, 0))
     vertObject <- getUniform (const (objectUni, 0))
 
