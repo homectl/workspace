@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards     #-}
 {-# LANGUAGE PatternSynonyms   #-}
@@ -31,7 +32,7 @@ import           Foreign.C.String                 (peekCString, withCString,
 import           Foreign.Marshal.Alloc            (alloca)
 import           Foreign.Marshal.Array            (allocaArray, withArray)
 import           Foreign.Marshal.Utils            (with)
-import           Foreign.Ptr                      (nullPtr, castPtr)
+import           Foreign.Ptr                      (castPtr, nullPtr)
 import           Foreign.Storable                 (peek)
 import           GHC.IORef                        (IORef)
 import           Graphics.GL.Core33
@@ -39,6 +40,7 @@ import           Graphics.GL.Types                (GLuint)
 
 
 type WinId = Int
+
 data Drawcall s = Drawcall
     { drawcallFBO        :: s -> (Either WinId (IO FBOKeys, IO ()), IO ())
     , drawcallName       :: Int
@@ -91,13 +93,16 @@ compile drawcalls s = do
         unisPerDc = zipWith orderedUnion vUnisPerDc fUnisPerDc
         sampsPerDc = zipWith orderedUnion vSampsPerDc fSampsPerDc
 
-        limitErrors = concat [
-            ["Too many uniform blocks used in a single shader program\n" | any (\ xs -> length xs >= maxUnis) unisPerDc],
-            ["Too many textures used in a single shader program\n" | any (\ xs -> length xs >= maxSamplers) sampsPerDc],
-            ["Too many uniform blocks used in a single vertex shader\n" | any (\ xs -> length xs >= maxVUnis) vUnisPerDc],
-            ["Too many textures used in a single vertex shader\n" | any (\ xs -> length xs >= maxVSamplers) vSampsPerDc],
-            ["Too many uniform blocks used in a single fragment shader\n" | any (\ xs -> length xs >= maxFUnis) fUnisPerDc],
-            ["Too many textures used in a single fragment shader\n" | any (\ xs -> length xs >= maxFSamplers) fSampsPerDc]
+        limitError kind target maxCnt elts =
+            let err = "Too many " <> kind <> " used in a single " <> target in
+            [err | any (\ xs -> length xs >= maxCnt) elts]
+        limitErrors = concat
+            [ limitError "uniform blocks" "shader program" maxUnis unisPerDc
+            , limitError "textures" "shader program" maxSamplers sampsPerDc
+            , limitError "uniform blocks" "vertex shader" maxVUnis vUnisPerDc
+            , limitError "textures" "vertex shader" maxVSamplers vSampsPerDc
+            , limitError "uniform blocks" "fragment shader" maxFUnis fUnisPerDc
+            , limitError "textures" "fragment shader" maxFSamplers fSampsPerDc
             ]
 
         allocatedUniforms = allocate maxUnis unisPerDc
@@ -323,27 +328,34 @@ orderedUnion [] ys = ys
 
 type Asserter x = x -> IO Bool -- Used to assert we may use textures bound as render targets
 
-allocate :: Int -> [[Int]] -> [[Int]]
-allocate mx = allocate' Map.empty []
-    where allocate' m ys ((x:xs):xss) | Just a <- Map.lookup x m  = allocate' m (a:ys) (xs:xss)
-                                      | ms <- Map.size m, ms < mx = allocate' (Map.insert x ms m) (ms:ys) (xs:xss)
-                                      | otherwise                 = let (ek,ev) = findLastUsed m mx (ys ++ xs ++ concat xss) in allocate' (Map.insert x ev (Map.delete ek m)) (ev:ys) (xs:xss)
-          allocate' m ys (_:xss) = reverse ys : allocate' m [] xss
-          allocate' _ _ [] = []
+allocate :: Int -> [[Set.Key]] -> [[Int]]
+allocate mx = allocate' mx Map.empty []
 
-          findLastUsed m n (x:xs) | n > 1 = let (a, m') = Map.updateLookupWithKey (const $ const Nothing) x m
-                                                n' = if isJust a then n-1 else n
-                                            in findLastUsed m' n' xs
-          findLastUsed m _ _ = head $ Map.toList m
+allocate' :: Int -> Map.IntMap Int -> [Int] -> [[Set.Key]] -> [[Int]]
+allocate' mx m ys ((x:xs):xss)
+    | Just a <- Map.lookup x m  = allocate' mx m (a:ys) (xs:xss)
+    | ms <- Map.size m, ms < mx = allocate' mx (Map.insert x ms m) (ms:ys) (xs:xss)
+    | otherwise =
+        let (ek,ev) = findLastUsed m mx (ys ++ xs ++ concat xss) in
+        allocate' mx (Map.insert x ev (Map.delete ek m)) (ev:ys) (xs:xss)
+  where
+    findLastUsed m n (x:xs) | n > 1 =
+        let (a, m') = Map.updateLookupWithKey (const $ const Nothing) x m
+            n' = if isJust a then n-1 else n
+        in findLastUsed m' n' xs
+    findLastUsed m _ _ = head $ Map.toList m
+allocate' mx m ys (_:xss) = reverse ys : allocate' mx m [] xss
+allocate' _ _ _ [] = []
 
 
 getFBOerror :: MonadIO m => m (Maybe Text)
-getFBOerror = do
-    status <- glCheckFramebufferStatus GL_DRAW_FRAMEBUFFER
-    return $ case status of
+getFBOerror =
+    (`fmap` glCheckFramebufferStatus GL_DRAW_FRAMEBUFFER) $ \case
         GL_FRAMEBUFFER_COMPLETE -> Nothing
-        GL_FRAMEBUFFER_UNSUPPORTED -> Just "The combination of draw images (FBO) used in the render call is unsupported by this graphics driver\n"
-        _ -> error "GPipe internal FBO error"
+        GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT -> Just "not all framebuffer attachment points are framebuffer attachment complete (texture layer index out of bounds?)"
+        GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT -> Just "no images are attached to the framebuffer"
+        GL_FRAMEBUFFER_UNSUPPORTED -> Just "the combination of draw images (FBO) used in the render call is unsupported by this graphics driver"
+        status -> error $ "GPipe internal FBO error: " ++ show status
 
 
 getGPUInfo :: IO (Text, Text)

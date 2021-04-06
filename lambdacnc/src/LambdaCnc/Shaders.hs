@@ -99,7 +99,7 @@ vertCamera RuntimeConfig{} (toV4 1 -> pos, normal) = (screenPos, (uv, fragPos, t
     uv = pos^._xy
 
 
-diffuseLight :: V4 FFloat -> V4 FFloat -> V4 FFloat -> V3 FFloat -> V3 FFloat
+diffuseLight :: (Floating a, IfB a, OrdB a) => V4 a -> V4 a -> V4 a -> V3 a -> V3 a
 diffuseLight fragPos normal lightPos lightColor =
     let
         lightDir = signorm (lightPos - fragPos)
@@ -112,7 +112,7 @@ diffuseLight fragPos normal lightPos lightColor =
 fragSolid :: RuntimeConfig FFloat -> (V2 FFloat -> FFloat) -> (V2 FFloat -> FFloat) -> SolidShaderAttachment F -> V3 FFloat
 fragSolid RuntimeConfig{..} shadowSamp texSamp (uv, fragPos, normal) = c
   where
-    objectColor =  V3 0.5 0.5 0.5 -- texSamp (uv / 80000)
+    objectColor = V3 1 1 1 ^* texSamp (uv ^/ 80000)
 
     lightPos = rotMatrixZ (time/2) !* V4 60000 0 30000 1
     diffuse = diffuseLight fragPos normal lightPos (V3 0.8 0.8 0.8)

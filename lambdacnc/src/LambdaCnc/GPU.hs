@@ -36,7 +36,7 @@ main = do
     Env.setEnv "GPIPE_DEBUG" "1"
     runContextT GLFW.defaultHandleConfig{GLFW.configEventPolicy = Just $ GLFW.WaitTimeout $ 1 / fps} $ do
         let V2 w h = viewPort
-        win <- newWindow (WindowFormatColorDepth RGB8 Depth16) $ (GLFW.defaultWindowConfig "LambdaRay")
+        win <- newWindow (WindowFormatColorDepth RGB8 Depth16) $ (GLFW.defaultWindowConfig "LambdaCNC")
             { GLFW.configWidth = w
             , GLFW.configHeight = h
             , GLFW.configHints = [GLFW.WindowHint'Samples (Just 4)]
