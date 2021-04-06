@@ -29,6 +29,7 @@ library
     , GPipe
     , GPipe-Engine
     , GPipe-GLFW
+    , data-default
     , lens
     , time
 
