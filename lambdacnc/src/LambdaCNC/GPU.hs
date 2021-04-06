@@ -4,6 +4,7 @@
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE DeriveFunctor #-}
 module LambdaCNC.GPU
   ( main
   ) where
@@ -17,7 +18,7 @@ import           Data.Word                    (Word32)
 import           Graphics.GPipe
 import qualified Graphics.GPipe.Context.GLFW  as GLFW
 import qualified Graphics.GPipe.Engine.STL    as STL
-import           Graphics.GPipe.Engine.TimeIt (timeIt)
+import           Graphics.GPipe.Engine.TimeIt (timeIt, timeItInPlace)
 import           LambdaCNC.Config             (GlobalUniformBuffer,
                                                GlobalUniforms (..),
                                                ObjectUniformBuffer, Solids (..),
@@ -29,10 +30,10 @@ import qualified System.Environment           as Env
 
 
 fps :: Double
-fps = 5
+fps = 24
 
 viewPort :: V2 Int
-viewPort = V2 1500 1000
+viewPort = V2 2000 1500
 
 
 data Shaders os = Shaders
@@ -42,9 +43,29 @@ data Shaders os = Shaders
     , quadShader      :: Shaders.QuadShader os
     }
 
+data MachinePosition a = MachinePosition
+    { xPos :: a
+    , yPos :: a
+    , zPos :: a
+    }
+    deriving (Functor)
 
-startPositions :: Solids (V3 Float)
-startPositions = (pure 0){ objZAxis = V3 0 0 20000 }
+machMax :: MachinePosition Int
+machMax = MachinePosition 40000 61500 5600
+
+objectPositions :: MachinePosition Int -> Solids (V3 Float)
+objectPositions MachinePosition{..} =
+    (pure 0)
+        { objXAxis = V3 x (y + 4000)      24500
+        , objYAxis = V3 0  y               5000
+        , objZAxis = V3 x (y - 4000) (z + 24500)
+        }
+  where
+    x = toFloat (xPos - (xMax `div` 2))
+    y = toFloat (yPos - (yMax `div` 2))
+    z = toFloat (zPos - (zMax `div` 2))
+
+    MachinePosition xMax yMax zMax = machMax
 
 
 main :: IO ()
@@ -69,7 +90,7 @@ main = do
                 buf <- newBuffer $ length mesh
                 writeBuffer buf 0 mesh
                 return buf
-        let solids = liftA2 (,) meshes startPositions
+        let solids = liftA2 (,) meshes (objectPositions $ MachinePosition 0 0 0)
 
         quadVertexBuffer <- timeIt "Generating quad" $ do
             buf <- newBuffer 6
@@ -89,8 +110,8 @@ main = do
             blackWhite = tail whiteBlack
         writeTexture2D tex 0 0 (V2 8 8) (cycle (take 8 whiteBlack ++ take 8 blackWhite))
 
-        shadowColorTex <- newTexture2D R8 (V2 1000 1000) 1
-        shadowDepthTex <- newTexture2D Depth16 (V2 1000 1000) 1
+        shadowColorTex <- newTexture2D R8 Shaders.shadowMapSize 1
+        shadowDepthTex <- newTexture2D Depth16 Shaders.shadowMapSize 1
 
         shaders <- Shaders
             <$> timeIt "Compiling shadow shader..." (Shaders.compileShadowShader globalUni objectUni)
@@ -120,7 +141,7 @@ loop
     -> Shaders os
     -> ContextT GLFW.Handle os IO ()
 loop win startTime solids quadVertexBuffer globalUni objectUni shadowColorTex shadowDepthTex shaders@Shaders{..} = do
-    closeRequested <- timeIt "Rendering..." $ do
+    closeRequested <- timeItInPlace "Rendering..." $ do
         cfg <- liftIO $ updateUniforms startTime
         writeBuffer globalUni 0 [cfg]
 

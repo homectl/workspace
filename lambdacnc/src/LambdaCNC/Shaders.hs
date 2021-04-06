@@ -4,6 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns        #-}
 {-# OPTIONS_GHC -Wno-unused-matches #-}
+{-# LANGUAGE TypeFamilies #-}
 module LambdaCNC.Shaders
   ( ShadowShader, ShadowShaderEnv (..), compileShadowShader
   , SolidsShader, SolidsShaderEnv, compileSolidsShader
@@ -17,6 +18,8 @@ module LambdaCNC.Shaders
   , ShadowDepthTex
   , MonochromeTex
   , ColorTex
+
+  , shadowMapSize
   ) where
 
 import           Control.Lens     ((^.))
@@ -33,6 +36,18 @@ aspectRatio (V2 w h) = w / h
 
 modelMat :: V4 (V4 VFloat)
 modelMat = rotMatrixZ (pi/8 * 5) -- time
+
+lightMat :: Floating a => V4 a -> M44 a
+lightMat lightPos = projMat !*! viewMat
+  where
+    viewMat = lookAt (lightPos^._xyz) (V3 0 0 0) (V3 0 0 1)
+    projMat = ortho (-r) r (-t) t 1000 350000
+    t = 50000
+    r = 80000
+
+getLightPos :: Floating a => a -> V4 a
+-- getLightPos time = rotMatrixZ (time/2) !* V4 120000 0 30000 1
+getLightPos _ = rotMatrixZ (pi/10*(-3)) !* V4 70000 1000 20000 1
 
 --------------------------------------------------
 
@@ -53,13 +68,12 @@ data ShadowShaderEnv = ShadowShaderEnv
     , envShadowDepth :: Image (Format Depth)
     }
 
-vertLight :: GlobalUniforms VFloat -> (V3 VFloat, V3 VFloat) -> (VPos, VFloat)
-vertLight GlobalUniforms{} (toV4 1 -> pos, normal) =
+
+vertLight :: GlobalUniforms VFloat -> ObjectUniforms VFloat -> (V3 VFloat, V3 VFloat) -> (VPos, VFloat)
+vertLight GlobalUniforms{..} ObjectUniforms{..} (toV4 1 -> pos, normal) =
     (screenPos, screenPos^._z * 0.5 + 0.5)
   where
-    viewMat = lookAt (V3 100000 50000 50000) (V3 0 0 0) (V3 0 0 1)
-    projMat = ortho (-50000) 50000 (-50000) 50000 1000 350000
-    screenPos = projMat !*! viewMat !*! modelMat !* pos
+    screenPos = lightMat (getLightPos time) !*! modelMat !* (pos + toV4 0 objectPos)
 
 
 fragShadow :: GlobalUniforms FFloat -> FFloat -> (FFloat, FragDepth)
@@ -72,14 +86,15 @@ compileShadowShader
     -> ObjectUniformBuffer os
     -> ContextT ctx os IO (ShadowShader os)
 compileShadowShader globalUni objectUni = compileShader $ do
-    vertCfg <- getUniform (const (globalUni, 0))
-    fragCfg <- getUniform (const (globalUni, 0))
+    vertGlobal <- getUniform (const (globalUni, 0))
+    vertObject <- getUniform (const (objectUni, 0))
+    fragGlobal <- getUniform (const (globalUni, 0))
 
-    primitiveStream <- fmap (vertLight vertCfg) <$>
+    primitiveStream <- fmap (vertLight vertGlobal vertObject) <$>
         toPrimitiveStream envPrimitives
 
-    fragmentStream <- fmap (fragShadow fragCfg) <$>
-        rasterize (const (Back, PolygonFill, ViewPort (V2 0 0) (V2 1000 1000), DepthRange 0 1)) primitiveStream
+    fragmentStream <- fmap (fragShadow fragGlobal) <$>
+        rasterize (const (Back, PolygonFill, ViewPort (V2 0 0) shadowMapSize, DepthRange 0 1)) primitiveStream
 
     drawDepth (\s -> (NoBlending, envShadowDepth s, DepthOption Less True)) fragmentStream $
         drawColor (\s -> (envShadowColor s, True, False))
@@ -89,18 +104,65 @@ compileShadowShader globalUni objectUni = compileShader $ do
 
 type SolidsShader os = CompiledShader os SolidsShaderEnv
 type SolidsShaderEnv = PrimitiveArray Triangles ObjectShaderInput
-type SolidShaderAttachment x = (V2 (S x Float), V4 (S x Float), V4 (S x Float))
+type SolidShaderAttachment x = (V2 (S x Float), V4 (S x Float), V4 (S x Float), V4 (S x Float))
 
 
 vertCamera :: GlobalUniforms VFloat -> ObjectUniforms VFloat -> (V3 VFloat, V3 VFloat) -> (VPos, SolidShaderAttachment V)
-vertCamera GlobalUniforms{..} ObjectUniforms{..} (toV4 1 -> pos, normal) = (screenPos, (uv, fragPos, toV4 1 normal))
+vertCamera GlobalUniforms{..} ObjectUniforms{..} (toV4 1 -> pos, normal) = (screenPos, (uv, fragPos, fragNormal, fragPosLightSpace))
   where
     viewMat = lookAt cameraPos (V3 0 0 0) (V3 0 0 1)
-    projMat = perspective (pi/4) (aspectRatio screenSize) 1000 350000
+    projMat = perspective (pi/3) (aspectRatio screenSize) 1000 350000
 
-    fragPos = modelMat !* pos + toV4 1 objectPos
+    fragPos = modelMat !* (pos + toV4 0 objectPos)
+    fragNormal = modelMat !* toV4 1 normal
+    fragPosLightSpace = lightMat (getLightPos time) !* fragPos
     screenPos = projMat !*! viewMat !* fragPos
     uv = pos^._xy
+
+
+shadowMapSize :: Num a => V2 a
+shadowMapSize = V2 1000 1000
+texelSize :: Fractional a => V2 a
+texelSize = 1 / shadowMapSize
+
+
+shadowCoords :: (V2 FFloat -> FFloat) -> V4 FFloat -> V4 FFloat -> V4 FFloat -> V4 FFloat -> V2 FFloat -> FFloat
+shadowCoords shadowSamp lightPos fp lsfp normal offset = shadow
+  where
+    lightDir = signorm (lightPos - fp)
+
+    -- perform perspective divide
+    projCoords = (lsfp^._xyz ^/ lsfp^._w) * 0.5 + 0.5
+    -- get depth of current fragment from light's perspective
+    currentDepth = projCoords^._z
+
+    pcfCoords = projCoords^._xy + offset * texelSize
+    closestDepth = shadowSamp pcfCoords
+
+    -- check whether current frag pos is in shadow
+    bias = maxB (0.05 * (1.0 - dot normal lightDir)) 0.005
+
+    shadow = ifThenElse' (currentDepth - bias >* closestDepth) 0.3 1.0
+
+
+shadowCalculation :: (V2 FFloat -> FFloat) -> V4 FFloat -> V4 FFloat -> V4 FFloat -> V4 FFloat -> FFloat
+shadowCalculation shadowSamp lightPos fragPos normal fragPosLightSpace =
+    (/ fromIntegral (length pcfVecs))
+    . sum
+    . map (shadowCoords shadowSamp lightPos fragPos fragPosLightSpace normal)
+    $ pcfVecs
+  where
+    pcfVecs =
+        [ V2 0 0
+        -- , V2 (-1) (-1)
+        -- , V2 (-1) 0
+        -- , V2 (-1) 1
+        -- , V2 0 (-1)
+        -- , V2 0 1
+        -- , V2 1 (-1)
+        -- , V2 1 0
+        -- , V2 1 1
+        ]
 
 
 diffuseLight :: (Floating a, IfB a, OrdB a) => V4 a -> V4 a -> V4 a -> V3 a -> V3 a
@@ -114,12 +176,13 @@ diffuseLight fragPos normal lightPos lightColor =
 
 
 fragSolid :: GlobalUniforms FFloat -> (V2 FFloat -> FFloat) -> (V2 FFloat -> FFloat) -> SolidShaderAttachment F -> V3 FFloat
-fragSolid GlobalUniforms{..} shadowSamp texSamp (uv, fragPos, normal) = c
+fragSolid GlobalUniforms{..} shadowSamp texSamp (uv, fragPos, normal, fragPosLightSpace) = c
   where
     objectColor = V3 1 1 1 ^* texSamp (uv ^/ 80000)
+    lightPos = getLightPos time
 
-    lightPos = rotMatrixZ (time/2) !* V4 60000 0 30000 1
-    diffuse = diffuseLight fragPos normal lightPos (V3 0.8 0.8 0.8)
+    diffuse = diffuseLight fragPos normal lightPos (V3 1 1 1)
+            ^* shadowCalculation shadowSamp lightPos fragPos normal fragPosLightSpace
 
     c = objectColor * diffuse
 

@@ -1214,6 +1214,7 @@ getTexture2DArrayImage :: Texture2DArray os f -> Level -> Int -> Render os (Imag
 getTexture3DImage :: Texture3D os f -> Level -> Int -> Render os (Image f)
 getTextureCubeImage :: TextureCube os f -> Level -> CubeSide -> Render os (Image f)
 
+registerRenderWriteTextureName :: TexName -> Render os ()
 registerRenderWriteTextureName tn = Render (lift $ lift $ lift $ readIORef tn) >>= registerRenderWriteTexture . fromIntegral
 
 getTexture1DImage t@(Texture1D tn _ ls) l' = let l = min ls l' in do registerRenderWriteTextureName tn

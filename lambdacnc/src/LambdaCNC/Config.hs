@@ -59,7 +59,7 @@ defaultGlobalUniforms :: Fractional a => GlobalUniforms a
 defaultGlobalUniforms = GlobalUniforms
     { time = 0
     , screenSize = V2 1500 1000
-    , cameraPos = V3 40000 50000 40000
+    , cameraPos = V3 50000 50000 30000
     }
 
 
