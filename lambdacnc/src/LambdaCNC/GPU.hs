@@ -1,10 +1,10 @@
+{-# LANGUAGE DeriveFunctor       #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE NamedFieldPuns      #-}
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies        #-}
-{-# LANGUAGE DeriveFunctor #-}
 module LambdaCNC.GPU
   ( main
   ) where
@@ -21,9 +21,10 @@ import qualified Graphics.GPipe.Engine.STL    as STL
 import           Graphics.GPipe.Engine.TimeIt (timeIt, timeItInPlace)
 import           LambdaCNC.Config             (GlobalUniformBuffer,
                                                GlobalUniforms (..),
-                                               ObjectUniformBuffer, Solids (..),
+                                               ObjectUniformBuffer,
+                                               ObjectUniforms (..), Solids (..),
                                                defaultGlobalUniforms,
-                                               defaultObjectUniforms, ObjectUniforms(..))
+                                               defaultObjectUniforms)
 import qualified LambdaCNC.Shaders            as Shaders
 import           Prelude                      hiding ((<*))
 import qualified System.Environment           as Env
@@ -33,14 +34,16 @@ fps :: Double
 fps = 24
 
 viewPort :: V2 Int
-viewPort = V2 2000 1500
+viewPort = V2 3000 1800
 
 
 data Shaders os = Shaders
-    { shadowShader    :: Shaders.ShadowShader os
-    , solidsShader    :: Shaders.SolidsShader os
-    , wireframeShader :: Shaders.SolidsShader os
-    , quadShader      :: Shaders.QuadShader os
+    { shadowShader        :: Shaders.ShadowShader os
+    , solidsShader        :: Shaders.SolidsShader os
+    , wireframeShader     :: Shaders.SolidsShader os
+    , quadShader          :: Shaders.QuadShader os
+    , bulbShader          :: Shaders.SolidsShader os
+    , bulbWireframeShader :: Shaders.SolidsShader os
     }
 
 data MachinePosition a = MachinePosition
@@ -79,7 +82,7 @@ main = do
             , GLFW.configHints = [GLFW.WindowHint'Samples (Just 4)]
             }
 
-        meshes <- timeIt "Loading meshes" $ do
+        meshes <- timeIt "Loading object meshes" $ do
             meshes <- liftIO $ Solids
                 <$> STL.mustLoadSTL "data/models/Bed.stl"
                 <*> STL.mustLoadSTL "data/models/Ground.stl"
@@ -92,7 +95,13 @@ main = do
                 return buf
         let solids = liftA2 (,) meshes (objectPositions $ MachinePosition 0 0 0)
 
-        quadVertexBuffer <- timeIt "Generating quad" $ do
+        lightbulb <- timeIt "Loading object meshes" $ do
+            mesh <- liftIO $ STL.mustLoadSTL "data/models/lightbulb.stl"
+            buf <- newBuffer $ length mesh
+            writeBuffer buf 0 mesh
+            return buf
+
+        quad <- timeIt "Generating quad" $ do
             buf <- newBuffer 6
             writeBuffer buf 0 [ V2 (-1) (-1), V2 (-1)   1 , V2 1 1
                               , V2 (-1) (-1), V2   1  (-1), V2 1 1
@@ -118,9 +127,11 @@ main = do
             <*> timeIt "Compiling solids shader..." (Shaders.compileSolidsShader win viewPort globalUni objectUni shadowColorTex tex)
             <*> timeIt "Compiling wireframe shader..." (Shaders.compileWireframeShader win viewPort globalUni objectUni)
             <*> timeIt "Compiling shadow map view shader..." (Shaders.compileQuadShader win viewPort shadowColorTex)
+            <*> timeIt "Compiling lightbulb shader..." (Shaders.compileBulbShader win viewPort globalUni)
+            <*> timeIt "Compiling lightbulb wireframe shader..." (Shaders.compileBulbWireframeShader win viewPort globalUni)
 
         startTime <- liftIO Time.getCurrentTime
-        loop win startTime solids quadVertexBuffer globalUni objectUni shadowColorTex shadowDepthTex shaders
+        loop win startTime solids lightbulb quad globalUni objectUni shadowColorTex shadowDepthTex shaders
 
 
 updateUniforms :: Floating a => Time.UTCTime -> IO (GlobalUniforms a)
@@ -132,15 +143,16 @@ updateUniforms startTime = do
 loop
     :: Window os RGBFloat Depth
     -> Time.UTCTime
-    -> Solids (Buffer os Shaders.ObjectShaderInput, V3 Float)
-    -> Buffer os Shaders.QuadShaderInput
+    -> Solids (Shaders.Buffer3D os, V3 Float)
+    -> Shaders.Buffer3D os
+    -> Shaders.Buffer2D os
     -> GlobalUniformBuffer os
     -> ObjectUniformBuffer os
     -> Shaders.ShadowColorTex os
     -> Shaders.ShadowDepthTex os
     -> Shaders os
     -> ContextT GLFW.Handle os IO ()
-loop win startTime solids quadVertexBuffer globalUni objectUni shadowColorTex shadowDepthTex shaders@Shaders{..} = do
+loop win startTime solids lightbulb quad globalUni objectUni shadowColorTex shadowDepthTex shaders@Shaders{..} = do
     closeRequested <- timeItInPlace "Rendering..." $ do
         cfg <- liftIO $ updateUniforms startTime
         writeBuffer globalUni 0 [cfg]
@@ -154,7 +166,7 @@ loop win startTime solids quadVertexBuffer globalUni objectUni shadowColorTex sh
             clearImageDepth shadowDepth 1
 
         -- Render each object on the shadow map.
-        forM_ solids $ \(solid, pos) -> do
+        forM_ [objBed solids, objGround solids] $ \(solid, pos) -> do
             writeBuffer objectUni 0 [ObjectUniforms pos]
             render $ do
                 shadowColor <- getTexture2DImage shadowColorTex 0
@@ -173,15 +185,20 @@ loop win startTime solids quadVertexBuffer globalUni objectUni shadowColorTex sh
             clearWindowDepth win 1
 
         -- Render each object on the window frame buffer.
-        forM_ solids $ \(solid, pos) -> do
+        forM_ [objBed solids, objGround solids] $ \(solid, pos) -> do
             writeBuffer objectUni 0 [ObjectUniforms pos]
             render $ do
                 prim <- fmap (toPrimitiveArray TriangleList) . newVertexArray $ solid
                 solidsShader prim
-                -- wireframeShader prim
+                wireframeShader prim
 
-                quadVertexArray <- toPrimitiveArray TriangleList <$> newVertexArray quadVertexBuffer
+                quadVertexArray <- toPrimitiveArray TriangleList <$> newVertexArray quad
                 quadShader quadVertexArray
+
+        render $ do
+            prim <- fmap (toPrimitiveArray TriangleList) . newVertexArray $ lightbulb
+            bulbShader prim
+            bulbWireframeShader prim
 
         swapWindowBuffers win
 
@@ -189,4 +206,4 @@ loop win startTime solids quadVertexBuffer globalUni objectUni shadowColorTex sh
 
     liftIO $ threadDelay 10000
     unless (closeRequested == Just True) $
-        loop win startTime solids quadVertexBuffer globalUni objectUni shadowColorTex shadowDepthTex shaders
+        loop win startTime solids lightbulb quad globalUni objectUni shadowColorTex shadowDepthTex shaders

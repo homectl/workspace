@@ -10,9 +10,10 @@ module LambdaCNC.Shaders
   , SolidsShader, SolidsShaderEnv, compileSolidsShader
   , compileWireframeShader
   , QuadShader, QuadShaderEnv, compileQuadShader
+  , compileBulbShader, compileBulbWireframeShader
 
-  , ObjectShaderInput
-  , QuadShaderInput
+  , ObjectShaderInput, Buffer3D
+  , QuadShaderInput, Buffer2D
 
   , ShadowColorTex
   , ShadowDepthTex
@@ -34,8 +35,9 @@ toV4 w v = V4 (v^._x) (v^._y) (v^._z) w
 aspectRatio :: Fractional a => V2 a -> a
 aspectRatio (V2 w h) = w / h
 
-modelMat :: V4 (V4 VFloat)
-modelMat = rotMatrixZ (pi/8 * 5) -- time
+modelMat :: VFloat -> V4 (V4 VFloat)
+modelMat time = rotMatrixZ (pi/2)
+-- modelMat time = rotMatrixZ (time / 3)
 
 lightMat :: Floating a => V4 a -> M44 a
 lightMat lightPos = projMat !*! viewMat
@@ -47,12 +49,14 @@ lightMat lightPos = projMat !*! viewMat
 
 getLightPos :: Floating a => a -> V4 a
 -- getLightPos time = rotMatrixZ (time/2) !* V4 120000 0 30000 1
-getLightPos _ = rotMatrixZ (pi/10*(-3)) !* V4 70000 1000 20000 1
+getLightPos _ = rotMatrixZ (pi/10*(-7)) !* V4 100000 1000 30000 1
 
 --------------------------------------------------
 
 type ObjectShaderInput = (B3 Float, B3 Float)
+type Buffer3D os = Buffer os ObjectShaderInput
 type QuadShaderInput = (B2 Float)
+type Buffer2D os = Buffer os QuadShaderInput
 
 type ShadowColorTex os = Texture2D os (Format RFloat)
 type ShadowDepthTex os = Texture2D os (Format Depth)
@@ -73,7 +77,7 @@ vertLight :: GlobalUniforms VFloat -> ObjectUniforms VFloat -> (V3 VFloat, V3 VF
 vertLight GlobalUniforms{..} ObjectUniforms{..} (toV4 1 -> pos, normal) =
     (screenPos, screenPos^._z * 0.5 + 0.5)
   where
-    screenPos = lightMat (getLightPos time) !*! modelMat !* (pos + toV4 0 objectPos)
+    screenPos = lightMat (getLightPos time) !*! modelMat time !* (pos + toV4 0 objectPos)
 
 
 fragShadow :: GlobalUniforms FFloat -> FFloat -> (FFloat, FragDepth)
@@ -106,24 +110,27 @@ type SolidsShader os = CompiledShader os SolidsShaderEnv
 type SolidsShaderEnv = PrimitiveArray Triangles ObjectShaderInput
 type SolidShaderAttachment x = (V2 (S x Float), V4 (S x Float), V4 (S x Float), V4 (S x Float))
 
-
-vertCamera :: GlobalUniforms VFloat -> ObjectUniforms VFloat -> (V3 VFloat, V3 VFloat) -> (VPos, SolidShaderAttachment V)
-vertCamera GlobalUniforms{..} ObjectUniforms{..} (toV4 1 -> pos, normal) = (screenPos, (uv, fragPos, fragNormal, fragPosLightSpace))
+cameraMat :: Floating a => V2 a -> V3 a -> M44 a
+cameraMat screenSize cameraPos = projMat !*! viewMat
   where
     viewMat = lookAt cameraPos (V3 0 0 0) (V3 0 0 1)
     projMat = perspective (pi/3) (aspectRatio screenSize) 1000 350000
 
-    fragPos = modelMat !* (pos + toV4 0 objectPos)
-    fragNormal = modelMat !* toV4 1 normal
+
+vertCamera :: GlobalUniforms VFloat -> ObjectUniforms VFloat -> (V3 VFloat, V3 VFloat) -> (VPos, SolidShaderAttachment V)
+vertCamera GlobalUniforms{..} ObjectUniforms{..} (toV4 1 -> pos, normal) = (screenPos, (uv, fragPos, fragNormal, fragPosLightSpace))
+  where
+    fragPos = modelMat time !* (pos + toV4 0 objectPos)
+    fragNormal = modelMat time !* toV4 1 normal
     fragPosLightSpace = lightMat (getLightPos time) !* fragPos
-    screenPos = projMat !*! viewMat !* fragPos
+    screenPos = cameraMat screenSize cameraPos !* fragPos
     uv = pos^._xy
 
 
 shadowMapSize :: Num a => V2 a
-shadowMapSize = V2 1000 1000
+shadowMapSize = V2 700 700
 texelSize :: Fractional a => V2 a
-texelSize = 1 / shadowMapSize
+texelSize = fmap (1.0 /) shadowMapSize
 
 
 shadowCoords :: (V2 FFloat -> FFloat) -> V4 FFloat -> V4 FFloat -> V4 FFloat -> V4 FFloat -> V2 FFloat -> FFloat
@@ -140,19 +147,19 @@ shadowCoords shadowSamp lightPos fp lsfp normal offset = shadow
     closestDepth = shadowSamp pcfCoords
 
     -- check whether current frag pos is in shadow
-    bias = maxB (0.05 * (1.0 - dot normal lightDir)) 0.005
+    bias = 0.005 -- maxB (0.05 * (1.0 - dot normal lightDir)) 0.005
 
     shadow = ifThenElse' (currentDepth - bias >* closestDepth) 0.3 1.0
 
 
 shadowCalculation :: (V2 FFloat -> FFloat) -> V4 FFloat -> V4 FFloat -> V4 FFloat -> V4 FFloat -> FFloat
 shadowCalculation shadowSamp lightPos fragPos normal fragPosLightSpace =
-    (/ fromIntegral (length pcfVecs))
+    (/ fromIntegral (length pcfOffsets))
     . sum
     . map (shadowCoords shadowSamp lightPos fragPos fragPosLightSpace normal)
-    $ pcfVecs
+    $ pcfOffsets
   where
-    pcfVecs =
+    pcfOffsets =
         [ V2 0 0
         -- , V2 (-1) (-1)
         -- , V2 (-1) 0
@@ -204,7 +211,7 @@ compileSolidsShader win screenSize globalUni objectUni shadowTex tex = compileSh
     primitiveStream <- fmap (vertCamera vertGlobal vertObject) <$>
         toPrimitiveStream id
 
-    shadowSampler <- newSampler2D (const (shadowTex, SamplerNearest, (pure Repeat, undefined)))
+    shadowSampler <- newSampler2D (const (shadowTex, SamplerFilter Linear Linear Linear Nothing, (pure Repeat, undefined)))
     texSampler <- newSampler2D (const (tex, SamplerNearest, (pure Repeat, undefined)))
 
     let shadowSamp = sample2D shadowSampler SampleAuto Nothing Nothing
@@ -220,7 +227,7 @@ compileSolidsShader win screenSize globalUni objectUni shadowTex tex = compileSh
 
 compileWireframeShader
     :: ContextHandler ctx
-    => Window os RGBFloat ds
+    => Window os RGBFloat Depth
     -> V2 Int
     -> GlobalUniformBuffer os
     -> ObjectUniformBuffer os
@@ -232,10 +239,10 @@ compileWireframeShader win screenSize globalUni objectUni = compileShader $ do
     primitiveStream <- fmap (vertCamera vertGlobal vertObject) <$>
         toPrimitiveStream id
 
-    fragmentStream <- fmap (const 0) <$>
+    fragmentStream <- withRasterizedInfo (\_ r -> (0, rasterizedFragCoord r ^. _z)) <$>
         rasterize (const (Front, PolygonLine 1, ViewPort (V2 0 0) screenSize, DepthRange 0 1)) primitiveStream
 
-    drawWindowColor (const (win, ContextColorOption NoBlending (pure True))) fragmentStream
+    drawWindowColorDepth (const (win, ContextColorOption NoBlending (pure True), DepthOption Less True)) fragmentStream
 
 
 --------------------------------------------------
@@ -264,3 +271,50 @@ compileQuadShader win screenSize tex = compileShader $ do
         rasterize (const (FrontAndBack, PolygonFill, ViewPort (V2 0 0) screenSize, DepthRange 0 1)) primitiveStream
 
     drawWindowColor (const (win, ContextColorOption NoBlending (pure True))) fragmentStream
+
+--------------------------------------------------
+
+-- Roughly put the light emitter in the center of the bulb by moving the bulb's
+-- sphere up (in Z direction).
+bulbOffset :: V4 VFloat
+bulbOffset = V4 0 0 4200 0
+
+vertBulb :: GlobalUniforms VFloat -> (V3 VFloat, V3 VFloat) -> (V4 VFloat, V3 VFloat)
+vertBulb GlobalUniforms{..} (vertPos, n) = (pos, n)
+  where
+    objPos = rotMatrixX (-pi/2) !*! scaled 200 !* toV4 0 vertPos + getLightPos time + bulbOffset
+    pos = cameraMat screenSize cameraPos !* objPos
+
+
+compileBulbShader
+    :: ContextHandler ctx
+    => Window os RGBFloat Depth
+    -> V2 Int
+    -> GlobalUniformBuffer os
+    -> ContextT ctx os IO (SolidsShader os)
+compileBulbShader win screenSize globalUni = compileShader $ do
+    vertGlobal <- getUniform (const (globalUni, 0))
+
+    primitiveStream <- fmap (vertBulb vertGlobal) <$> toPrimitiveStream id
+
+    fragmentStream <- withRasterizedInfo (\_ r -> (1, rasterizedFragCoord r ^. _z)) <$>
+        rasterize (const (Front, PolygonFill, ViewPort (V2 0 0) screenSize, DepthRange 0 1)) primitiveStream
+
+    drawWindowColorDepth (const (win, ContextColorOption NoBlending (pure True), DepthOption Less True)) fragmentStream
+
+
+compileBulbWireframeShader
+    :: ContextHandler ctx
+    => Window os RGBFloat Depth
+    -> V2 Int
+    -> GlobalUniformBuffer os
+    -> ContextT ctx os IO (SolidsShader os)
+compileBulbWireframeShader win screenSize globalUni = compileShader $ do
+    vertGlobal <- getUniform (const (globalUni, 0))
+
+    primitiveStream <- fmap (vertBulb vertGlobal) <$> toPrimitiveStream id
+
+    fragmentStream <- withRasterizedInfo (\_ r -> (0, rasterizedFragCoord r ^. _z)) <$>
+        rasterize (const (FrontAndBack, PolygonLine 1, ViewPort (V2 0 0) screenSize, DepthRange 0 1)) primitiveStream
+
+    drawWindowColorDepth (const (win, ContextColorOption NoBlending (pure True), DepthOption Less True)) fragmentStream
