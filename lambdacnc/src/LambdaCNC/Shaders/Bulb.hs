@@ -20,6 +20,7 @@ type Compiled os = CompiledShader os Env
 data Env = Env
     { envScreenSize :: V2 Int
     , envPrimitives :: PrimitiveArray Triangles Shader3DInput
+    , envIndex :: Int
     }
 
 --------------------------------------------------
@@ -51,7 +52,7 @@ solidShader
     -> ContextT ctx os IO (Compiled os)
 solidShader globalUni lightUni win = compileShader $ do
     vertGlobal <- getUniform (const (globalUni, 0))
-    vertLight <- getUniform (const (lightUni, 0))
+    vertLight <- getUniform (\Env{..} -> (lightUni, envIndex))
 
     primitiveStream <- fmap (vert vertGlobal vertLight) <$> toPrimitiveStream envPrimitives
 
@@ -70,7 +71,7 @@ wireframeShader
     -> ContextT ctx os IO (Compiled os)
 wireframeShader globalUni lightUni win = compileShader $ do
     vertGlobal <- getUniform (const (globalUni, 0))
-    vertLight <- getUniform (const (lightUni, 0))
+    vertLight <- getUniform (\Env{..} -> (lightUni, envIndex))
 
     primitiveStream <- fmap (vert vertGlobal vertLight) <$> toPrimitiveStream envPrimitives
 

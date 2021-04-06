@@ -38,10 +38,10 @@ solidShader
     => [ShadowColorTex os]
     -> Window os RGBFloat ds
     -> ContextT ctx os IO (Compiled os)
-solidShader [tex] win = compileShader $ do
+solidShader [tex1, tex2] win = compileShader $ do
     primitiveStream <- fmap vert <$> toPrimitiveStream envPrimitives
 
-    texSampler <- newSampler2D (const (tex, SamplerNearest, (pure Repeat, undefined)))
+    texSampler <- newSampler2D (const (tex1, SamplerNearest, (pure Repeat, undefined)))
     let texSamp = sample2D texSampler SampleAuto Nothing Nothing
 
     fragmentStream <- fmap (frag texSamp) <$>

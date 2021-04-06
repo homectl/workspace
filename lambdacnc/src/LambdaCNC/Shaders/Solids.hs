@@ -28,16 +28,16 @@ data Env = Env
     { envScreenSize :: V2 Int
     , envPrimitives :: PrimitiveArray Triangles Shader3DInput
     }
-type SolidShaderAttachment x = (V2 (S x Float), V4 (S x Float), V4 (S x Float), V4 (S x Float))
+type SolidShaderAttachment x = (V2 (S x Float), V4 (S x Float), V4 (S x Float), (V4 (S x Float), V4 (S x Float)))
 
 --------------------------------------------------
 
 vert :: GlobalUniforms VFloat -> ObjectUniforms VFloat -> [LightUniforms VFloat] -> (V3 VFloat, V3 VFloat) -> (VPos, SolidShaderAttachment V)
-vert GlobalUniforms{..} ObjectUniforms{..} [LightUniforms{..}] (toV4 1 -> pos, normal) = (screenPos, (uv, fragPos, fragNormal, fragPosLightSpace))
+vert GlobalUniforms{..} ObjectUniforms{..} lightUnis (toV4 1 -> pos, normal) = (screenPos, (uv, fragPos, fragNormal, (fpls1, fpls2)))
   where
     fragPos = modelMat time !* (pos + toV4 0 objectPos)
     fragNormal = modelMat time !* toV4 1 normal
-    fragPosLightSpace = lightMat (toV4 1 lightPos) !* fragPos
+    [fpls1, fpls2] = map (\LightUniforms{..} -> lightMat (toV4 1 lightPos) !* fragPos) lightUnis
     screenPos = cameraMat screenSize cameraPos !* fragPos
     uv = pos^._xy
 
@@ -100,14 +100,18 @@ diffuseLight fragPos normal lightPos lightColor =
 
 
 frag :: GlobalUniforms FFloat -> [FragLight] -> (V2 FFloat -> FFloat) -> SolidShaderAttachment F -> V3 FFloat
-frag GlobalUniforms{..} lights texSamp (uv, fragPos, normal, fragPosLightSpace) = c
+frag GlobalUniforms{..} lights texSamp (uv, fragPos, normal, (fpls1, fpls2)) = c
   where
     objectColor = V3 1 1 1 ^* texSamp (uv ^/ 80000)
 
-    diffuse = sum $ map (\FragLight{..} ->
-        let lightPos = toV4 1 fragLightPos in
-        diffuseLight fragPos normal lightPos (V3 1 1 1)
-            ^* shadowCalculation fragLightSampler lightPos fragPos normal fragPosLightSpace) lights
+    diffuse =
+        sum $ zipWith
+            (\FragLight{..} fpls ->
+                let lightPos = toV4 1 fragLightPos in
+                diffuseLight fragPos normal lightPos (V3 1 1 1)
+                    ^* shadowCalculation fragLightSampler lightPos fragPos normal fpls)
+            lights
+            [fpls1, fpls2]
 
     c = diffuse * objectColor
 

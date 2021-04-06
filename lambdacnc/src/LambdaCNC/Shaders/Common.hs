@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeFamilies #-}
 module LambdaCNC.Shaders.Common where
 
 import           Control.Lens   ((^.))
@@ -53,7 +54,9 @@ type ShadowDepthTex os = Texture2D os (Format Depth)
 type MonochromeTex os = Texture2D os (Format RFloat)
 type ColorTex os = Texture2D os (Format RGBFloat)
 
-data Light os = Light
+--------------------------------------------------
+
+data ShadowMap os = ShadowMap
     { shadowColorTex :: ShadowColorTex os
     , shadowDepthTex :: ShadowDepthTex os
     }

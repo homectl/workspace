@@ -125,7 +125,10 @@ main = do
         writeTexture2D tex 0 0 (V2 8 8) (cycle (take 8 whiteBlack ++ take 8 blackWhite))
 
         lights <- sequence
-            [ Shaders.Light
+            [ Shaders.ShadowMap
+                <$> newTexture2D R16F Shaders.shadowMapSize 1
+                <*> newTexture2D Depth16 Shaders.shadowMapSize 1
+            , Shaders.ShadowMap
                 <$> newTexture2D R16F Shaders.shadowMapSize 1
                 <*> newTexture2D Depth16 Shaders.shadowMapSize 1
             ]
@@ -137,7 +140,10 @@ main = do
         writeBuffer objectUni 0 [defaultObjectUniforms]
 
         lightUni <- newBuffer $ length lights
-        writeBuffer lightUni 0 [LightUniforms (V3 (-60000) 50000 30000)]
+        writeBuffer lightUni 0
+            [ LightUniforms (V3 (-60000) 50000 30000)
+            , LightUniforms (V3 (-30000) (-50000) 30000)
+            ]
 
         let shadowMaps = map Shaders.shadowColorTex lights
 
@@ -201,10 +207,10 @@ mainloop
     -> Shaders.Buffer2D os
     -> GlobalUniformBuffer os
     -> ObjectUniformBuffer os
-    -> [Shaders.Light os]
+    -> [Shaders.ShadowMap os]
     -> Shaders os
     -> ContextT GLFW.Handle os IO ()
-mainloop win startTime mvState solids lightbulb quad globalUni objectUni lights Shaders{..} = loop
+mainloop win startTime mvState solids lightbulb quad globalUni objectUni shadowMaps Shaders{..} = loop
   where
     loop = do
         closeRequested <- timeItInPlace "Rendering..." $ do
@@ -216,11 +222,11 @@ mainloop win startTime mvState solids lightbulb quad globalUni objectUni lights 
             cfg <- liftIO $ updateUniforms startTime envScreenSize
             writeBuffer globalUni 0 [cfg]
 
-            forM_ (zip lights [0..]) $ \(Shaders.Light{..}, i) -> do
+            forM_ shadowMaps $ \Shaders.ShadowMap{..} -> do
                 -- Clear color and depth of the shadow map.
                 render $ do
-                    shadowColor <- getTexture2DImage shadowColorTex i
-                    shadowDepth <- getTexture2DImage shadowDepthTex i
+                    shadowColor <- getTexture2DImage shadowColorTex 0
+                    shadowDepth <- getTexture2DImage shadowDepthTex 0
 
                     clearImageColor shadowColor 0
                     clearImageDepth shadowDepth 1
@@ -229,8 +235,8 @@ mainloop win startTime mvState solids lightbulb quad globalUni objectUni lights 
                 forM_ solidsWithPos $ \(solid, pos) -> do
                     writeBuffer objectUni 0 [ObjectUniforms pos]
                     render $ do
-                        shadowColor <- getTexture2DImage shadowColorTex i
-                        shadowDepth <- getTexture2DImage shadowDepthTex i
+                        shadowColor <- getTexture2DImage shadowColorTex 0
+                        shadowDepth <- getTexture2DImage shadowDepthTex 0
 
                         prim <- fmap (toPrimitiveArray TriangleList) . newVertexArray $ solid
                         shadowShader ShadowShader.Env
@@ -263,10 +269,11 @@ mainloop win startTime mvState solids lightbulb quad globalUni objectUni lights 
                         }
 
             -- Render the light bulbs.
-            render $ do
+            forM_ (zipWith const [0..] shadowMaps) $ \i -> render $ do
                 prim <- fmap (toPrimitiveArray TriangleList) . newVertexArray $ lightbulb
                 let env = BulbShader.Env
                         { BulbShader.envPrimitives = prim
+                        , BulbShader.envIndex = i
                         , ..
                         }
                 bulbShader env
