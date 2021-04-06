@@ -11,6 +11,7 @@ module LambdaCNC.GPU
 
 import           Control.Applicative          (liftA2)
 import           Control.Concurrent           (threadDelay)
+import           Control.Lens                 ((^.))
 import           Control.Monad                (forM, forM_, unless)
 import           Control.Monad.IO.Class       (liftIO)
 import qualified Data.Time.Clock              as Time
@@ -25,7 +26,11 @@ import           LambdaCNC.Config             (GlobalUniformBuffer,
                                                ObjectUniforms (..), Solids (..),
                                                defaultGlobalUniforms,
                                                defaultObjectUniforms)
-import qualified LambdaCNC.Shaders            as Shaders
+import qualified LambdaCNC.Shaders.Bulb       as BulbShader
+import qualified LambdaCNC.Shaders.Common     as Shaders
+import qualified LambdaCNC.Shaders.Quad       as QuadShader
+import qualified LambdaCNC.Shaders.Shadow     as ShadowShader
+import qualified LambdaCNC.Shaders.Solids     as SolidsShader
 import           Prelude                      hiding ((<*))
 import qualified System.Environment           as Env
 
@@ -33,17 +38,17 @@ import qualified System.Environment           as Env
 fps :: Double
 fps = 24
 
-viewPort :: V2 Int
-viewPort = V2 3000 1800
+windowSize :: V2 Int
+windowSize = V2 3000 1500
 
 
 data Shaders os = Shaders
-    { shadowShader        :: Shaders.ShadowShader os
-    , solidsShader        :: Shaders.SolidsShader os
-    , wireframeShader     :: Shaders.SolidsShader os
-    , quadShader          :: Shaders.QuadShader os
-    , bulbShader          :: Shaders.SolidsShader os
-    , bulbWireframeShader :: Shaders.SolidsShader os
+    { shadowShader        :: ShadowShader.Compiled os
+    , solidsShader        :: SolidsShader.Compiled os
+    , wireframeShader     :: SolidsShader.Compiled os
+    , quadShader          :: QuadShader.Compiled os
+    , bulbShader          :: BulbShader.Compiled os
+    , bulbWireframeShader :: BulbShader.Compiled os
     }
 
 data MachinePosition a = MachinePosition
@@ -75,11 +80,13 @@ main :: IO ()
 main = do
     Env.setEnv "GPIPE_DEBUG" "1"
     runContextT GLFW.defaultHandleConfig{GLFW.configEventPolicy = Just $ GLFW.WaitTimeout $ 1 / fps} $ do
-        let V2 w h = viewPort
-        win <- newWindow (WindowFormatColorDepth RGB8 Depth16) $ (GLFW.defaultWindowConfig "LambdaCNC")
-            { GLFW.configWidth = w
-            , GLFW.configHeight = h
-            , GLFW.configHints = [GLFW.WindowHint'Samples (Just 4)]
+        win <- newWindow (WindowFormatColorDepth RGB8 Depth16) $ (GLFW.defaultWindowConfig "LambdaCNC (GPipe)")
+            { GLFW.configWidth = windowSize^._x
+            , GLFW.configHeight = windowSize^._y
+            , GLFW.configHints =
+                [
+                -- , GLFW.WindowHint'Samples (Just 1)
+                ]
             }
 
         meshes <- timeIt "Loading object meshes" $ do
@@ -119,16 +126,16 @@ main = do
             blackWhite = tail whiteBlack
         writeTexture2D tex 0 0 (V2 8 8) (cycle (take 8 whiteBlack ++ take 8 blackWhite))
 
-        shadowColorTex <- newTexture2D R8 Shaders.shadowMapSize 1
+        shadowColorTex <- newTexture2D R16F Shaders.shadowMapSize 1
         shadowDepthTex <- newTexture2D Depth16 Shaders.shadowMapSize 1
 
         shaders <- Shaders
-            <$> timeIt "Compiling shadow shader..." (Shaders.compileShadowShader globalUni objectUni)
-            <*> timeIt "Compiling solids shader..." (Shaders.compileSolidsShader win viewPort globalUni objectUni shadowColorTex tex)
-            <*> timeIt "Compiling wireframe shader..." (Shaders.compileWireframeShader win viewPort globalUni objectUni)
-            <*> timeIt "Compiling shadow map view shader..." (Shaders.compileQuadShader win viewPort shadowColorTex)
-            <*> timeIt "Compiling lightbulb shader..." (Shaders.compileBulbShader win viewPort globalUni)
-            <*> timeIt "Compiling lightbulb wireframe shader..." (Shaders.compileBulbWireframeShader win viewPort globalUni)
+            <$> timeIt "Compiling shadow shader..." (ShadowShader.solidShader globalUni objectUni)
+            <*> timeIt "Compiling solids shader..." (SolidsShader.solidShader win globalUni objectUni shadowColorTex tex)
+            <*> timeIt "Compiling wireframe shader..." (SolidsShader.wireframeShader win globalUni objectUni)
+            <*> timeIt "Compiling shadow map view shader..." (QuadShader.solidShader win shadowColorTex)
+            <*> timeIt "Compiling lightbulb shader..." (BulbShader.solidShader win globalUni)
+            <*> timeIt "Compiling lightbulb wireframe shader..." (BulbShader.wireframeShader win globalUni)
 
         startTime <- liftIO Time.getCurrentTime
         loop win startTime solids lightbulb quad globalUni objectUni shadowColorTex shadowDepthTex shaders
@@ -154,6 +161,8 @@ loop
     -> ContextT GLFW.Handle os IO ()
 loop win startTime solids lightbulb quad globalUni objectUni shadowColorTex shadowDepthTex shaders@Shaders{..} = do
     closeRequested <- timeItInPlace "Rendering..." $ do
+        Just (w, h) <- GLFW.getWindowSize win
+
         cfg <- liftIO $ updateUniforms startTime
         writeBuffer globalUni 0 [cfg]
 
@@ -173,32 +182,42 @@ loop win startTime solids lightbulb quad globalUni objectUni shadowColorTex shad
                 shadowDepth <- getTexture2DImage shadowDepthTex 0
 
                 prim <- fmap (toPrimitiveArray TriangleList) . newVertexArray $ solid
-                shadowShader Shaders.ShadowShaderEnv
-                    { Shaders.envPrimitives = prim
-                    , Shaders.envShadowColor = shadowColor
-                    , Shaders.envShadowDepth = shadowDepth
+                shadowShader ShadowShader.Env
+                    { ShadowShader.envPrimitives = prim
+                    , ShadowShader.envShadowColor = shadowColor
+                    , ShadowShader.envShadowDepth = shadowDepth
                     }
 
         -- Clear the window frame buffer.
         render $ do
-            clearWindowColor win (V3 0 0 0.8)
+            clearWindowColor win (V3 0.7 0.7 0.7)
             clearWindowDepth win 1
 
         -- Render each object on the window frame buffer.
         forM_ [objBed solids, objGround solids] $ \(solid, pos) -> do
             writeBuffer objectUni 0 [ObjectUniforms pos]
             render $ do
-                prim <- fmap (toPrimitiveArray TriangleList) . newVertexArray $ solid
-                solidsShader prim
-                wireframeShader prim
+                solidsPrim <- fmap (toPrimitiveArray TriangleList) . newVertexArray $ solid
+                solidsShader SolidsShader.Env
+                    { SolidsShader.envScreenSize = V2 w h
+                    , SolidsShader.envPrimitives = solidsPrim
+                    }
+                -- wireframeShader prim
 
-                quadVertexArray <- toPrimitiveArray TriangleList <$> newVertexArray quad
-                quadShader quadVertexArray
+                quadPrim <- toPrimitiveArray TriangleList <$> newVertexArray quad
+                quadShader QuadShader.Env
+                    { QuadShader.envScreenSize = V2 w h
+                    , QuadShader.envPrimitives = quadPrim
+                    }
 
         render $ do
             prim <- fmap (toPrimitiveArray TriangleList) . newVertexArray $ lightbulb
-            bulbShader prim
-            bulbWireframeShader prim
+            let env = BulbShader.Env
+                    { BulbShader.envScreenSize = V2 w h
+                    , BulbShader.envPrimitives = prim
+                    }
+            bulbShader env
+            bulbWireframeShader env
 
         swapWindowBuffers win
 

@@ -58,8 +58,8 @@ instance BufferFormat a => BufferFormat (GlobalUniforms a) where
 defaultGlobalUniforms :: Fractional a => GlobalUniforms a
 defaultGlobalUniforms = GlobalUniforms
     { time = 0
-    , screenSize = V2 1500 1000
-    , cameraPos = V3 50000 50000 20000
+    , screenSize = V2 960 540
+    , cameraPos = V3 90000 40000 20000 * 1.4
     }
 
 

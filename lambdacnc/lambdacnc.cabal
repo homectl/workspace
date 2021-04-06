@@ -21,7 +21,11 @@ library
   exposed-modules:
       LambdaCNC.Config
       LambdaCNC.GPU
-      LambdaCNC.Shaders
+      LambdaCNC.Shaders.Bulb
+      LambdaCNC.Shaders.Common
+      LambdaCNC.Shaders.Quad
+      LambdaCNC.Shaders.Shadow
+      LambdaCNC.Shaders.Solids
   ghc-options:
       -Wall
   build-depends:
