@@ -3,6 +3,9 @@
 {-# LANGUAGE NamedFieldPuns      #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 module LambdaCNC.GPU
   ( main
   ) where
@@ -31,6 +34,16 @@ viewPort :: V2 Int
 viewPort = V2 1500 1000
 
 
+data Objects a = Objects
+    { objBed :: a
+    , objGround :: a
+    , objXAxis :: a
+    , objYAxis :: a
+    , objZAxis :: a
+    }
+    deriving (Functor, Foldable)
+
+
 main :: IO ()
 main = do
     Env.setEnv "GPIPE_DEBUG" "1"
@@ -43,9 +56,14 @@ main = do
             }
 
         objVertexBuffer <- timeIt "Loading mesh" $ do
-            mesh <- liftIO $ STL.stlToMesh <$> STL.mustLoadSTL "data/models/Bed.stl"
-            buf <- newBuffer $ length mesh
-            writeBuffer buf 0 mesh
+            meshes <- liftIO $ Objects
+                <$> (STL.stlToMesh <$> STL.mustLoadSTL "data/models/Bed.stl")
+                <*> (STL.stlToMesh <$> STL.mustLoadSTL "data/models/Ground.stl")
+                <*> (STL.stlToMesh <$> STL.mustLoadSTL "data/models/XAxis.stl")
+                <*> (STL.stlToMesh <$> STL.mustLoadSTL "data/models/YAxis.stl")
+                <*> (STL.stlToMesh <$> STL.mustLoadSTL "data/models/ZAxis.stl")
+            buf <- newBuffer $ foldr ((+) . length) 0 meshes
+            writeBuffer buf 0 $ concat meshes
             return buf
 
         quadVertexBuffer <- timeIt "Generating quad" $ do
