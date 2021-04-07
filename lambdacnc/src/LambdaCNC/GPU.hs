@@ -41,7 +41,9 @@ import qualified LambdaCNC.Shaders.Quad            as QuadShader
 import qualified LambdaCNC.Shaders.Shadow          as ShadowShader
 import qualified LambdaCNC.Shaders.Solids          as SolidsShader
 import           Prelude                           hiding ((<*))
+import qualified System.Directory                  as Dir
 import qualified System.Environment                as Env
+import           System.FilePath                   ((</>))
 
 
 fps :: Double
@@ -88,9 +90,18 @@ objectPositions MachinePosition{..} =
     MachinePosition xMax yMax zMax = machMax
 
 
+cleanupShaders :: IO ()
+cleanupShaders = do
+    let prefix = "generated-shaders"
+    files <- map (prefix </>) . filter (/= "README.md") <$> Dir.listDirectory prefix
+    mapM_ Dir.removeFile files
+
+
 main :: IO ()
 main = do
     Env.setEnv "GPIPE_DEBUG" "1"
+    cleanupShaders
+
     runContextT GLFW.defaultHandleConfig{GLFW.configEventPolicy = Just $ GLFW.WaitTimeout $ 1 / fps} $ do
         win <- newWindow (WindowFormatColorDepth RGB8 Depth16) $ (GLFW.defaultWindowConfig "LambdaCNC (GPipe)")
             { GLFW.configWidth = windowSize^._x

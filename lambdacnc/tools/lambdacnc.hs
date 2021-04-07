@@ -39,7 +39,7 @@ interpret modName = GHC.runGhc (Just libdir) $ do
         , GHC.hscTarget = GHC.HscInterpreted
         , GHC.packageFlags =
             [ F.ExposePackage pkg (F.PackageArg pkg) (F.ModRenaming True [])
-            | pkg <- ["GPipe", "GPipe-Engine", "GPipe-GLFW", "JuicyPixels", "data-default", "lens", "time"]
+            | pkg <- ["GPipe", "GPipe-Engine", "GPipe-GLFW", "JuicyPixels", "data-default", "directory", "filepath", "lens", "time"]
             ]
         -- C:\\Users\\Pippijn\\AppData\\Roaming\\cabal\\store\\ghc-8.10.4\\package.db
         -- C:\\Users\\Pippijn\\Documents\\code\\lambdaray\\dist-newstyle\\build\\x86_64-windows\\ghc-8.10.4\\lambdaray-0.0.1\\package.conf.inplace

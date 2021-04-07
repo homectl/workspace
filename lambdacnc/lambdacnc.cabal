@@ -35,6 +35,8 @@ library
     , GPipe-Engine
     , GPipe-GLFW
     , data-default
+    , directory
+    , filepath
     , lens
     , time
 

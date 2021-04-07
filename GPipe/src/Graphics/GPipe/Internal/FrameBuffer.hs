@@ -193,8 +193,9 @@ makeDrawcall :: DrawcallInfo s -> FragmentStreamData -> IO (Drawcall s)
 makeDrawcall (sh, shd, wOrIo) (FragmentStreamData rastN shaderpos (PrimitiveStreamData primN ubuff) keep) = do
     (fsource, funis, fsamps, _, prevDecls, prevS) <- runExprM shd (discard keep >> sh)
     (vsource, vunis, vsamps, vinps, _, _) <- runExprM prevDecls (prevS >> shaderpos)
-    dumpGeneratedFile "generated-shaders/shader.frag" fsource
-    dumpGeneratedFile "generated-shaders/shader.vert" vsource
+    let prefix = "generated-shaders/shader" <> show primN
+    dumpGeneratedFile (prefix <> ".frag") fsource
+    dumpGeneratedFile (prefix <> ".vert") vsource
     return $ Drawcall wOrIo primN rastN vsource fsource vinps vunis vsamps funis fsamps ubuff
 
 
