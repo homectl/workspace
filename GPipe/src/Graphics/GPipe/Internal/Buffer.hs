@@ -5,7 +5,6 @@
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeSynonymInstances #-}
-
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 module Graphics.GPipe.Internal.Buffer
 (

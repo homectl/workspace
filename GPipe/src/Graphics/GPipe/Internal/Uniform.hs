@@ -61,25 +61,26 @@ class BufferFormat a => UniformInput a where
 -- | Load a uniform value from a 'Buffer' into a 'Shader'. The argument function is used to retrieve the buffer and the index into this buffer from the shader environment.
 getUniform :: forall os f s b x. (UniformInput b) => (s -> (Buffer os (Uniform b), Int)) -> Shader os s (UniformFormat b x)
 getUniform sf = Shader $ do
-                   uniAl <- askUniformAlignment
-                   blockId <- getName
-                   let (u, offToStype) = shaderGen (useUniform (buildUDecl offToStype) blockId)
-                       sampleBuffer = makeBuffer undefined undefined uniAl :: Buffer os (Uniform b)
-                       shaderGen :: (Int -> ExprM Text) -> (UniformFormat b x, OffsetToSType) -- Int is name of uniform block
-                       shaderGen = runReader $ runWriterT $ shaderGenF $ fromBUnifom $ bufBElement sampleBuffer $ BInput 0 0
-                   doForUniform blockId $ \s bind -> let (ub, i) = sf s
-                                                     in if i < 0 || i >= bufferLength ub
-                                                            then error "toUniformBlock, uniform buffer offset out of bounds"
-                                                            else do
-                                                                bname <- readIORef $ bufName ub
-                                                                glBindBufferRange GL_UNIFORM_BUFFER (fromIntegral bind) bname (fromIntegral $ i * bufElementSize ub) (fromIntegral $ bufElementSize ub)
-                   return u
-    where
-            ToUniform (Kleisli shaderGenF) = toUniform :: ToUniform x b (UniformFormat b x)
-            fromBUnifom (Uniform b) = b
+    uniAl <- askUniformAlignment
+    blockId <- getName
+    let (u, offToStype) = shaderGen (useUniform (buildUDecl offToStype) blockId)
+        sampleBuffer = makeBuffer undefined undefined uniAl :: Buffer os (Uniform b)
+        shaderGen :: (Int -> ExprM Text) -> (UniformFormat b x, OffsetToSType) -- Int is name of uniform block
+        shaderGen = runReader $ runWriterT $ shaderGenF $ fromBUnifom $ bufBElement sampleBuffer $ BInput 0 0
+    doForUniform blockId $ \s bind ->
+        let (ub, i) = sf s in
+        if i < 0 || i >= bufferLength ub
+            then error "toUniformBlock, uniform buffer offset out of bounds"
+            else do
+                bname <- readIORef $ bufName ub
+                glBindBufferRange GL_UNIFORM_BUFFER (fromIntegral bind) bname (fromIntegral $ i * bufElementSize ub) (fromIntegral $ bufElementSize ub)
+    return u
+  where
+    ToUniform (Kleisli shaderGenF) = toUniform :: ToUniform x b (UniformFormat b x)
+    fromBUnifom (Uniform b) = b
 
-            doForUniform :: Int -> (s -> Binding -> IO()) -> ShaderM s ()
-            doForUniform n io = modifyRenderIO (\s -> s { uniformNameToRenderIO = insert n io (uniformNameToRenderIO s) } )
+    doForUniform :: Int -> (s -> Binding -> IO()) -> ShaderM s ()
+    doForUniform n io = modifyRenderIO (\s -> s { uniformNameToRenderIO = insert n io (uniformNameToRenderIO s) } )
 
 buildUDecl :: OffsetToSType -> GlobDeclM ()
 buildUDecl = buildUDecl' 0 . Map.toAscList

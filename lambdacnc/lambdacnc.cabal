@@ -21,6 +21,7 @@ library
   exposed-modules:
       LambdaCNC.Config
       LambdaCNC.GPU
+      LambdaCNC.Pipeline
       LambdaCNC.Shaders.Bulb
       LambdaCNC.Shaders.Common
       LambdaCNC.Shaders.LightInfo

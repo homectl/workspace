@@ -1,4 +1,5 @@
 {-# LANGUAGE Arrows            #-}
+{-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE TypeFamilies      #-}
 module LambdaCNC.Config where
