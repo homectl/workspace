@@ -27,7 +27,6 @@ import qualified LambdaCNC.Shaders.Common          as Shaders
 import           LambdaCNC.Shaders.LightInfo       (LightInfo (..))
 import qualified LambdaCNC.Shaders.LightInfo       as LightInfo
 import qualified LambdaCNC.Shaders.Quad            as QuadShader
-import qualified LambdaCNC.Shaders.QuadColor       as QuadColorShader
 import qualified LambdaCNC.Shaders.Shadow          as ShadowShader
 import qualified LambdaCNC.Shaders.Solids          as SolidsShader
 
@@ -123,8 +122,8 @@ data Shaders os = Shaders
     { shadowShader        :: ShadowShader.Compiled os
     , solidsShader        :: SolidsShader.Compiled os
     , wireframeShader     :: SolidsShader.Compiled os
-    , quadShader          :: QuadShader.Compiled os
-    , quadColorShader     :: QuadColorShader.Compiled os
+    , quadShader          :: QuadShader.Compiled os RFloat
+    , quadColorShader     :: QuadShader.Compiled os RGBFloat
     , bulbShader          :: BulbShader.Compiled os
     , bulbWireframeShader :: BulbShader.Compiled os
     }
@@ -210,8 +209,8 @@ initData win = do
         <$> timeIt "Compiling shadow shader..." (ShadowShader.solidShader globalUni objectUni lightUni)
         <*> timeIt "Compiling solids shader..." (SolidsShader.solidShader globalUni objectUni lightUni shadowTextures tex)
         <*> timeIt "Compiling wireframe shader..." (SolidsShader.wireframeShader globalUni objectUni)
-        <*> timeIt "Compiling shadow map view shader..." (QuadShader.solidShader objectUni win)
-        <*> timeIt "Compiling final frame shader..." (QuadColorShader.solidShader objectUni win)
+        <*> timeIt "Compiling shadow map view shader..." (QuadShader.solidShader objectUni pure win)
+        <*> timeIt "Compiling final frame shader..." (QuadShader.solidShader objectUni id win)
         <*> timeIt "Compiling lightbulb shader..." (BulbShader.solidShader globalUni lightUni)
         <*> timeIt "Compiling lightbulb wireframe shader..." (BulbShader.wireframeShader globalUni lightUni)
 
@@ -302,7 +301,7 @@ renderings win PipelineData{shaders=Shaders{..}, ..} PipelineState{stFrameBuffer
     render $ do
         envPrimitives <- toPrimitiveArray TriangleList <$> newVertexArray quad
         let envTexture = fbColor fbFinal
-        quadColorShader QuadColorShader.Env{..}
+        quadColorShader QuadShader.Env{..}
 
     -- Render the shadow maps as small pictures on quads at the bottom of the screen.
     iforM_ shadowMaps $ \i Shaders.ShadowMap{..} -> do

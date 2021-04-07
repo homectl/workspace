@@ -26,7 +26,6 @@ library
       LambdaCNC.Shaders.Common
       LambdaCNC.Shaders.LightInfo
       LambdaCNC.Shaders.Quad
-      LambdaCNC.Shaders.QuadColor
       LambdaCNC.Shaders.Shadow
       LambdaCNC.Shaders.Solids
   ghc-options:

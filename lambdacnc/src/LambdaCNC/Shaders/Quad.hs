@@ -9,16 +9,16 @@ import           Control.Lens             ((^.))
 import           Graphics.GPipe           hiding (normalize)
 import           LambdaCNC.Config         (ObjectUniformBuffer,
                                            ObjectUniforms (..))
-import           LambdaCNC.Shaders.Common (MonochromeTex, Shader2DInput)
+import           LambdaCNC.Shaders.Common (Shader2DInput)
 import           Prelude                  hiding ((<*))
 
 --------------------------------------------------
 
-type Compiled os = CompiledShader os (Env os)
-data Env os = Env
+type Compiled os f = CompiledShader os (Env os f)
+data Env os f = Env
     { envScreenSize :: V2 Int
     , envPrimitives :: PrimitiveArray Triangles Shader2DInput
-    , envTexture    :: MonochromeTex os
+    , envTexture    :: Texture2D os (Format f)
     }
 
 --------------------------------------------------
@@ -30,17 +30,13 @@ vert ObjectUniforms{..} pos = (V4 x y 0 1, (pos + 1) / 2)
 
 --------------------------------------------------
 
-frag :: (V2 FFloat -> FFloat) -> V2 FFloat -> V3 FFloat
-frag texSamp uv = let c = texSamp uv in V3 c c c
-
---------------------------------------------------
-
 solidShader
-    :: ContextHandler ctx
+    :: (ContextHandler ctx, ColorSampleable f)
     => ObjectUniformBuffer os
+    -> (Color f (S F (ColorElement f)) -> V3 FFloat)
     -> Window os RGBFloat ds
-    -> ContextT ctx os IO (Compiled os)
-solidShader objectUni win = compileShader $ do
+    -> ContextT ctx os IO (Compiled os f)
+solidShader objectUni toColor win = compileShader $ do
     vertObject <- getUniform (const (objectUni, 0))
 
     primitiveStream <- fmap (vert vertObject) <$> toPrimitiveStream envPrimitives
@@ -48,7 +44,7 @@ solidShader objectUni win = compileShader $ do
     texSampler <- newSampler2D (\Env{..} -> (envTexture, SamplerNearest, (pure Repeat, undefined)))
     let texSamp = sample2D texSampler SampleAuto Nothing Nothing
 
-    fragmentStream <- fmap (frag texSamp) <$>
+    fragmentStream <- fmap (toColor . texSamp) <$>
         rasterize (\env -> (FrontAndBack, PolygonFill, ViewPort (V2 0 0) (envScreenSize env), DepthRange 0 1)) primitiveStream
 
     drawWindowColor (const (win, ContextColorOption NoBlending (pure True))) fragmentStream
