@@ -50,6 +50,7 @@ executable lambdacnc
       -threaded
   build-depends:
       base < 5
+    , GPipe-Engine
     , directory
     , ghc
     , ghc-paths

@@ -1,15 +1,9 @@
-{-# LANGUAGE DeriveFunctor       #-}
-{-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE LambdaCase          #-}
-{-# LANGUAGE NamedFieldPuns      #-}
-{-# LANGUAGE RecordWildCards     #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE DeriveFunctor   #-}
+{-# LANGUAGE NamedFieldPuns  #-}
+{-# LANGUAGE RecordWildCards #-}
 module LambdaCNC.Pipeline where
 
 import           Control.Applicative               (liftA2)
-import           Control.Concurrent.MVar           (MVar)
-import qualified Control.Concurrent.MVar           as MVar
 import           Control.Lens.Indexed              (iforM_)
 import           Control.Monad                     (forM, forM_)
 import           Control.Monad.IO.Class            (liftIO)
@@ -17,6 +11,7 @@ import           Data.Foldable                     (toList)
 import qualified Data.Time.Clock                   as Time
 import           Data.Word                         (Word32)
 import           Graphics.GPipe
+import qualified Graphics.GPipe.Context.GLFW.Input as Input
 import qualified Graphics.GPipe.Engine.STL         as STL
 import           Graphics.GPipe.Engine.TimeIt      (timeIt)
 import           LambdaCNC.Config                  (GlobalUniformBuffer,
@@ -34,8 +29,12 @@ import qualified LambdaCNC.Shaders.LightInfo       as LightInfo
 import qualified LambdaCNC.Shaders.Quad            as QuadShader
 import qualified LambdaCNC.Shaders.Shadow          as ShadowShader
 import qualified LambdaCNC.Shaders.Solids          as SolidsShader
-import           Prelude                           hiding ((<*))
 
+--------------------------------------------------
+--
+-- Dynamic pipeline data
+--
+--------------------------------------------------
 
 data MachinePosition a = MachinePosition
     { xPos :: a
@@ -46,9 +45,6 @@ data MachinePosition a = MachinePosition
 
 machMax :: MachinePosition Int
 machMax = MachinePosition 40000 61500 5600
-
-startPos :: MachinePosition Int
-startPos = fmap (`div` 2) machMax
 
 objectPositions :: MachinePosition Int -> Solids (V3 Float)
 objectPositions MachinePosition{..} =
@@ -65,6 +61,17 @@ objectPositions MachinePosition{..} =
     MachinePosition xMax yMax zMax = machMax
 
 
+type PipelineState os = MachinePosition Int
+
+startState :: PipelineState os
+startState = fmap (`div` 2) machMax
+
+--------------------------------------------------
+--
+-- Static pipeline data: shaders, textures, etc.
+--
+--------------------------------------------------
+
 data Shaders os = Shaders
     { shadowShader        :: ShadowShader.Compiled os
     , solidsShader        :: SolidsShader.Compiled os
@@ -75,17 +82,9 @@ data Shaders os = Shaders
     }
 
 
-updateUniforms :: Floating a => Time.UTCTime -> V2 Int -> IO (GlobalUniforms a)
-updateUniforms startTime screenSize = do
-    now <- Time.getCurrentTime
-    return defaultGlobalUniforms
-        { time = fromRational $ toRational $ Time.diffUTCTime now startTime
-        , screenSize = fmap fromIntegral screenSize
-        }
-
-
 data PipelineData os = PipelineData
-    { solids     :: Solids (Shaders.Buffer3D os)
+    { startTime  :: Time.UTCTime
+    , solids     :: Solids (Shaders.Buffer3D os)
     , lightbulb  :: Shaders.Buffer3D os
     , quad       :: Shaders.Buffer2D os
     , globalUni  :: GlobalUniformBuffer os
@@ -97,6 +96,8 @@ data PipelineData os = PipelineData
 
 initialise :: ContextHandler ctx => Window os RGBFloat Depth -> ContextT ctx os IO (PipelineData os)
 initialise win = do
+    startTime <- liftIO Time.getCurrentTime
+
     solids <- timeIt "Loading object meshes" $ do
         meshes <- liftIO $ Solids
             <$> STL.mustLoadSTL "data/models/Bed.stl"
@@ -164,18 +165,20 @@ initialise win = do
 
     return PipelineData{..}
 
+--------------------------------------------------
+--
+-- Rendering pipeline
+--
+--------------------------------------------------
 
 renderings
     :: (ContextHandler ctx)
     => Window os RGBFloat Depth
     -> V2 Int
-    -> ( Time.UTCTime
-       , MVar (MachinePosition Int)
-       , PipelineData os)
+    -> PipelineData os
+    -> PipelineState os
     -> ContextT ctx os IO ()
-renderings win envScreenSize (startTime, mvState, PipelineData{shaders=Shaders{..}, ..}) = do
-    state <- liftIO $ MVar.readMVar mvState
-
+renderings win envScreenSize PipelineData{shaders=Shaders{..}, ..} state = do
     let solidsWithPos = liftA2 (,) solids (objectPositions state)
 
     cfg <- liftIO $ updateUniforms startTime envScreenSize
@@ -191,8 +194,8 @@ renderings win envScreenSize (startTime, mvState, PipelineData{shaders=Shaders{.
             clearImageDepth shadowDepth 1
 
         -- Render each object on the shadow map.
-        forM_ solidsWithPos $ \(solid, pos) -> do
-            writeBuffer objectUni 0 [ObjectUniforms pos]
+        forM_ solidsWithPos $ \(solid, objectPos) -> do
+            writeBuffer objectUni 0 [defaultObjectUniforms{objectPos}]
             render $ do
                 envShadowColor <- getTexture2DImage shadowColorTex 0
                 envShadowDepth <- getTexture2DImage shadowDepthTex 0
@@ -206,8 +209,8 @@ renderings win envScreenSize (startTime, mvState, PipelineData{shaders=Shaders{.
         clearWindowDepth win 1
 
     -- Render each object on the window frame buffer.
-    forM_ solidsWithPos $ \(solid, pos) -> do
-        writeBuffer objectUni 0 [ObjectUniforms pos]
+    forM_ solidsWithPos $ \(solid, objectPos) -> do
+        writeBuffer objectUni 0 [defaultObjectUniforms{objectPos}]
         render $ do
             envPrimitives <- fmap (toPrimitiveArray TriangleList) . newVertexArray $ solid
             let env = SolidsShader.Env{..}
@@ -216,7 +219,7 @@ renderings win envScreenSize (startTime, mvState, PipelineData{shaders=Shaders{.
 
     -- Render the shadow maps as small pictures on quads at the bottom of the screen.
     iforM_ shadowMaps $ \envIndex Shaders.ShadowMap{..} -> do
-        writeBuffer objectUni 0 [ObjectUniforms (V3 (1/4 * fromIntegral envIndex) 0 0)]
+        writeBuffer objectUni 0 [ObjectUniforms{objectPos=V3 (1/5 * fromIntegral envIndex) 0 0, objectScale=1/10}]
         render $ do
             envPrimitives <- toPrimitiveArray TriangleList <$> newVertexArray quad
             let envTexture = shadowColorTex
@@ -228,3 +231,41 @@ renderings win envScreenSize (startTime, mvState, PipelineData{shaders=Shaders{.
         let env = BulbShader.Env{..}
         bulbShader env
         bulbWireframeShader env
+
+
+updateUniforms :: Floating a => Time.UTCTime -> V2 Int -> IO (GlobalUniforms a)
+updateUniforms startTime screenSize = do
+    now <- Time.getCurrentTime
+    return defaultGlobalUniforms
+        { time = fromRational $ toRational $ Time.diffUTCTime now startTime
+        , screenSize = fmap fromIntegral screenSize
+        }
+
+--------------------------------------------------
+--
+-- Event processing
+--
+--------------------------------------------------
+
+keyCallback :: MachinePosition Int -> Input.Key -> Int -> Input.KeyState -> Input.ModifierKeys -> MachinePosition Int
+keyCallback pos@MachinePosition{..} = process
+  where
+    process k _ Input.KeyState'Pressed _   = keyPressed k
+    process k _ Input.KeyState'Repeating _ = keyPressed k
+    process _ _ Input.KeyState'Released _  = pos
+
+    MachinePosition xMax yMax zMax = machMax
+
+    keyPressed k =
+        let fb = moveMult (k == Input.Key'Down) (k == Input.Key'Up)
+            lr = moveMult (k == Input.Key'Left) (k == Input.Key'Right)
+            ud = moveMult (k == Input.Key'PageDown) (k == Input.Key'PageUp)
+        in
+        pos { xPos = max 0 . min xMax $ (xPos + (xMax `div` 50) * lr)
+            , yPos = max 0 . min yMax $ (yPos + (yMax `div` 50) * fb)
+            , zPos = max 0 . min zMax $ (zPos + (zMax `div` 50) * ud)
+            }
+
+    moveMult True _      = -1
+    moveMult _ True      = 1
+    moveMult False False = 0

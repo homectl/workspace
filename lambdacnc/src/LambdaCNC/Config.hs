@@ -66,27 +66,29 @@ defaultGlobalUniforms = GlobalUniforms
 
 -------------------------------------------------
 
-newtype ObjectUniforms a = ObjectUniforms
+data ObjectUniforms a = ObjectUniforms
     { objectPos :: V3 a
+    , objectScale :: a
     }
 
 type ObjectUniformBuffer os = Buffer os (Uniform (ObjectUniforms (B Float)))
 
 instance UniformInput a => UniformInput (ObjectUniforms a) where
     type UniformFormat (ObjectUniforms a) x = (ObjectUniforms (UniformFormat a x))
-    toUniform = proc ~(ObjectUniforms a) -> do
-        a' <- toUniform -< a
-        returnA -< ObjectUniforms a'
+    toUniform = proc ~(ObjectUniforms a b) -> do
+        (a', b') <- toUniform -< (a, b)
+        returnA -< ObjectUniforms a' b'
 
 instance BufferFormat a => BufferFormat (ObjectUniforms a) where
     type HostFormat (ObjectUniforms a) = ObjectUniforms (HostFormat a)
-    toBuffer = proc ~(ObjectUniforms a) -> do
-        a' <- toBuffer -< a
-        returnA -< ObjectUniforms a'
+    toBuffer = proc ~(ObjectUniforms a b) -> do
+        (a', b') <- toBuffer -< (a, b)
+        returnA -< ObjectUniforms a' b'
 
-defaultObjectUniforms :: Default a => ObjectUniforms a
+defaultObjectUniforms :: (Num a, Default a) => ObjectUniforms a
 defaultObjectUniforms = ObjectUniforms
     { objectPos = pure def
+    , objectScale = 1
     }
 
 -------------------------------------------------

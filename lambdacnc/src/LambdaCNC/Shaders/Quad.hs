@@ -27,7 +27,7 @@ data Env os = Env
 vert :: ObjectUniforms VFloat -> V2 VFloat -> (VPos, V2 VFloat)
 vert ObjectUniforms{..} pos = (V4 x y 0 1, (pos + 1) / 2)
   where
-    V2 x y = pos/8 - (1 - 1.0 / 8) + objectPos^._xy
+    V2 x y = pos ^* objectScale - (1 - pure objectScale) + objectPos^._xy
 
 --------------------------------------------------
 
