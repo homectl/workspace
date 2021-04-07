@@ -51,17 +51,15 @@ type Buffer3D os = Buffer os Shader3DInput
 type Shader2DInput = (B2 Float)
 type Buffer2D os = Buffer os Shader2DInput
 
-type ShadowColorTex os = Texture2D os (Format RFloat)
-type ShadowDepthTex os = Texture2D os (Format Depth)
-
 type MonochromeTex os = Texture2D os (Format RFloat)
+type DepthTex os = Texture2D os (Format Depth)
 type ColorTex os = Texture2D os (Format RGBFloat)
 
 --------------------------------------------------
 
 data ShadowMap os = ShadowMap
-    { shadowColorTex :: ShadowColorTex os
-    , shadowDepthTex :: ShadowDepthTex os
+    { shadowColorTex :: MonochromeTex os
+    , shadowDepthTex :: DepthTex os
     }
     deriving (Show)
 

@@ -1,11 +1,11 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 module Graphics.GPipe.Engine where
 
-import           Control.Concurrent.MVar      (MVar, readMVar)
+import           Control.Concurrent.MVar
 import           Control.Monad                (unless)
 import           Control.Monad.IO.Class       (liftIO)
 import           Graphics.GPipe               (ContextT, Depth, RGBFloat,
-                                               V2 (..), Window,
-                                               swapWindowBuffers)
+                                               Window, swapWindowBuffers)
 import qualified Graphics.GPipe.Context.GLFW  as GLFW
 import           Graphics.GPipe.Engine.TimeIt (timeItInPlace)
 
@@ -13,20 +13,24 @@ import           Graphics.GPipe.Engine.TimeIt (timeItInPlace)
 mainloop
     :: Window os RGBFloat Depth
     -> Bool
-    -> (Window os RGBFloat Depth -> V2 Int -> pipelineData -> pipelineState -> ContextT GLFW.Handle os IO ())
+    -> (pipelineState -> ContextT GLFW.Handle os IO pipelineState)
+    -> (Window os RGBFloat Depth -> pipelineData -> pipelineState -> ContextT GLFW.Handle os IO ())
     -> pipelineData
     -> MVar pipelineState
     -> ContextT GLFW.Handle os IO ()
-mainloop win timing renderer pipelineData pipelineState = loop
+mainloop win timing prepare render pipelineData pipelineState = loop
   where
     timeIt = if timing then timeItInPlace "Rendering..." else id
 
     loop = do
         closeRequested <- timeIt $ do
-            windowSize <- (\(Just (w, h)) -> V2 w h) <$> GLFW.getWindowSize win
-
-            liftIO (readMVar pipelineState) >>=
-                renderer win windowSize pipelineData
+            -- Take the current state, make any necessary changes to it within
+            -- the ContextT, then put it back so GLFW callbacks can proceed.
+            state <- liftIO (takeMVar pipelineState) >>= prepare
+            liftIO $ putMVar pipelineState state
+            -- Render with the current state (events will be processed on the
+            -- next iteration).
+            render win pipelineData state
 
             swapWindowBuffers win
 

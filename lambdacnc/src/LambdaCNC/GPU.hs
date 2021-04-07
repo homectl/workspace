@@ -47,14 +47,17 @@ main = do
             { GLFW.configWidth = windowSize^._x
             , GLFW.configHeight = windowSize^._y
             , GLFW.configHints =
-                [ GLFW.WindowHint'Samples (Just 8)
+                -- Need to do this manually because of frame buffer post processing.
+                [ GLFW.WindowHint'Samples Nothing
                 ]
             }
 
-        pipelineData <- Pipeline.initialise win
-        pipelineState <- liftIO $ MVar.newMVar Pipeline.startState
+        pipelineData <- Pipeline.initData win
+        pipelineState <- (liftIO . MVar.newMVar) =<< Pipeline.initState windowSize
 
         void $ Input.setKeyCallback win $ Just $ \k i s m ->
             MVar.modifyMVar_ pipelineState (\state -> return $ Pipeline.keyCallback state k i s m)
+        void $ GLFW.setWindowSizeCallback win $ Just $ \w h ->
+            MVar.modifyMVar_ pipelineState (\state -> return $ Pipeline.windowSizeCallback state w h)
 
-        Engine.mainloop win False Pipeline.renderings pipelineData pipelineState
+        Engine.mainloop win False Pipeline.updateState Pipeline.renderings pipelineData pipelineState

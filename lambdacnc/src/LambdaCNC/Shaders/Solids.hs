@@ -17,19 +17,21 @@ import           LambdaCNC.Config            (GlobalUniformBuffer,
                                               ObjectUniformBuffer,
                                               ObjectUniforms (..))
 import           LambdaCNC.Shaders.Common    (FragLight (..), MonochromeTex,
-                                              Shader3DInput, ShadowColorTex,
-                                              cameraMat, lightMat, modelMat,
-                                              shadowMapSize, toV4, lightTransform)
+                                              Shader3DInput, cameraMat,
+                                              lightMat, lightTransform,
+                                              modelMat, shadowMapSize, toV4)
 import           LambdaCNC.Shaders.LightInfo (LightInfo (..))
 import qualified LambdaCNC.Shaders.LightInfo as LightInfo
 import           Prelude                     hiding ((<*))
 
 --------------------------------------------------
 
-type Compiled os = CompiledShader os Env
-data Env = Env
+type Compiled os = CompiledShader os (Env os)
+data Env os = Env
     { envScreenSize :: V2 Int
     , envPrimitives :: PrimitiveArray Triangles Shader3DInput
+    , envColor      :: Image (Format RGBFloat)
+    , envDepth      :: Image (Format Depth)
     }
 type SolidShaderAttachment x = (V2 (S x Float), V4 (S x Float), V4 (S x Float), LightInfo (V4 (S x Float)))
 
@@ -125,11 +127,10 @@ solidShader
     => GlobalUniformBuffer os
     -> ObjectUniformBuffer os
     -> LightUniformBuffer os
-    -> LightInfo (ShadowColorTex os)
+    -> LightInfo (MonochromeTex os)
     -> MonochromeTex os
-    -> Window os RGBFloat Depth
     -> ContextT ctx os IO (Compiled os)
-solidShader globalUni objectUni lightUni shadowTextures tex win = compileShader $ do
+solidShader globalUni objectUni lightUni shadowTextures tex = compileShader $ do
     vertGlobal <- getUniform (const (globalUni, 0))
     vertObject <- getUniform (const (objectUni, 0))
     vertLight <- sequence $ liftA2 (\_ i -> getUniform (const (lightUni, i))) shadowTextures $ LightInfo.fromList [0..]
@@ -151,7 +152,8 @@ solidShader globalUni objectUni lightUni shadowTextures tex win = compileShader 
     fragmentStream <- withRasterizedInfo (\a r -> (frag fragGlobal shadowSamp texSamp a, rasterizedFragCoord r ^. _z)) <$>
         rasterize (\env -> (Front, PolygonFill, ViewPort (V2 0 0) (envScreenSize env), DepthRange 0 1)) primitiveStream
 
-    drawWindowColorDepth (const (win, ContextColorOption NoBlending (pure True), DepthOption Less True)) fragmentStream
+    drawDepth (\s -> (NoBlending, envDepth s, DepthOption Less True)) fragmentStream $
+        drawColor (\s -> (envColor s, pure True, False))
 
 --------------------------------------------------
 
@@ -159,9 +161,8 @@ wireframeShader
     :: ContextHandler ctx
     => GlobalUniformBuffer os
     -> ObjectUniformBuffer os
-    -> Window os RGBFloat Depth
     -> ContextT ctx os IO (Compiled os)
-wireframeShader globalUni objectUni win = compileShader $ do
+wireframeShader globalUni objectUni = compileShader $ do
     vertGlobal <- getUniform (const (globalUni, 0))
     vertObject <- getUniform (const (objectUni, 0))
 
@@ -171,4 +172,5 @@ wireframeShader globalUni objectUni win = compileShader $ do
     fragmentStream <- withRasterizedInfo (const $ \r -> (0, rasterizedFragCoord r ^. _z)) <$>
         rasterize (\env -> (Front, PolygonLine 1, ViewPort (V2 0 0) (envScreenSize env), DepthRange 0 1)) primitiveStream
 
-    drawWindowColorDepth (const (win, ContextColorOption NoBlending (pure True), DepthOption Less True)) fragmentStream
+    drawDepth (\s -> (NoBlending, envDepth s, DepthOption Less True)) fragmentStream $
+        drawColor (\s -> (envColor s, pure True, False))

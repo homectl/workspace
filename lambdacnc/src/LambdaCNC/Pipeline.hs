@@ -27,12 +27,13 @@ import qualified LambdaCNC.Shaders.Common          as Shaders
 import           LambdaCNC.Shaders.LightInfo       (LightInfo (..))
 import qualified LambdaCNC.Shaders.LightInfo       as LightInfo
 import qualified LambdaCNC.Shaders.Quad            as QuadShader
+import qualified LambdaCNC.Shaders.QuadColor       as QuadColorShader
 import qualified LambdaCNC.Shaders.Shadow          as ShadowShader
 import qualified LambdaCNC.Shaders.Solids          as SolidsShader
 
 --------------------------------------------------
 --
--- Dynamic pipeline data
+-- Dynamic pipeline data, i.e. the mutable state
 --
 --------------------------------------------------
 
@@ -61,10 +62,56 @@ objectPositions MachinePosition{..} =
     MachinePosition xMax yMax zMax = machMax
 
 
-type PipelineState os = MachinePosition Int
+data FrameBuffer os = FrameBuffer
+    { fbColor :: Shaders.ColorTex os
+    , fbDepth :: Shaders.DepthTex os
+    }
 
-startState :: PipelineState os
-startState = fmap (`div` 2) machMax
+newtype FrameBuffers os = FrameBuffers
+    { fbFinal :: FrameBuffer os
+    }
+
+
+initFrameBuffers
+  :: ContextHandler ctx
+  => V2 Int
+  -> ContextT ctx os IO (FrameBuffers os)
+initFrameBuffers windowSize = do
+    FrameBuffers <$> makeFrameBuffer
+  where
+    makeFrameBuffer = FrameBuffer
+        <$> newTexture2D RGB16F windowSize 1
+        <*> newTexture2D Depth16 windowSize 1
+
+
+data PipelineState os = PipelineState
+    { stMachPos      :: MachinePosition Int
+    , stWindowSize   :: V2 Int
+
+    , stFrameBuffers :: Maybe (FrameBuffers os)
+    }
+
+
+initState
+  :: ContextHandler ctx
+  => V2 Int
+  -> ContextT ctx os IO (PipelineState os)
+initState stWindowSize = do
+    updateState $ PipelineState
+        { stMachPos = fmap (`div` 2) machMax
+        , stFrameBuffers = Nothing
+        , ..
+        }
+
+
+updateState
+  :: ContextHandler ctx
+  => PipelineState os
+  -> ContextT ctx os IO (PipelineState os)
+updateState state@PipelineState{stFrameBuffers=Nothing, stWindowSize} = do
+    stFrameBuffers <- Just <$> initFrameBuffers stWindowSize
+    return state{stFrameBuffers}
+updateState state = return state
 
 --------------------------------------------------
 --
@@ -77,6 +124,7 @@ data Shaders os = Shaders
     , solidsShader        :: SolidsShader.Compiled os
     , wireframeShader     :: SolidsShader.Compiled os
     , quadShader          :: QuadShader.Compiled os
+    , quadColorShader     :: QuadColorShader.Compiled os
     , bulbShader          :: BulbShader.Compiled os
     , bulbWireframeShader :: BulbShader.Compiled os
     }
@@ -94,8 +142,11 @@ data PipelineData os = PipelineData
     }
 
 
-initialise :: ContextHandler ctx => Window os RGBFloat Depth -> ContextT ctx os IO (PipelineData os)
-initialise win = do
+initData
+  :: ContextHandler ctx
+  => Window os RGBFloat Depth
+  -> ContextT ctx os IO (PipelineData os)
+initData win = do
     startTime <- liftIO Time.getCurrentTime
 
     solids <- timeIt "Loading object meshes" $ do
@@ -157,11 +208,12 @@ initialise win = do
 
     shaders <- Shaders
         <$> timeIt "Compiling shadow shader..." (ShadowShader.solidShader globalUni objectUni lightUni)
-        <*> timeIt "Compiling solids shader..." (SolidsShader.solidShader globalUni objectUni lightUni shadowTextures tex win)
-        <*> timeIt "Compiling wireframe shader..." (SolidsShader.wireframeShader globalUni objectUni win)
+        <*> timeIt "Compiling solids shader..." (SolidsShader.solidShader globalUni objectUni lightUni shadowTextures tex)
+        <*> timeIt "Compiling wireframe shader..." (SolidsShader.wireframeShader globalUni objectUni)
         <*> timeIt "Compiling shadow map view shader..." (QuadShader.solidShader objectUni win)
-        <*> timeIt "Compiling lightbulb shader..." (BulbShader.solidShader globalUni lightUni win)
-        <*> timeIt "Compiling lightbulb wireframe shader..." (BulbShader.wireframeShader globalUni lightUni win)
+        <*> timeIt "Compiling final frame shader..." (QuadColorShader.solidShader objectUni win)
+        <*> timeIt "Compiling lightbulb shader..." (BulbShader.solidShader globalUni lightUni)
+        <*> timeIt "Compiling lightbulb wireframe shader..." (BulbShader.wireframeShader globalUni lightUni)
 
     return PipelineData{..}
 
@@ -172,17 +224,21 @@ initialise win = do
 --------------------------------------------------
 
 renderings
-    :: (ContextHandler ctx)
+    :: ContextHandler ctx
     => Window os RGBFloat Depth
-    -> V2 Int
     -> PipelineData os
     -> PipelineState os
     -> ContextT ctx os IO ()
-renderings win envScreenSize PipelineData{shaders=Shaders{..}, ..} state = do
-    let solidsWithPos = liftA2 (,) solids (objectPositions state)
+renderings _ _ PipelineState{stFrameBuffers=Nothing} =
+    liftIO $ putStrLn "WARNING renderings: frame buffers not initialised"
+renderings win PipelineData{shaders=Shaders{..}, ..} PipelineState{stFrameBuffers=Just FrameBuffers{..}, ..} = do
+    let solidsWithPos = liftA2 (,) solids (objectPositions stMachPos)
+    let envScreenSize = stWindowSize
 
-    cfg <- liftIO $ updateUniforms startTime envScreenSize
+    cfg <- liftIO $ updateUniforms startTime stWindowSize
     writeBuffer globalUni 0 [cfg]
+
+    ------------------------ PRODUCE SHADOW MAPS ------------------------
 
     iforM_ shadowMaps $ \envIndex Shaders.ShadowMap{..} -> do
         -- Clear color and depth of the shadow map.
@@ -203,42 +259,66 @@ renderings win envScreenSize PipelineData{shaders=Shaders{..}, ..} state = do
                 envPrimitives <- fmap (toPrimitiveArray TriangleList) . newVertexArray $ solid
                 shadowShader ShadowShader.Env{..}
 
-    -- Clear the window frame buffer.
+    ------------------------ DRAW TO FRAME BUFFERS ------------------------
+
+    -- Clear the final rendering texture.
     render $ do
-        clearWindowColor win (V3 0.7 0.7 0.7)
-        clearWindowDepth win 1
+        shadowColor <- getTexture2DImage (fbColor fbFinal) 0
+        shadowDepth <- getTexture2DImage (fbDepth fbFinal) 0
+
+        clearImageColor shadowColor 0.7
+        clearImageDepth shadowDepth 1
 
     -- Render each object on the window frame buffer.
     forM_ solidsWithPos $ \(solid, objectPos) -> do
         writeBuffer objectUni 0 [defaultObjectUniforms{objectPos}]
         render $ do
+            envColor <- getTexture2DImage (fbColor fbFinal) 0
+            envDepth <- getTexture2DImage (fbDepth fbFinal) 0
             envPrimitives <- fmap (toPrimitiveArray TriangleList) . newVertexArray $ solid
+
             let env = SolidsShader.Env{..}
             solidsShader env
             -- wireframeShader env
 
-    -- Render the shadow maps as small pictures on quads at the bottom of the screen.
-    iforM_ shadowMaps $ \envIndex Shaders.ShadowMap{..} -> do
-        writeBuffer objectUni 0 [ObjectUniforms{objectPos=V3 (1/5 * fromIntegral envIndex) 0 0, objectScale=1/10}]
-        render $ do
-            envPrimitives <- toPrimitiveArray TriangleList <$> newVertexArray quad
-            let envTexture = shadowColorTex
-            quadShader QuadShader.Env{..}
-
     -- Render the light bulbs.
     iforM_ shadowMaps $ \envIndex _ -> render $ do
+        envColor <- getTexture2DImage (fbColor fbFinal) 0
+        envDepth <- getTexture2DImage (fbDepth fbFinal) 0
         envPrimitives <- fmap (toPrimitiveArray TriangleList) . newVertexArray $ lightbulb
         let env = BulbShader.Env{..}
         bulbShader env
         bulbWireframeShader env
 
+    ------------------------ DRAW ON SCREEN ------------------------
+
+    -- Clear the window frame buffer.
+    render $ do
+        clearWindowColor win 0
+        clearWindowDepth win 1
+
+    -- Paint the final image onto a full screen quad.
+    writeBuffer objectUni 0 [ObjectUniforms{objectPos=V3 0 0 0, objectScale=1}]
+    render $ do
+        envPrimitives <- toPrimitiveArray TriangleList <$> newVertexArray quad
+        let envTexture = fbColor fbFinal
+        quadColorShader QuadColorShader.Env{..}
+
+    -- Render the shadow maps as small pictures on quads at the bottom of the screen.
+    iforM_ shadowMaps $ \i Shaders.ShadowMap{..} -> do
+        writeBuffer objectUni 0 [ObjectUniforms{objectPos=V3 (1/5 * fromIntegral i) 0 0, objectScale=1/10}]
+        render $ do
+            envPrimitives <- toPrimitiveArray TriangleList <$> newVertexArray quad
+            let envTexture = shadowColorTex
+            quadShader QuadShader.Env{..}
+
 
 updateUniforms :: Floating a => Time.UTCTime -> V2 Int -> IO (GlobalUniforms a)
-updateUniforms startTime screenSize = do
+updateUniforms startTime windowSize = do
     now <- Time.getCurrentTime
     return defaultGlobalUniforms
         { time = fromRational $ toRational $ Time.diffUTCTime now startTime
-        , screenSize = fmap fromIntegral screenSize
+        , screenSize = fmap fromIntegral windowSize
         }
 
 --------------------------------------------------
@@ -247,12 +327,18 @@ updateUniforms startTime screenSize = do
 --
 --------------------------------------------------
 
-keyCallback :: MachinePosition Int -> Input.Key -> Int -> Input.KeyState -> Input.ModifierKeys -> MachinePosition Int
-keyCallback pos@MachinePosition{..} = process
+keyCallback
+  :: PipelineState os
+  -> Input.Key
+  -> Int
+  -> Input.KeyState
+  -> Input.ModifierKeys
+  -> PipelineState os
+keyCallback state@PipelineState{stMachPos=pos@MachinePosition{..}} = process
   where
     process k _ Input.KeyState'Pressed _   = keyPressed k
     process k _ Input.KeyState'Repeating _ = keyPressed k
-    process _ _ Input.KeyState'Released _  = pos
+    process _ _ Input.KeyState'Released _  = state
 
     MachinePosition xMax yMax zMax = machMax
 
@@ -261,11 +347,22 @@ keyCallback pos@MachinePosition{..} = process
             lr = moveMult (k == Input.Key'Left) (k == Input.Key'Right)
             ud = moveMult (k == Input.Key'PageDown) (k == Input.Key'PageUp)
         in
-        pos { xPos = max 0 . min xMax $ (xPos + (xMax `div` 50) * lr)
+        state { stMachPos = pos
+            { xPos = max 0 . min xMax $ (xPos + (xMax `div` 50) * lr)
             , yPos = max 0 . min yMax $ (yPos + (yMax `div` 50) * fb)
             , zPos = max 0 . min zMax $ (zPos + (zMax `div` 50) * ud)
-            }
+            } }
 
     moveMult True _      = -1
     moveMult _ True      = 1
     moveMult False False = 0
+
+
+windowSizeCallback
+  :: PipelineState os
+  -> Int -> Int
+  -> PipelineState os
+windowSizeCallback state w h = state
+    { stWindowSize = V2 w h
+    , stFrameBuffers = Nothing  -- Reinitialise frame buffers on next rendering.
+    }

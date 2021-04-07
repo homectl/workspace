@@ -22,6 +22,8 @@ type Compiled os = CompiledShader os Env
 data Env = Env
     { envScreenSize :: V2 Int
     , envPrimitives :: PrimitiveArray Triangles Shader3DInput
+    , envColor      :: Image (Format RGBFloat)
+    , envDepth      :: Image (Format Depth)
     , envIndex      :: Int
     }
 
@@ -50,9 +52,8 @@ solidShader
     :: ContextHandler ctx
     => GlobalUniformBuffer os
     -> LightUniformBuffer os
-    -> Window os RGBFloat Depth
     -> ContextT ctx os IO (Compiled os)
-solidShader globalUni lightUni win = compileShader $ do
+solidShader globalUni lightUni = compileShader $ do
     vertGlobal <- getUniform (const (globalUni, 0))
     vertLight <- getUniform (\Env{..} -> (lightUni, envIndex))
     fragLight <- getUniform (\Env{..} -> (lightUni, envIndex))
@@ -62,7 +63,8 @@ solidShader globalUni lightUni win = compileShader $ do
     fragmentStream <- withRasterizedInfo (\a r -> (frag fragLight a, rasterizedFragCoord r ^. _z)) <$>
         rasterize (\env -> (Front, PolygonFill, ViewPort (V2 0 0) (envScreenSize env), DepthRange 0 1)) primitiveStream
 
-    drawWindowColorDepth (const (win, ContextColorOption NoBlending (pure True), DepthOption Less True)) fragmentStream
+    drawDepth (\s -> (NoBlending, envDepth s, DepthOption Less True)) fragmentStream $
+        drawColor (\s -> (envColor s, pure True, False))
 
 --------------------------------------------------
 
@@ -70,9 +72,8 @@ wireframeShader
     :: ContextHandler ctx
     => GlobalUniformBuffer os
     -> LightUniformBuffer os
-    -> Window os RGBFloat Depth
     -> ContextT ctx os IO (Compiled os)
-wireframeShader globalUni lightUni win = compileShader $ do
+wireframeShader globalUni lightUni = compileShader $ do
     vertGlobal <- getUniform (const (globalUni, 0))
     vertLight <- getUniform (\Env{..} -> (lightUni, envIndex))
 
@@ -81,4 +82,5 @@ wireframeShader globalUni lightUni win = compileShader $ do
     fragmentStream <- withRasterizedInfo (\_ r -> (0, rasterizedFragCoord r ^. _z)) <$>
         rasterize (\env -> (FrontAndBack, PolygonLine 1, ViewPort (V2 0 0) (envScreenSize env), DepthRange 0 1)) primitiveStream
 
-    drawWindowColorDepth (const (win, ContextColorOption NoBlending (pure True), DepthOption Less True)) fragmentStream
+    drawDepth (\s -> (NoBlending, envDepth s, DepthOption Less True)) fragmentStream $
+        drawColor (\s -> (envColor s, pure True, False))
