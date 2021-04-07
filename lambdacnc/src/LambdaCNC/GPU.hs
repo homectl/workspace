@@ -146,10 +146,10 @@ main = do
                 , LightUniforms (V3 (-60000)   60000  30000) (V3 0.0 0.7 0.0)
                 , LightUniforms (V3   60000  (-60000) 30000) (V3 0.0 0.0 0.7)
                 , LightUniforms (V3   60000    60000  30000) (V3 0.3 0.3 0.0)
-                , LightUniforms (V3   60000        0  30000) (V3 0.0 0.3 0.3)
-                , LightUniforms (V3       0    60000  30000) (V3 0.3 0.0 0.3)
-                , LightUniforms (V3 (-60000)       0  30000) (V3 0.3 0.3 0.3)
-                , LightUniforms (V3       0  (-60000) 30000) (V3 0.8 0.5 0.3)
+                , LightUniforms (V3   80000        0  30000) (V3 0.0 0.3 0.3)
+                , LightUniforms (V3       0    80000  30000) (V3 0.3 0.0 0.3)
+                , LightUniforms (V3 (-80000)       0  30000) (V3 0.3 0.3 0.3)
+                , LightUniforms (V3       0  (-80000) 30000) (V3 0.8 0.5 0.3)
                 ]
         shadowMaps <- sequence $ (`fmap` lights) $ const $
             Shaders.ShadowMap
@@ -179,7 +179,7 @@ main = do
         setupInput win mvState
 
         startTime <- liftIO Time.getCurrentTime
-        Engine.mainloop win renderings (startTime, mvState, solids, lightbulb, quad, globalUni, objectUni, shadowMaps, shaders)
+        Engine.mainloop win False renderings (startTime, mvState, solids, lightbulb, quad, globalUni, objectUni, shadowMaps, shaders)
 
 
 setupInput :: Window os c ds -> MVar (MachinePosition Int) -> ContextT GLFW.Handle os IO ()
@@ -273,6 +273,7 @@ renderings win envScreenSize (startTime, mvState, solids, lightbulb, quad, globa
             solidsShader env
             -- wireframeShader env
 
+    -- Render the shadow maps as small pictures on quads at the bottom of the screen.
     iforM_ shadowMaps $ \envIndex Shaders.ShadowMap{..} -> do
         writeBuffer objectUni 0 [ObjectUniforms (V3 (1/4 * fromIntegral envIndex) 0 0)]
         render $ do

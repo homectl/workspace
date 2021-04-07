@@ -10,13 +10,16 @@ import           Graphics.GPipe.Engine.TimeIt (timeItInPlace)
 
 mainloop
     :: Window os RGBFloat Depth
+    -> Bool
     -> (Window os RGBFloat Depth -> V2 Int -> a -> ContextT GLFW.Handle os IO ())
     -> a
     -> ContextT GLFW.Handle os IO ()
-mainloop win renderer scene = loop
+mainloop win timing renderer scene = loop
   where
+    timeIt = if timing then timeItInPlace "Rendering..." else id
+
     loop = do
-        closeRequested <- timeItInPlace "Rendering..." $ do
+        closeRequested <- timeIt $ do
             windowSize <- (\(Just (w, h)) -> V2 w h) <$> GLFW.getWindowSize win
 
             renderer win windowSize scene
