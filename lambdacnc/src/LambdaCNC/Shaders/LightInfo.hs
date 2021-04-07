@@ -1,15 +1,18 @@
-{-# LANGUAGE Arrows            #-}
-{-# LANGUAGE DeriveTraversable #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TypeFamilies      #-}
+{-# LANGUAGE Arrows                #-}
+{-# LANGUAGE DeriveTraversable     #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 module LambdaCNC.Shaders.LightInfo where
 
-import           Control.Applicative (Applicative (..))
-import           Control.Arrow       (returnA)
-import           Data.Default        (Default (..))
-import           Data.Maybe          (fromMaybe)
-import           Graphics.GPipe      (FragmentInput (..), S, V4)
+import           Control.Applicative      (Applicative (..))
+import           Control.Arrow            (returnA)
+import           Control.Lens.Combinators (FoldableWithIndex, FunctorWithIndex,
+                                           TraversableWithIndex)
+import           Data.Default             (Default (..))
+import           Data.Maybe               (fromMaybe)
+import           Graphics.GPipe           (FragmentInput (..), S, V4)
 
 --------------------------------------------------
 
@@ -33,6 +36,10 @@ data LightInfo a = LightInfo
     (Maybe a)
     (Maybe a)
     deriving (Functor, Foldable, Traversable, Show)
+
+instance FunctorWithIndex Int LightInfo
+instance FoldableWithIndex Int LightInfo
+instance TraversableWithIndex Int LightInfo
 
 instance Default (LightInfo a) where
     def = LightInfo
@@ -149,13 +156,13 @@ fromList l =
             LightInfo
               a1
               a2
-              a3 
-              a4 
-              a5 
-              a6 
-              a7 
-              a8 
-              a9 
+              a3
+              a4
+              a5
+              a6
+              a7
+              a8
+              a9
               a10
         _ -> def
   where

@@ -13,6 +13,7 @@ import           Control.Applicative               (liftA2)
 import           Control.Concurrent.MVar           (MVar)
 import qualified Control.Concurrent.MVar           as MVar
 import           Control.Lens                      ((^.))
+import           Control.Lens.Indexed              (iforM_)
 import           Control.Monad                     (forM, forM_)
 import           Control.Monad.IO.Class            (liftIO)
 import           Data.Foldable                     (toList)
@@ -21,9 +22,9 @@ import           Data.Word                         (Word32)
 import           Graphics.GPipe
 import qualified Graphics.GPipe.Context.GLFW       as GLFW
 import qualified Graphics.GPipe.Context.GLFW.Input as Input
+import qualified Graphics.GPipe.Engine             as Engine
 import qualified Graphics.GPipe.Engine.STL         as STL
 import           Graphics.GPipe.Engine.TimeIt      (timeIt)
-import qualified Graphics.GPipe.Engine as Engine
 import           LambdaCNC.Config                  (GlobalUniformBuffer,
                                                     GlobalUniforms (..),
                                                     LightUniforms (..),
@@ -228,10 +229,7 @@ renderings win envScreenSize (startTime, mvState, solids, lightbulb, quad, globa
     cfg <- liftIO $ updateUniforms startTime envScreenSize
     writeBuffer globalUni 0 [cfg]
 
-    let indexedShadowMaps = liftA2 (,) (LightInfo.fromList [0..]) shadowMaps
-    -- liftIO $ print indexedShadowMaps
-
-    forM_ indexedShadowMaps $ \(envIndex, Shaders.ShadowMap{..}) -> do
+    iforM_ shadowMaps $ \envIndex Shaders.ShadowMap{..} -> do
         -- Clear color and depth of the shadow map.
         render $ do
             shadowColor <- getTexture2DImage shadowColorTex 0
@@ -264,7 +262,7 @@ renderings win envScreenSize (startTime, mvState, solids, lightbulb, quad, globa
             solidsShader env
             -- wireframeShader env
 
-    forM_ indexedShadowMaps $ \(envIndex, Shaders.ShadowMap{..}) -> do
+    iforM_ shadowMaps $ \envIndex Shaders.ShadowMap{..} -> do
         writeBuffer objectUni 0 [ObjectUniforms (V3 (1/4 * fromIntegral envIndex) 0 0)]
         render $ do
             envPrimitives <- toPrimitiveArray TriangleList <$> newVertexArray quad
@@ -272,7 +270,7 @@ renderings win envScreenSize (startTime, mvState, solids, lightbulb, quad, globa
             quadShader QuadShader.Env{..}
 
     -- Render the light bulbs.
-    forM_ indexedShadowMaps $ \(envIndex, _) -> render $ do
+    iforM_ shadowMaps $ \envIndex _ -> render $ do
         envPrimitives <- fmap (toPrimitiveArray TriangleList) . newVertexArray $ lightbulb
         let env = BulbShader.Env{..}
         bulbShader env
