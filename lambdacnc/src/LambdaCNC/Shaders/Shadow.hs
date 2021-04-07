@@ -11,10 +11,13 @@ import           Control.Lens             ((^.))
 import           Graphics.GPipe           hiding (normalize)
 import           LambdaCNC.Config         (GlobalUniformBuffer,
                                            GlobalUniforms (..),
+                                           LightUniformBuffer,
+                                           LightUniforms (..),
                                            ObjectUniformBuffer,
-                                           ObjectUniforms (..), LightUniforms(..), LightUniformBuffer)
+                                           ObjectUniforms (..))
 import           LambdaCNC.Shaders.Common (Shader3DInput, lightMat,
-                                           modelMat, shadowMapSize, toV4)
+                                           lightTransform, modelMat,
+                                           shadowMapSize, toV4)
 import           Prelude                  hiding ((<*))
 
 --------------------------------------------------
@@ -24,15 +27,16 @@ data Env = Env
     { envPrimitives  :: PrimitiveArray Triangles Shader3DInput
     , envShadowColor :: Image (Format RFloat)
     , envShadowDepth :: Image (Format Depth)
+    , envIndex       :: Int
     }
 
 --------------------------------------------------
 
-vert :: GlobalUniforms VFloat -> ObjectUniforms VFloat -> [LightUniforms VFloat] -> (V3 VFloat, V3 VFloat) -> (VPos, VFloat)
-vert GlobalUniforms{..} ObjectUniforms{..} [LightUniforms{..}] (toV4 1 -> pos, normal) =
+vert :: GlobalUniforms VFloat -> ObjectUniforms VFloat -> LightUniforms VFloat -> (V3 VFloat, V3 VFloat) -> (VPos, VFloat)
+vert GlobalUniforms{..} ObjectUniforms{..} LightUniforms{..} (toV4 1 -> pos, normal) =
     (screenPos, screenPos^._z * 0.5 + 0.5)
   where
-    screenPos = lightMat (toV4 1 lightPos) !*! modelMat time !* (pos + toV4 0 objectPos)
+    screenPos = lightMat (lightTransform time !* toV4 1 lightPos) !*! modelMat time !* (pos + toV4 0 objectPos)
 
 --------------------------------------------------
 
@@ -50,11 +54,11 @@ solidShader
 solidShader globalUni objectUni lightUni = compileShader $ do
     vertGlobal <- getUniform (const (globalUni, 0))
     vertObject <- getUniform (const (objectUni, 0))
-    vertLight <- getUniform (const (lightUni, 0))
-    
+    vertLight <- getUniform (\Env{..} -> (lightUni, envIndex))
+
     fragGlobal <- getUniform (const (globalUni, 0))
 
-    primitiveStream <- fmap (vert vertGlobal vertObject [vertLight]) <$>
+    primitiveStream <- fmap (vert vertGlobal vertObject vertLight) <$>
         toPrimitiveStream envPrimitives
 
     fragmentStream <- fmap (frag fragGlobal) <$>

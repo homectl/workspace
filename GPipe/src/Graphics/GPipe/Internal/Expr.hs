@@ -551,8 +551,8 @@ instance Num (S a Word) where
     negate = preopu "-"
 
 instance Fractional (S a Float) where
-  (/)          = binf "/"
-  fromRational = S . return . ("float(" <>) . (<> ")") . tshow . (`asTypeOf` (undefined :: Float)) . fromRational
+    (/)          = binf "/"
+    fromRational = S . return . ("float(" <>) . (<> ")") . tshow . (`asTypeOf` (undefined :: Float)) . fromRational
 
 class Integral' a where
     div' :: a -> a -> a

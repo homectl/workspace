@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 module LambdaCNC.Shaders.Common where
 
 import           Control.Lens   ((^.))
@@ -21,7 +21,10 @@ nearPlane = 3000
 farPlane = 350000
 
 shadowMapSize :: Num a => V2 a
-shadowMapSize = V2 1200 1200
+shadowMapSize = V2 600 600
+
+lightTransform :: Floating a => a -> M44 a
+lightTransform time = rotMatrixZ (time/2)
 
 lightMat :: Floating a => V4 a -> M44 a
 lightMat lightPos = projMat !*! viewMat
@@ -60,8 +63,10 @@ data ShadowMap os = ShadowMap
     { shadowColorTex :: ShadowColorTex os
     , shadowDepthTex :: ShadowDepthTex os
     }
+    deriving (Show)
 
 data FragLight = FragLight
     { fragLightPos     :: V3 FFloat
+    , fragLightColor   :: V3 FFloat
     , fragLightSampler :: V2 FFloat -> FFloat
     }

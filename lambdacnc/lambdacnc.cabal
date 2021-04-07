@@ -23,6 +23,7 @@ library
       LambdaCNC.GPU
       LambdaCNC.Shaders.Bulb
       LambdaCNC.Shaders.Common
+      LambdaCNC.Shaders.LightInfo
       LambdaCNC.Shaders.Quad
       LambdaCNC.Shaders.Shadow
       LambdaCNC.Shaders.Solids

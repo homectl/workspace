@@ -66,6 +66,7 @@ import           Foreign.Storable                             (Storable (peek))
 import           Linear.V2                                    (V2 (..))
 import           Linear.V3                                    (V3 (..))
 import           Linear.V4                                    (V4 (..))
+import GHC.IO.Unsafe (unsafePerformIO)
 
 data Texture1D os a = Texture1D TexName Size1 MaxLevels
 data Texture1DArray os a = Texture1DArray TexName Size2 MaxLevels
@@ -80,6 +81,10 @@ type MaxLevels = Int
 type Size1 = Int
 type Size2 = V2 Int
 type Size3 = V3 Int
+
+instance Show (Texture2D os format) where
+    show (Texture2D name _ _) = "Texture2D(" <> show (unsafePerformIO $ readIORef name) <> ")"
+    show (RenderBuffer2D name _) = "RenderBuffer2D(" <> show (unsafePerformIO $ readIORef name) <> ")"
 
 newTexture1D :: forall ctx w os f c m. (ContextHandler ctx, ColorSampleable c, MonadIO m) => Format c -> Size1 -> MaxLevels -> ContextT ctx os m (Texture1D os (Format c))
 newTexture1DArray :: forall ctx w os f c m. (ContextHandler ctx, ColorSampleable c, MonadIO m) => Format c -> Size2 -> MaxLevels -> ContextT ctx os m (Texture1DArray os (Format c))
