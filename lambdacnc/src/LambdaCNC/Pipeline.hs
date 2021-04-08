@@ -1,15 +1,17 @@
-{-# LANGUAGE DeriveFunctor   #-}
-{-# LANGUAGE NamedFieldPuns  #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE DeriveFunctor       #-}
+{-# LANGUAGE NamedFieldPuns      #-}
+{-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module LambdaCNC.Pipeline where
 
 import           Control.Applicative               (liftA2)
 import           Control.Lens.Indexed              (iforM_)
-import           Control.Monad                     (forM, forM_)
+import           Control.Monad                     (foldM, foldM_, forM, forM_)
 import           Control.Monad.IO.Class            (liftIO)
 import           Data.Foldable                     (toList)
+import           Data.Int                          (Int32)
 import qualified Data.Time.Clock                   as Time
-import           Data.Word                         (Word32)
+import           Data.Word                         (Word32, Word8)
 import           Graphics.GPipe
 import qualified Graphics.GPipe.Context.GLFW.Input as Input
 import qualified Graphics.GPipe.Engine.STL         as STL
@@ -24,10 +26,12 @@ import           LambdaCNC.Config                  (GlobalUniformBuffer,
                                                     defaultObjectUniforms)
 import qualified LambdaCNC.Shaders.Bulb            as BulbShader
 import qualified LambdaCNC.Shaders.Common          as Shaders
+import qualified LambdaCNC.Shaders.GaussianBlur    as GaussianBlurShader
 import           LambdaCNC.Shaders.LightInfo       (LightInfo (..))
 import qualified LambdaCNC.Shaders.LightInfo       as LightInfo
 import qualified LambdaCNC.Shaders.Quad            as QuadShader
 import qualified LambdaCNC.Shaders.Shadow          as ShadowShader
+import qualified LambdaCNC.Shaders.Blend as BlendShader
 import qualified LambdaCNC.Shaders.Solids          as SolidsShader
 
 --------------------------------------------------
@@ -61,13 +65,11 @@ objectPositions MachinePosition{..} =
     MachinePosition xMax yMax zMax = machMax
 
 
-data FrameBuffer os = FrameBuffer
-    { fbColor :: Shaders.ColorTex os
-    , fbDepth :: Shaders.DepthTex os
-    }
-
-newtype FrameBuffers os = FrameBuffers
-    { fbFinal :: FrameBuffer os
+data FrameBuffers os = FrameBuffers
+    { fbDepth  :: Shaders.DepthTex os
+    , fbColor  :: Shaders.ColorTex os
+    , fbBright :: Shaders.ColorTex os
+    , fbTmp    :: Shaders.ColorTex os
     }
 
 
@@ -76,11 +78,11 @@ initFrameBuffers
   => V2 Int
   -> ContextT ctx os IO (FrameBuffers os)
 initFrameBuffers windowSize = do
-    FrameBuffers <$> makeFrameBuffer
-  where
-    makeFrameBuffer = FrameBuffer
-        <$> newTexture2D RGB16F windowSize 1
-        <*> newTexture2D Depth16 windowSize 1
+    FrameBuffers
+        <$> newTexture2D Depth16 windowSize 1
+        <*> newTexture2D RGB16F windowSize 1
+        <*> newTexture2D RGB16F windowSize 1
+        <*> newTexture2D RGB16F windowSize 1
 
 
 data PipelineState os = PipelineState
@@ -122,6 +124,8 @@ data Shaders os = Shaders
     { shadowShader        :: ShadowShader.Compiled os
     , solidsShader        :: SolidsShader.Compiled os
     , wireframeShader     :: SolidsShader.Compiled os
+    , gaussianBlurShader  :: GaussianBlurShader.Compiled os
+    , blendShader  :: BlendShader.Compiled os
     , quadShader          :: QuadShader.Compiled os RFloat
     , quadColorShader     :: QuadShader.Compiled os RGBFloat
     , bulbShader          :: BulbShader.Compiled os
@@ -136,6 +140,7 @@ data PipelineData os = PipelineData
     , quad       :: Shaders.Buffer2D os
     , globalUni  :: GlobalUniformBuffer os
     , objectUni  :: ObjectUniformBuffer os
+    , gaussUni   :: Buffer os (Uniform (B Int32))
     , shadowMaps :: LightInfo (Shaders.ShadowMap os)
     , shaders    :: Shaders os
     }
@@ -203,12 +208,17 @@ initData win = do
     lightUni <- newBuffer $ length lights
     writeBuffer lightUni 0 $ toList lights
 
+    gaussUni <- newBuffer 1
+    writeBuffer gaussUni 0 [1]
+
     let shadowTextures = fmap Shaders.shadowColorTex shadowMaps
 
     shaders <- Shaders
         <$> timeIt "Compiling shadow shader..." (ShadowShader.solidShader globalUni objectUni lightUni)
         <*> timeIt "Compiling solids shader..." (SolidsShader.solidShader globalUni objectUni lightUni shadowTextures tex)
         <*> timeIt "Compiling wireframe shader..." (SolidsShader.wireframeShader globalUni objectUni)
+        <*> timeIt "Compiling gaussian blur shader..." (GaussianBlurShader.solidShader gaussUni)
+        <*> timeIt "Compiling blend shader..." (BlendShader.solidShader globalUni)
         <*> timeIt "Compiling shadow map view shader..." (QuadShader.solidShader objectUni pure win)
         <*> timeIt "Compiling final frame shader..." (QuadShader.solidShader objectUni id win)
         <*> timeIt "Compiling lightbulb shader..." (BulbShader.solidShader globalUni lightUni)
@@ -262,18 +272,23 @@ renderings win PipelineData{shaders=Shaders{..}, ..} PipelineState{stFrameBuffer
 
     -- Clear the final rendering texture.
     render $ do
-        shadowColor <- getTexture2DImage (fbColor fbFinal) 0
-        shadowDepth <- getTexture2DImage (fbDepth fbFinal) 0
+        imgDepth <- getTexture2DImage fbDepth 0
+        imgColor <- getTexture2DImage fbColor 0
+        imgBright <- getTexture2DImage fbBright 0
+        imgTmp <- getTexture2DImage fbTmp 0
 
-        clearImageColor shadowColor 0.7
-        clearImageDepth shadowDepth 1
+        clearImageDepth imgDepth 1
+        clearImageColor imgColor 0.7
+        clearImageColor imgBright 0
+        clearImageColor imgTmp 0
 
     -- Render each object on the window frame buffer.
     forM_ solidsWithPos $ \(solid, objectPos) -> do
         writeBuffer objectUni 0 [defaultObjectUniforms{objectPos}]
         render $ do
-            envColor <- getTexture2DImage (fbColor fbFinal) 0
-            envDepth <- getTexture2DImage (fbDepth fbFinal) 0
+            envColorFb <- getTexture2DImage fbColor 0
+            envBrightFb <- getTexture2DImage fbBright 0
+            envDepthFb <- getTexture2DImage fbDepth 0
             envPrimitives <- fmap (toPrimitiveArray TriangleList) . newVertexArray $ solid
 
             let env = SolidsShader.Env{..}
@@ -282,12 +297,41 @@ renderings win PipelineData{shaders=Shaders{..}, ..} PipelineState{stFrameBuffer
 
     -- Render the light bulbs.
     iforM_ shadowMaps $ \envIndex _ -> render $ do
-        envColor <- getTexture2DImage (fbColor fbFinal) 0
-        envDepth <- getTexture2DImage (fbDepth fbFinal) 0
+        envColorFb <- getTexture2DImage fbColor 0
+        envBrightFb <- getTexture2DImage fbBright 0
+        envDepthFb <- getTexture2DImage fbDepth 0
         envPrimitives <- fmap (toPrimitiveArray TriangleList) . newVertexArray $ lightbulb
         let env = BulbShader.Env{..}
         bulbShader env
         bulbWireframeShader env
+
+    -- Gaussian blur of the bright texture: horizontal
+    foldM_ (\(fbSrc, fbDst) (_ :: Int) -> do
+            writeBuffer gaussUni 0 [1]
+            render $ do
+                let envTexture = fbSrc
+                envPrimitives <- toPrimitiveArray TriangleList <$> newVertexArray quad
+                envColorFb <- getTexture2DImage fbDst 0
+                gaussianBlurShader GaussianBlurShader.Env{..}
+
+            -- Gaussian blur: vertical
+            writeBuffer gaussUni 0 [0]
+            render $ do
+                let envTexture = fbDst
+                envPrimitives <- toPrimitiveArray TriangleList <$> newVertexArray quad
+                envColorFb <- getTexture2DImage fbSrc 0
+                gaussianBlurShader GaussianBlurShader.Env{..}
+            return (fbSrc, fbDst))
+        (fbBright, fbTmp)
+        [0..10]
+
+    -- Blend blurred bright parts and regular scene.
+    render $ do
+        let envTexture1 = fbColor
+            envTexture2 = fbBright
+        envPrimitives <- toPrimitiveArray TriangleList <$> newVertexArray quad
+        envColorFb <- getTexture2DImage fbTmp 0
+        blendShader BlendShader.Env{..}
 
     ------------------------ DRAW ON SCREEN ------------------------
 
@@ -300,7 +344,7 @@ renderings win PipelineData{shaders=Shaders{..}, ..} PipelineState{stFrameBuffer
     writeBuffer objectUni 0 [ObjectUniforms{objectPos=V3 0 0 0, objectScale=1}]
     render $ do
         envPrimitives <- toPrimitiveArray TriangleList <$> newVertexArray quad
-        let envTexture = fbColor fbFinal
+        let envTexture = fbTmp
         quadColorShader QuadShader.Env{..}
 
     -- Render the shadow maps as small pictures on quads at the bottom of the screen.

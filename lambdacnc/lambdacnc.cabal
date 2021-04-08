@@ -22,8 +22,10 @@ library
       LambdaCNC.Config
       LambdaCNC.GPU
       LambdaCNC.Pipeline
+      LambdaCNC.Shaders.Blend
       LambdaCNC.Shaders.Bulb
       LambdaCNC.Shaders.Common
+      LambdaCNC.Shaders.GaussianBlur
       LambdaCNC.Shaders.LightInfo
       LambdaCNC.Shaders.Quad
       LambdaCNC.Shaders.Shadow

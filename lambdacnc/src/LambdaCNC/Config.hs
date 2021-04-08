@@ -40,27 +40,29 @@ data GlobalUniforms a = GlobalUniforms
     { time       :: a
     , screenSize :: V2 a
     , cameraPos  :: V3 a
+    , exposure :: a
     }
 
 type GlobalUniformBuffer os = Buffer os (Uniform (GlobalUniforms (B Float)))
 
 instance UniformInput a => UniformInput (GlobalUniforms a) where
     type UniformFormat (GlobalUniforms a) x = (GlobalUniforms (UniformFormat a x))
-    toUniform = proc ~(GlobalUniforms a b c) -> do
-        (a', b', c') <- toUniform -< (a, b, c)
-        returnA -< GlobalUniforms a' b' c'
+    toUniform = proc ~(GlobalUniforms a b c d) -> do
+        (a', b', c', d') <- toUniform -< (a, b, c, d)
+        returnA -< GlobalUniforms a' b' c' d'
 
 instance BufferFormat a => BufferFormat (GlobalUniforms a) where
     type HostFormat (GlobalUniforms a) = GlobalUniforms (HostFormat a)
-    toBuffer = proc ~(GlobalUniforms a b c) -> do
-        (a', b', c') <- toBuffer -< (a, b, c)
-        returnA -< GlobalUniforms a' b' c'
+    toBuffer = proc ~(GlobalUniforms a b c d) -> do
+        (a', b', c', d') <- toBuffer -< (a, b, c, d)
+        returnA -< GlobalUniforms a' b' c' d'
 
 defaultGlobalUniforms :: Fractional a => GlobalUniforms a
 defaultGlobalUniforms = GlobalUniforms
     { time = 0
     , screenSize = V2 960 540
     , cameraPos = V3 90000 40000 20000 * 2
+    , exposure = 1.0
     }
 
 

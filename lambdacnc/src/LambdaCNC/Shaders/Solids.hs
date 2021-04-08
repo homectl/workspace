@@ -30,8 +30,9 @@ type Compiled os = CompiledShader os (Env os)
 data Env os = Env
     { envScreenSize :: V2 Int
     , envPrimitives :: PrimitiveArray Triangles Shader3DInput
-    , envColor      :: Image (Format RGBFloat)
-    , envDepth      :: Image (Format Depth)
+    , envColorFb    :: Image (Format RGBFloat)
+    , envBrightFb   :: Image (Format RGBFloat)
+    , envDepthFb    :: Image (Format Depth)
     }
 type SolidShaderAttachment x = (V2 (S x Float), V4 (S x Float), V4 (S x Float), LightInfo (V4 (S x Float)))
 
@@ -104,8 +105,9 @@ diffuseLight fragPos normal lightPos lightColor =
     diffuse
 
 
-frag :: GlobalUniforms FFloat -> LightInfo FragLight -> (V2 FFloat -> FFloat) -> SolidShaderAttachment F -> V3 FFloat
-frag GlobalUniforms{..} lights texSamp (uv, fragPos, normal, fragPosLightSpace) = c
+frag :: GlobalUniforms FFloat -> LightInfo FragLight -> (V2 FFloat -> FFloat) -> SolidShaderAttachment F -> (V3 FFloat, V3 FFloat)
+frag GlobalUniforms{..} lights texSamp (uv, fragPos, normal, fragPosLightSpace) =
+    (fragColor, brightColor)
   where
     objectColor = V3 1 1 1 ^* texSamp (uv ^/ 100000)
 
@@ -118,7 +120,9 @@ frag GlobalUniforms{..} lights texSamp (uv, fragPos, normal, fragPosLightSpace) 
             lights
             fragPosLightSpace
 
-    c = diffuse * objectColor
+    fragColor = exposure *^ diffuse * objectColor
+    brightness = dot fragColor (V3 0.2126 0.7152 0.0722)
+    brightColor = ifThenElse' (brightness >* 1.0) fragColor 0
 
 --------------------------------------------------
 
@@ -152,8 +156,10 @@ solidShader globalUni objectUni lightUni shadowTextures tex = compileShader $ do
     fragmentStream <- withRasterizedInfo (\a r -> (frag fragGlobal shadowSamp texSamp a, rasterizedFragCoord r ^. _z)) <$>
         rasterize (\env -> (Front, PolygonFill, ViewPort (V2 0 0) (envScreenSize env), DepthRange 0 1)) primitiveStream
 
-    drawDepth (\s -> (NoBlending, envDepth s, DepthOption Less True)) fragmentStream $
-        drawColor (\s -> (envColor s, pure True, False))
+    drawDepth (\s -> (NoBlending, envDepthFb s, DepthOption Less True)) fragmentStream $
+        \(fragColor, brightColor) -> do
+            drawColor (\s -> (envColorFb s, pure True, False)) fragColor
+            drawColor (\s -> (envBrightFb s, pure True, False)) brightColor
 
 --------------------------------------------------
 
@@ -172,5 +178,5 @@ wireframeShader globalUni objectUni = compileShader $ do
     fragmentStream <- withRasterizedInfo (const $ \r -> (0, rasterizedFragCoord r ^. _z)) <$>
         rasterize (\env -> (Front, PolygonLine 1, ViewPort (V2 0 0) (envScreenSize env), DepthRange 0 1)) primitiveStream
 
-    drawDepth (\s -> (NoBlending, envDepth s, DepthOption Less True)) fragmentStream $
-        drawColor (\s -> (envColor s, pure True, False))
+    drawDepth (\s -> (NoBlending, envDepthFb s, DepthOption Less True)) fragmentStream $
+        drawColor (\s -> (envColorFb s, pure True, False))
