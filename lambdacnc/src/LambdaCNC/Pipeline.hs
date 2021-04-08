@@ -4,7 +4,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module LambdaCNC.Pipeline where
 
-import qualified Graphics.GPipe.Fonts.Atlas as F
 import           Control.Applicative               (liftA2)
 import           Control.Lens.Indexed              (iforM_)
 import           Control.Monad                     (foldM_, forM, forM_)

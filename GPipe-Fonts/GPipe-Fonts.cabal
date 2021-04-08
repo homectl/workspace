@@ -23,6 +23,8 @@ library
   hs-source-dirs: src
   exposed-modules:
       Graphics.GPipe.Fonts.Atlas
+      Graphics.GPipe.Fonts.Common
+      Graphics.GPipe.Fonts.SimpleDistanceField
   build-depends:
       base
     , FontyFruity

@@ -7,19 +7,24 @@ module Graphics.GPipe.Fonts.Atlas
   , loadFontFile
   ) where
 
-import           Control.Monad          (when)
-import           Data.IORef             (IORef, modifyIORef, newIORef,
-                                         readIORef, writeIORef)
-import           Data.IntMap            (IntMap)
-import qualified Data.IntMap            as IM
-import           Data.List              (foldl')
-import qualified Data.Vector            as V
-import qualified Data.Vector.Unboxed    as UV
-import           Graphics.GPipe         hiding (toInt)
-import           Graphics.Text.TrueType
+import           Control.Monad               (when)
+import           Data.IORef                  (IORef, modifyIORef, newIORef,
+                                              readIORef, writeIORef)
+import           Data.IntMap                 (IntMap)
+import qualified Data.IntMap                 as IM
+import           Data.List                   (foldl')
+import qualified Data.Vector                 as V
+import qualified Data.Vector.Unboxed         as UV
+import           Graphics.GPipe              (M33, Metric (dot), V2 (..),
+                                              V3 (V3), V4 (..), identity,
+                                              normalize, (!*!), (*!))
+import           Graphics.GPipe.Fonts.Common
+import           Graphics.Text.TrueType      (CompositeScaling (CompositeScaling),
+                                              Font,
+                                              RawGlyph (_rawGlyphCompositionScale, _rawGlyphContour, _rawGlyphIndex),
+                                              getCharacterGlyphsAndMetrics,
+                                              loadFontFile, unitsPerEm)
 
-
-type OutlineCurves = [[V2 Float]]
 
 data ISize = ISize Int Int deriving Show
 
@@ -216,7 +221,7 @@ tessellateBezierCurves vs = makeBezierSection =<< extractControlPoints vs
 
 -- | Build a mesh from a string and render all the characters needed that aren't yet present on the atlas.  Every @'\n'@ character
 -- starts a new line.
-buildTextMesh :: FontAtlas -> TextStyle -> String -> IO ([V2 Float], [V2 Float])
+buildTextMesh :: FontAtlas -> TextStyle -> String -> IO Mesh
 buildTextMesh atlas style string = do
     mapM_ (renderCharacter atlas) string
     index <- readIORef (atlasIndex atlas)
@@ -243,7 +248,7 @@ buildTextMesh atlas style string = do
                         uv = cdUVBounds glyph
               where
                 characterIndex = fromEnum char
-        textMesh = (makeQuads rects, makeQuads (map (identity,) uvs))
+        textMesh = Mesh (makeQuads rects) (makeQuads (map (identity,) uvs)) []
         makeQuads = concatMap makeQuad
         makeQuad (mat, V4 x1 y1 x2 y2) = map transform [V2 x1 y1, V2 x2 y1, V2 x2 y2, V2 x2 y2, V2 x1 y2, V2 x1 y1]
           where
