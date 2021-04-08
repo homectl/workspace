@@ -299,10 +299,6 @@ renderings win PipelineData{shaders=Shaders{..}, ..} PipelineState{stFrameBuffer
             envDepthFb <- getTexture2DImage fbDepth 0
             envPrimitives <- fmap (toPrimitiveArray TriangleList) . newVertexArray $ solid
 
-            envPositionGb <- getTexture2DImage gbPosition 0
-            envNormalGb <- getTexture2DImage gbNormal 0
-            envColorGb <- getTexture2DImage gbColor 0
-
             let env = SolidsShader.Env{..}
             solidsShader env
             -- wireframeShader env

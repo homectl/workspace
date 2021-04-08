@@ -5,7 +5,7 @@
 {-# LANGUAGE ViewPatterns        #-}
 {-# OPTIONS_GHC -Wno-unused-matches #-}
 {-# LANGUAGE TypeFamilies        #-}
-module LambdaCNC.Shaders.Solids where
+module LambdaCNC.Shaders.Deferred.Geometry where
 
 import           Control.Applicative         (liftA2)
 import           Control.Lens                ((^.))
@@ -33,6 +33,10 @@ data Env os = Env
     , envColorFb    :: Image (Format RGBAFloat)
     , envBrightFb   :: Image (Format RGBAFloat)
     , envDepthFb    :: Image (Format Depth)
+
+    , envPositionGb :: Image (Format RGBAFloat)
+    , envNormalGb   :: Image (Format RGBAFloat)
+    , envColorGb    :: Image (Format RGBAFloat)
     }
 type SolidShaderAttachment x = (V2 (S x Float), V4 (S x Float), V4 (S x Float), LightInfo (V4 (S x Float)))
 
@@ -105,9 +109,9 @@ diffuseLight fragPos normal lightPos lightColor =
     diffuse
 
 
-frag :: GlobalUniforms FFloat -> LightInfo FragLight -> (V2 FFloat -> FFloat) -> SolidShaderAttachment F -> (V4 FFloat, V4 FFloat)
+frag :: GlobalUniforms FFloat -> LightInfo FragLight -> (V2 FFloat -> FFloat) -> SolidShaderAttachment F -> (V4 FFloat, V4 FFloat, V4 FFloat, V4 FFloat, V4 FFloat)
 frag GlobalUniforms{..} lights texSamp (uv, fragPos, normal, fragPosLightSpace) =
-    (toV4 1 fragColor, toV4 1 brightColor)
+    (toV4 1 fragColor, toV4 1 brightColor, toV4 1 (fragPos ^/ 100000), normal, toV4 0.5 objectColor)
   where
     objectColor = pure 1 ^* texSamp (uv ^/ 100000)
 
@@ -157,9 +161,13 @@ solidShader globalUni objectUni lightUni shadowTextures tex = compileShader $ do
         rasterize (\env -> (Front, PolygonFill, ViewPort (V2 0 0) (envScreenSize env), DepthRange 0 1)) primitiveStream
 
     drawDepth (\s -> (NoBlending, envDepthFb s, DepthOption Less True)) fragmentStream $
-        \(fragColor, brightColor) -> do
+        \(fragColor, brightColor, position, normal, albedoSpec) -> do
             drawColor (\s -> (envColorFb s, pure True, False)) fragColor
             drawColor (\s -> (envBrightFb s, pure True, False)) brightColor
+            -- GBuffer            
+            drawColor (\s -> (envPositionGb s, pure True, False)) position
+            drawColor (\s -> (envNormalGb s, pure True, False)) normal
+            drawColor (\s -> (envColorGb s, pure True, False)) albedoSpec
 
 --------------------------------------------------
 
