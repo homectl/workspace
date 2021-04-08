@@ -6,12 +6,12 @@ module LambdaCNC.Pipeline where
 
 import           Control.Applicative               (liftA2)
 import           Control.Lens.Indexed              (iforM_)
-import           Control.Monad                     (foldM, foldM_, forM, forM_)
+import           Control.Monad                     (foldM_, forM, forM_)
 import           Control.Monad.IO.Class            (liftIO)
 import           Data.Foldable                     (toList)
 import           Data.Int                          (Int32)
 import qualified Data.Time.Clock                   as Time
-import           Data.Word                         (Word32, Word8)
+import           Data.Word                         (Word32)
 import           Graphics.GPipe
 import qualified Graphics.GPipe.Context.GLFW.Input as Input
 import qualified Graphics.GPipe.Engine.STL         as STL
@@ -24,6 +24,7 @@ import           LambdaCNC.Config                  (GlobalUniformBuffer,
                                                     Solids (..),
                                                     defaultGlobalUniforms,
                                                     defaultObjectUniforms)
+import qualified LambdaCNC.Shaders.Blend           as BlendShader
 import qualified LambdaCNC.Shaders.Bulb            as BulbShader
 import qualified LambdaCNC.Shaders.Common          as Shaders
 import qualified LambdaCNC.Shaders.GaussianBlur    as GaussianBlurShader
@@ -31,7 +32,6 @@ import           LambdaCNC.Shaders.LightInfo       (LightInfo (..))
 import qualified LambdaCNC.Shaders.LightInfo       as LightInfo
 import qualified LambdaCNC.Shaders.Quad            as QuadShader
 import qualified LambdaCNC.Shaders.Shadow          as ShadowShader
-import qualified LambdaCNC.Shaders.Blend as BlendShader
 import qualified LambdaCNC.Shaders.Solids          as SolidsShader
 
 --------------------------------------------------
@@ -125,7 +125,7 @@ data Shaders os = Shaders
     , solidsShader        :: SolidsShader.Compiled os
     , wireframeShader     :: SolidsShader.Compiled os
     , gaussianBlurShader  :: GaussianBlurShader.Compiled os
-    , blendShader  :: BlendShader.Compiled os
+    , blendShader         :: BlendShader.Compiled os
     , quadShader          :: QuadShader.Compiled os RFloat
     , quadColorShader     :: QuadShader.Compiled os RGBFloat
     , bulbShader          :: BulbShader.Compiled os

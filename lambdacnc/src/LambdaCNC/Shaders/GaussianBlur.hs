@@ -5,14 +5,10 @@
 {-# LANGUAGE TypeFamilies        #-}
 module LambdaCNC.Shaders.GaussianBlur where
 
-import           Control.Lens             ((^.))
+import           Data.Int                 (Int32)
 import           Graphics.GPipe           hiding (normalize)
-import           LambdaCNC.Config         (ObjectUniformBuffer,
-                                           ObjectUniforms (..))
 import           LambdaCNC.Shaders.Common (ColorTex, Shader2DInput)
 import           Prelude                  hiding ((<*))
-import Data.Word(Word8)
-import Data.Int (Int32)
 
 --------------------------------------------------
 
