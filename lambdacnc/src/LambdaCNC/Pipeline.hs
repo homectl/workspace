@@ -305,22 +305,19 @@ renderings win PipelineData{shaders=Shaders{..}, ..} PipelineState{stFrameBuffer
         bulbShader env
         bulbWireframeShader env
 
-    -- Gaussian blur of the bright texture: horizontal
+    -- Gaussian blur of the bright texture
     foldM_ (\(fbSrc, fbDst) (_ :: Int) -> do
-            writeBuffer gaussUni 0 [1]
-            render $ do
-                let envTexture = fbSrc
-                envPrimitives <- toPrimitiveArray TriangleList <$> newVertexArray quad
-                envColorFb <- getTexture2DImage fbDst 0
-                gaussianBlurShader GaussianBlurShader.Env{..}
+            let blur dir src dst = do
+                  writeBuffer gaussUni 0 [dir]
+                  render $ do
+                      let envTexture = src
+                      envPrimitives <- toPrimitiveArray TriangleList <$> newVertexArray quad
+                      envColorFb <- getTexture2DImage dst 0
+                      gaussianBlurShader GaussianBlurShader.Env{..}
 
-            -- Gaussian blur: vertical
-            writeBuffer gaussUni 0 [0]
-            render $ do
-                let envTexture = fbDst
-                envPrimitives <- toPrimitiveArray TriangleList <$> newVertexArray quad
-                envColorFb <- getTexture2DImage fbSrc 0
-                gaussianBlurShader GaussianBlurShader.Env{..}
+            blur 1 fbSrc fbDst -- Gaussian blur: horizontal
+            blur 0 fbDst fbSrc -- Gaussian blur: vertical
+
             return (fbSrc, fbDst))
         (fbBright, fbTmp)
         [0..10]
