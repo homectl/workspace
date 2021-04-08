@@ -43,7 +43,7 @@ main = do
     cleanupShaders
 
     runContextT GLFW.defaultHandleConfig{GLFW.configEventPolicy = Just $ GLFW.WaitTimeout $ 1 / fps } $ do
-        win <- newWindow (WindowFormatColorDepth RGB8 Depth16) $ (GLFW.defaultWindowConfig "LambdaCNC (GPipe)")
+        win <- newWindow (WindowFormatColorDepth RGBA8 Depth16) $ (GLFW.defaultWindowConfig "LambdaCNC (GPipe)")
             { GLFW.configWidth = windowSize^._x
             , GLFW.configHeight = windowSize^._y
             , GLFW.configHints =

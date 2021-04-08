@@ -33,8 +33,8 @@ vert ObjectUniforms{..} pos = (V4 x y 0 1, (pos + 1) / 2)
 solidShader
     :: (ContextHandler ctx, ColorSampleable f)
     => ObjectUniformBuffer os
-    -> (Color f (S F (ColorElement f)) -> V3 FFloat)
-    -> Window os RGBFloat ds
+    -> (Color f (S F (ColorElement f)) -> V4 FFloat)
+    -> Window os RGBAFloat ds
     -> ContextT ctx os IO (Compiled os f)
 solidShader objectUni toColor win = compileShader $ do
     vertObject <- getUniform (const (objectUni, 0))

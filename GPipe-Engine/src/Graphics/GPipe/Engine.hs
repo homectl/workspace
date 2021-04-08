@@ -1,20 +1,20 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Graphics.GPipe.Engine where
 
-import           Control.Concurrent.MVar
+import           Control.Concurrent.MVar      (MVar, putMVar, takeMVar)
 import           Control.Monad                (unless)
 import           Control.Monad.IO.Class       (liftIO)
-import           Graphics.GPipe               (ContextT, Depth, RGBFloat,
+import           Graphics.GPipe               (ContextT, Depth, RGBAFloat,
                                                Window, swapWindowBuffers)
 import qualified Graphics.GPipe.Context.GLFW  as GLFW
 import           Graphics.GPipe.Engine.TimeIt (timeItInPlace)
 
 
 mainloop
-    :: Window os RGBFloat Depth
+    :: Window os RGBAFloat Depth
     -> Bool
     -> (pipelineState -> ContextT GLFW.Handle os IO pipelineState)
-    -> (Window os RGBFloat Depth -> pipelineData -> pipelineState -> ContextT GLFW.Handle os IO ())
+    -> (Window os RGBAFloat Depth -> pipelineData -> pipelineState -> ContextT GLFW.Handle os IO ())
     -> pipelineData
     -> MVar pipelineState
     -> ContextT GLFW.Handle os IO ()

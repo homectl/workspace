@@ -53,7 +53,7 @@ type Buffer2D os = Buffer os Shader2DInput
 
 type MonochromeTex os = Texture2D os (Format RFloat)
 type DepthTex os = Texture2D os (Format Depth)
-type ColorTex os = Texture2D os (Format RGBFloat)
+type ColorTex os = Texture2D os (Format RGBAFloat)
 
 --------------------------------------------------
 

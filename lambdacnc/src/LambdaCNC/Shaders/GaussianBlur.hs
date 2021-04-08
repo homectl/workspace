@@ -17,7 +17,7 @@ data Env os = Env
     { envScreenSize :: V2 Int
     , envPrimitives :: PrimitiveArray Triangles Shader2DInput
     , envTexture    :: ColorTex os
-    , envColorFb    :: Image (Format RGBFloat)
+    , envColorFb    :: Image (Format RGBAFloat)
     }
 
 --------------------------------------------------
@@ -29,7 +29,7 @@ vert pos = (V4 x y 0 1, (pos + 1) / 2)
 
 --------------------------------------------------
 
-frag :: FInt -> Sampler2D (Format RGBFloat) -> V2 FFloat -> V3 FFloat
+frag :: FInt -> Sampler2D (Format RGBAFloat) -> V2 FFloat -> V4 FFloat
 frag horizontal sampler uv = result
   where
     sample = sample2D sampler SampleAuto Nothing Nothing

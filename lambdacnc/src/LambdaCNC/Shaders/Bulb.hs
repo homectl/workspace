@@ -22,8 +22,8 @@ type Compiled os = CompiledShader os Env
 data Env = Env
     { envScreenSize :: V2 Int
     , envPrimitives :: PrimitiveArray Triangles Shader3DInput
-    , envColorFb      :: Image (Format RGBFloat)
-    , envBrightFb      :: Image (Format RGBFloat)
+    , envColorFb      :: Image (Format RGBAFloat)
+    , envBrightFb      :: Image (Format RGBAFloat)
     , envDepthFb      :: Image (Format Depth)
     , envIndex      :: Int
     }
@@ -44,8 +44,8 @@ vert GlobalUniforms{..} LightUniforms{..} (vertPos, n) = (pos, n)
 
 --------------------------------------------------
 
-frag :: GlobalUniforms FFloat -> LightUniforms FFloat -> V3 FFloat -> (V3 FFloat, V3 FFloat)
-frag GlobalUniforms{..} LightUniforms{..} _ = (fragColor, brightColor)
+frag :: GlobalUniforms FFloat -> LightUniforms FFloat -> V3 FFloat -> (V4 FFloat, V4 FFloat)
+frag GlobalUniforms{..} LightUniforms{..} _ = (toV4 1 fragColor, toV4 1 brightColor)
   where
     fragColor = exposure *^ lightColor
     brightness = dot fragColor (V3 0.2126 0.7152 0.0722)

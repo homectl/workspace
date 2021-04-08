@@ -66,10 +66,14 @@ objectPositions MachinePosition{..} =
 
 
 data FrameBuffers os = FrameBuffers
-    { fbDepth  :: Shaders.DepthTex os
-    , fbColor  :: Shaders.ColorTex os
-    , fbBright :: Shaders.ColorTex os
-    , fbTmp    :: Shaders.ColorTex os
+    { fbDepth    :: Shaders.DepthTex os
+    , fbColor    :: Shaders.ColorTex os
+    , fbBright   :: Shaders.ColorTex os
+    , fbTmp      :: Shaders.ColorTex os
+    -- GBuffer
+    , gbPosition :: Texture2D os (Format RGBAFloat)
+    , gbNormal   :: Texture2D os (Format RGBAFloat)
+    , gbColor    :: Texture2D os (Format RGBAFloat)
     }
 
 
@@ -80,9 +84,13 @@ initFrameBuffers
 initFrameBuffers windowSize = do
     FrameBuffers
         <$> newTexture2D Depth16 windowSize 1
-        <*> newTexture2D RGB16F windowSize 1
-        <*> newTexture2D RGB16F windowSize 1
-        <*> newTexture2D RGB16F windowSize 1
+        <*> newTexture2D RGBA16F windowSize 1
+        <*> newTexture2D RGBA16F windowSize 1
+        <*> newTexture2D RGBA16F windowSize 1
+        -- GBuffer
+        <*> newTexture2D RGBA16F windowSize 1
+        <*> newTexture2D RGBA16F windowSize 1
+        <*> newTexture2D RGBA8 windowSize 1
 
 
 data PipelineState os = PipelineState
@@ -127,7 +135,7 @@ data Shaders os = Shaders
     , gaussianBlurShader  :: GaussianBlurShader.Compiled os
     , blendShader         :: BlendShader.Compiled os
     , quadShader          :: QuadShader.Compiled os RFloat
-    , quadColorShader     :: QuadShader.Compiled os RGBFloat
+    , quadColorShader     :: QuadShader.Compiled os RGBAFloat
     , bulbShader          :: BulbShader.Compiled os
     , bulbWireframeShader :: BulbShader.Compiled os
     }
@@ -148,7 +156,7 @@ data PipelineData os = PipelineData
 
 initData
   :: ContextHandler ctx
-  => Window os RGBFloat Depth
+  => Window os RGBAFloat Depth
   -> ContextT ctx os IO (PipelineData os)
 initData win = do
     startTime <- liftIO Time.getCurrentTime
@@ -234,7 +242,7 @@ initData win = do
 
 renderings
     :: ContextHandler ctx
-    => Window os RGBFloat Depth
+    => Window os RGBAFloat Depth
     -> PipelineData os
     -> PipelineState os
     -> ContextT ctx os IO ()
@@ -290,6 +298,10 @@ renderings win PipelineData{shaders=Shaders{..}, ..} PipelineState{stFrameBuffer
             envBrightFb <- getTexture2DImage fbBright 0
             envDepthFb <- getTexture2DImage fbDepth 0
             envPrimitives <- fmap (toPrimitiveArray TriangleList) . newVertexArray $ solid
+
+            envPositionGb <- getTexture2DImage gbPosition 0
+            envNormalGb <- getTexture2DImage gbNormal 0
+            envColorGb <- getTexture2DImage gbColor 0
 
             let env = SolidsShader.Env{..}
             solidsShader env

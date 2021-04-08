@@ -19,7 +19,7 @@ data Env os = Env
     , envPrimitives :: PrimitiveArray Triangles Shader2DInput
     , envTexture1   :: ColorTex os
     , envTexture2   :: ColorTex os
-    , envColorFb    :: Image (Format RGBFloat)
+    , envColorFb    :: Image (Format RGBAFloat)
     }
 
 --------------------------------------------------
@@ -31,10 +31,10 @@ vert pos = (V4 x y 0 1, (pos + 1) / 2)
 
 --------------------------------------------------
 
-frag :: GlobalUniforms FFloat -> Sampler2D (Format RGBFloat) -> Sampler2D (Format RGBFloat) -> V2 FFloat -> V3 FFloat
+frag :: GlobalUniforms FFloat -> Sampler2D (Format RGBAFloat) -> Sampler2D (Format RGBAFloat) -> V2 FFloat -> V4 FFloat
 frag GlobalUniforms{..} sampler1 sampler2 uv = result
   where
-    sample1, sample2 :: V2 FFloat -> V3 FFloat
+    sample1, sample2 :: V2 FFloat -> V4 FFloat
     sample1 = sample2D sampler1 SampleAuto Nothing Nothing
     sample2 = sample2D sampler2 SampleAuto Nothing Nothing
 

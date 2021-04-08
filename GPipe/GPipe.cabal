@@ -49,8 +49,8 @@ library
       Graphics.GPipe.Texture
       Graphics.GPipe.Uniform
       Graphics.GPipe.Orphans
-  -- other-modules:
-      Data.SNMap
+      -- Internal modules, exported for tests and power users, but don't have
+      -- a stable API and are not necessarily safe to use.
       Graphics.GPipe.Internal.Buffer
       Graphics.GPipe.Internal.Compiler
       Graphics.GPipe.Internal.Context
@@ -65,6 +65,10 @@ library
       Graphics.GPipe.Internal.Texture
       Graphics.GPipe.Internal.Uniform
       Graphics.GPipe.Internal.Orphans
+  other-modules:
+      -- Data structures, not useful for users of the library.
+      Data.IntMap.Polymorphic
+      Data.SNMap
 
 test-suite testsuite
   default-language: Haskell2010

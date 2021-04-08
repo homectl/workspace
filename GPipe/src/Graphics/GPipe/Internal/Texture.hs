@@ -98,7 +98,7 @@ newTexture1D f s mx | s < 0 = error "newTexture1D, negative size"
                     | otherwise = do
                         mxSize <- getGlValue GL_MAX_TEXTURE_SIZE
                         if s > mxSize
-                          then liftIO $ throwIO $ GPipeException "newTexture1D, size larger then maximum supported by graphics driver"
+                          then liftIO $ throwIO $ GPipeException "newTexture1D, size larger than maximum supported by graphics driver"
                           else do
                             t <- makeTex
                             let glintf = fromIntegral $ getGlInternalFormat f
@@ -117,7 +117,7 @@ newTexture1DArray f s@(V2 w sl) mx
                     | otherwise = do
                             mxSize <- getGlValue GL_MAX_TEXTURE_SIZE
                             if w > mxSize || sl > mxSize
-                              then liftIO $ throwIO $ GPipeException "newTexture1DArray, size larger then maximum supported by graphics driver"
+                              then liftIO $ throwIO $ GPipeException "newTexture1DArray, size larger than maximum supported by graphics driver"
                               else do
                                 t <- makeTex
                                 let glintf = fromIntegral $ getGlInternalFormat f
@@ -135,7 +135,7 @@ newTexture2D f s@(V2 w h) mx | w < 0 || h < 0 = error "newTexture2D, negative si
                              | getGlFormat (undefined :: c) == GL_STENCIL_INDEX = do
                                 mxSize <- getGlValue GL_MAX_RENDERBUFFER_SIZE
                                 if w > mxSize || h > mxSize
-                                  then liftIO $ throwIO $ GPipeException "newTexture2D, size larger then maximum supported by graphics driver"
+                                  then liftIO $ throwIO $ GPipeException "newTexture2D, size larger than maximum supported by graphics driver"
                                   else do
                                     t <- makeRenderBuff
                                     liftNonWinContextAsyncIO $
@@ -144,7 +144,7 @@ newTexture2D f s@(V2 w h) mx | w < 0 || h < 0 = error "newTexture2D, negative si
                              | otherwise = do
                                 mxSize <- getGlValue GL_MAX_TEXTURE_SIZE
                                 if w > mxSize || h > mxSize
-                                  then liftIO $ throwIO $ GPipeException "newTexture2D, size larger then maximum supported by graphics driver"
+                                  then liftIO $ throwIO $ GPipeException "newTexture2D, size larger than maximum supported by graphics driver"
                                   else do
                                     t <- makeTex
                                     let glintf = fromIntegral $ getGlInternalFormat f
@@ -164,7 +164,7 @@ newTexture2DArray f s@(V3 w h sl) mx
                                 | otherwise = do
                     mxSize <- getGlValue GL_MAX_TEXTURE_SIZE
                     if w > mxSize || h > mxSize || sl > mxSize
-                      then liftIO $ throwIO $ GPipeException "newTexture2DArray, size larger then maximum supported by graphics driver"
+                      then liftIO $ throwIO $ GPipeException "newTexture2DArray, size larger than maximum supported by graphics driver"
                       else do
                         t <- makeTex
                         let glintf = fromIntegral $ getGlInternalFormat f
@@ -183,7 +183,7 @@ newTexture3D f s@(V3 w h d) mx | w < 0 || h < 0 || d < 0 = error "newTexture3D, 
                                | otherwise = do
                     mxSize <- getGlValue GL_MAX_TEXTURE_SIZE
                     if w > mxSize || h > mxSize || d > mxSize
-                      then liftIO $ throwIO $ GPipeException "newTexture3D, size larger then maximum supported by graphics driver"
+                      then liftIO $ throwIO $ GPipeException "newTexture3D, size larger than maximum supported by graphics driver"
                       else do
                         t <- makeTex
                         let glintf = fromIntegral $ getGlInternalFormat f
@@ -201,7 +201,7 @@ newTextureCube f s mx | s < 0 = error "newTextureCube, negative size"
                       | otherwise = do
                     mxSize <- getGlValue GL_MAX_CUBE_MAP_TEXTURE_SIZE
                     if s > mxSize
-                      then liftIO $ throwIO $ GPipeException "newTextureCube, size larger then maximum supported by graphics driver"
+                      then liftIO $ throwIO $ GPipeException "newTextureCube, size larger than maximum supported by graphics driver"
                       else do
                             t <- makeTex
                             let glintf = fromIntegral $ getGlInternalFormat f
