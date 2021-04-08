@@ -1,6 +1,7 @@
 packages:
   GPipe/
   GPipe-Engine/
+  GPipe-Fonts/
   GPipe-GLFW/
   STL/
   lambdacnc/

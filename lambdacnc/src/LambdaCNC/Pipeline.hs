@@ -4,6 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module LambdaCNC.Pipeline where
 
+import qualified Graphics.GPipe.Fonts.Atlas as F
 import           Control.Applicative               (liftA2)
 import           Control.Lens.Indexed              (iforM_)
 import           Control.Monad                     (foldM_, forM, forM_)
@@ -179,12 +180,18 @@ initData win = do
         writeBuffer buf 0 mesh
         return buf
 
-    quad <- timeIt "Generating quad" $ do
-        buf <- newBuffer 6
-        writeBuffer buf 0
+    -- Right font <- liftIO $ F.loadFontFile "data/fonts/Ubuntu-R.ttf"
+    -- fa <- liftIO $ F.createFontAtlas font undefined (F.FontAtlasOptions 10 128 10)
+    -- (aMesh, _) <- liftIO $ F.buildTextMesh fa (F.TextStyle 10 10) "A"
+    let quadMesh =
             [ V2 (-1) (-1), V2 (-1)   1 , V2 1 1
             , V2 (-1) (-1), V2   1  (-1), V2 1 1
             ]
+    -- liftIO $ print aMesh
+
+    quad <- timeIt "Generating quad" $ do
+        buf <- newBuffer $ length quadMesh
+        writeBuffer buf 0 quadMesh
         return buf
 
     tex <- newTexture2D R8 (V2 8 8) 1

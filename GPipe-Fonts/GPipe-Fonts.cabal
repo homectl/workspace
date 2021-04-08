@@ -1,0 +1,34 @@
+name:           GPipe-Fonts
+version:        0.1
+cabal-version:  >= 1.10
+build-type:     Simple
+author:         Patai Gergely
+license:        BSD3
+license-file:   LICENSE
+copyright:      (c) 2014, Patai Gergely
+category:       Graphics
+stability:      Experimental
+homepage:       https://github.com/homectl/lambdaray
+synopsis:       GPipe Font Engine
+description:
+                This package provides hardware accelerated font rendering facilities built on top of GPipe and FontyFruity.
+maintainer:     Pippijn van Steenhoven
+
+source-repository head
+  type:     git
+  location: https://github.com/homectl/lambdaray
+  subdir:   GPipe-Fonts
+
+library
+  hs-source-dirs: src
+  exposed-modules:
+      Graphics.GPipe.Fonts.Atlas
+  build-depends:
+      base
+    , FontyFruity
+    , GPipe
+    , containers
+    , vector
+  ghc-options:
+      -Wall
+  default-language: Haskell2010
