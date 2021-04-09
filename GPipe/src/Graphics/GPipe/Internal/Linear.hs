@@ -18,6 +18,7 @@ lookAt eye center up =
         zd = dot za eye
 
 
+rotMatrixX :: Floating a => a -> M44 a
 rotMatrixX phi = V4
     (V4 1          0          0          0)
     (V4 0          ( cos phi) (-sin phi) 0)
@@ -25,6 +26,7 @@ rotMatrixX phi = V4
     (V4 0          0          0          1)
 
 
+rotMatrixY :: Floating a => a -> M44 a
 rotMatrixY phi = V4
     (V4 ( cos phi) 0          ( sin phi) 0)
     (V4 0          1          0          0)
@@ -32,6 +34,7 @@ rotMatrixY phi = V4
     (V4 0          0          0          1)
 
 
+rotMatrixZ :: Floating a => a -> M44 a
 rotMatrixZ phi = V4
     (V4 ( cos phi) (-sin phi) 0          0)
     (V4 ( sin phi) ( cos phi) 0          0)

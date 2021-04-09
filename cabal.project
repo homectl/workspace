@@ -6,3 +6,4 @@ packages:
   STL/
   lambdacnc/
   lambdaray/
+  scenegraph/
