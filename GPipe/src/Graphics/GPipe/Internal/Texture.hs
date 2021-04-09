@@ -14,7 +14,7 @@
 module Graphics.GPipe.Internal.Texture where
 
 import           Control.Monad.IO.Class                       (MonadIO, liftIO)
-import           Data.IntMap.Lazy                             (insert)
+import           Data.IntMap.Polymorphic.Lazy                 (insert)
 import           Data.Text                                    (Text)
 import           Graphics.GPipe.Internal.Buffer               (Buffer (..),
                                                                BufferColor,
@@ -63,10 +63,10 @@ import           Foreign.Ptr                                  (minusPtr,
                                                                nullPtr, plusPtr,
                                                                wordPtrToPtr)
 import           Foreign.Storable                             (Storable (peek))
+import           GHC.IO.Unsafe                                (unsafePerformIO)
 import           Linear.V2                                    (V2 (..))
 import           Linear.V3                                    (V3 (..))
 import           Linear.V4                                    (V4 (..))
-import GHC.IO.Unsafe (unsafePerformIO)
 
 data Texture1D os a = Texture1D TexName Size1 MaxLevels
 data Texture1DArray os a = Texture1DArray TexName Size2 MaxLevels

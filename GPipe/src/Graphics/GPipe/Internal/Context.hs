@@ -55,18 +55,19 @@ import           Control.Monad.Trans.State.Strict (StateT (runStateT),
                                                    modify, put)
 import           Data.IORef                       (IORef, mkWeakIORef,
                                                    readIORef)
-import           Data.IntMap                      ((!))
-import           Data.Text (Text)
-import qualified Data.IntMap.Strict               as IMap
+import           Data.IntMap.Polymorphic          ((!))
+import qualified Data.IntMap.Polymorphic          as IMap
 import qualified Data.IntSet                      as Set
 import qualified Data.Map.Strict                  as Map
 import           Data.Maybe                       (maybeToList)
+import           Data.Text                        (Text)
 import           Data.Typeable                    (Typeable)
 import           Graphics.GL.Core33
 import           Graphics.GL.Types                (GLint, GLuint)
 import           Graphics.GPipe.Internal.Format   (WindowBits, WindowFormat,
                                                    windowBits)
 import           Linear.V2                        (V2 (V2))
+import           Graphics.GPipe.Internal.IDs
 
 -- | Class implementing a window handler that can create openGL contexts, such as GLFW or GLUT
 class ContextHandler ctx where
@@ -124,9 +125,9 @@ data ContextEnv ctx = ContextEnv {
   }
 
 data ContextState ctx = ContextState {
-    nextName       :: Name,
+    nextName       :: WinId,
     perWindowState :: PerWindowState ctx,
-    lastUsedWin    :: Name -- -1 is no window. 0 is the hidden window. 1.. are visible windows
+    lastUsedWin    :: WinId -- -1 is no window. 0 is the hidden window. 1.. are visible windows
   }
 
 -- | A monad in which shaders are run.
@@ -140,17 +141,15 @@ data RenderEnv = RenderEnv {
 data RenderState = RenderState {
     perWindowRenderState :: PerWindowRenderState,
     renderWriteTextures  :: Set.IntSet,
-    renderLastUsedWin    :: Name
+    renderLastUsedWin    :: WinId
   }
-
-type Name = Int
 
 type ContextDoAsync = IO () -> IO ()
 
-type PerWindowState ctx = IMap.IntMap (WindowState, ContextWindow ctx) -- -1 is no window. 0 is the hidden window. 1.. are visible windows
-type PerWindowRenderState = IMap.IntMap (WindowState, ContextDoAsync)
-data WindowState = WindowState {
-    windowContextData :: !ContextData
+type PerWindowState ctx = IMap.IntMap WinId (WindowState, ContextWindow ctx) -- -1 is no window. 0 is the hidden window. 1.. are visible windows
+type PerWindowRenderState = IMap.IntMap WinId (WindowState, ContextDoAsync)
+newtype WindowState = WindowState {
+    windowContextData :: ContextData
   }
 
 -- | Run a 'Render' monad, that may have the effect of windows or textures being drawn to.
@@ -189,7 +188,7 @@ runContextT chp (ContextT m) = do
      )
      (\ctx -> evalStateT (runReaderT m (ContextEnv ctx cds)) (ContextState 1 IMap.empty (-1)))
 
-data Window os c ds = Window { getWinName :: Name }
+data Window os c ds = Window { getWinName :: WinId }
 
 instance Eq (Window os c ds) where
   (Window a) == (Window b) = a == b
@@ -276,7 +275,7 @@ addContextFinalizer k m = ContextT $ do
   liftIO $ void $ mkWeakIORef k $ contextDoAsync ctx Nothing m
 
 
-getLastRenderWin :: Render os (Name, ContextData, ContextDoAsync)
+getLastRenderWin :: Render os (WinId, ContextData, ContextDoAsync)
 getLastRenderWin = Render $ do
   rs <- lift $ lift get
   let cwid = renderLastUsedWin rs -- There is always a window available since render calls getLastContextWin

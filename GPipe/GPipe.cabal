@@ -47,6 +47,7 @@ library
       Graphics.GPipe.Internal.Format
       Graphics.GPipe.Internal.FragmentStream
       Graphics.GPipe.Internal.FrameBuffer
+      Graphics.GPipe.Internal.IDs
       Graphics.GPipe.Internal.Linear
       Graphics.GPipe.Internal.PrimitiveArray
       Graphics.GPipe.Internal.PrimitiveStream
@@ -57,6 +58,9 @@ library
   other-modules:
       -- Data structures, not useful for users of the library.
       Data.IntMap.Polymorphic
+      Data.IntMap.Polymorphic.Lazy
+      Data.IntMap.Polymorphic.Strict
+      Data.IntMap.Polymorphic.Type
       Data.SNMap
   build-depends:
       base < 5

@@ -45,7 +45,8 @@ import           Data.Maybe                       (fromJust, isJust, isNothing)
 import           Data.Monoid                      (All (..))
 import           Graphics.GPipe.Internal.Buffer   (UniformAlignment,
                                                    getUniformAlignment)
-import           Graphics.GPipe.Internal.Compiler (Drawcall (Drawcall),
+import           Graphics.GPipe.Internal.Compiler (CompiledShader,
+                                                   Drawcall (Drawcall),
                                                    RenderIOState, compile,
                                                    mapRenderIOState,
                                                    newRenderIOState)
@@ -114,9 +115,6 @@ silenceShader (Shader (ShaderM m)) = Shader $ ShaderM $ do
         let (adcs, s') = runState (runListT (runWriterT (runReaderT m uniAl))) s
         put s'
         return $ map (\ (a, (_, disc)) -> (a, ([], disc))) adcs
-
--- | A compiled shader is just a function that takes an environment and returns a 'Render' action
-type CompiledShader os s = s -> Render os ()
 
 -- | Compile a shader into a set of draw calls and the IO state.
 --

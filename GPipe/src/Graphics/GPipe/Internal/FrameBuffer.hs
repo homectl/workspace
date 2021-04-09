@@ -16,7 +16,7 @@ import           Data.List                               (intercalate)
 import qualified Data.Text                               as Text
 import qualified Data.Text.IO                            as Text
 import           Graphics.GPipe.Internal.Compiler        (Drawcall (Drawcall),
-                                                          WinId, getFBOerror)
+                                                          getFBOerror)
 import           Graphics.GPipe.Internal.Context         (FBOKey,
                                                           FBOKeys (FBOKeys),
                                                           Render (Render),
@@ -39,6 +39,7 @@ import           Graphics.GPipe.Internal.Format          (ColorRenderable (clear
                                                           StencilRenderable)
 import           Graphics.GPipe.Internal.FragmentStream  (FragmentStream (..),
                                                           FragmentStreamData (..))
+import           Graphics.GPipe.Internal.IDs             (WinId)
 import           Graphics.GPipe.Internal.PrimitiveStream (PrimitiveStreamData (PrimitiveStreamData))
 import           Graphics.GPipe.Internal.Shader          (Shader (..), ShaderM,
                                                           tellDrawcall)
@@ -52,7 +53,7 @@ import           Control.Monad.IO.Class                  (MonadIO (liftIO))
 import           Control.Monad.Trans.Except              (ExceptT, throwE)
 import           Data.IORef                              (mkWeakIORef, newIORef,
                                                           readIORef)
-import qualified Data.IntMap                             as IMap
+import qualified Data.IntMap.Polymorphic                 as IMap
 import           Foreign.Marshal.Alloc                   (alloca)
 import           Foreign.Marshal.Array                   (withArray)
 import           Foreign.Marshal.Utils                   (fromBool, with)

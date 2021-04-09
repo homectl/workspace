@@ -21,8 +21,8 @@ import           Control.Category                 (Category)
 import           Control.Monad.Trans.Class        (lift)
 import           Control.Monad.Trans.Reader       (Reader, ask, runReader)
 import           Control.Monad.Trans.Writer       (WriterT (runWriterT), tell)
-import qualified Data.IntMap                      as Map
-import           Data.IntMap.Lazy                 (insert)
+import qualified Data.IntMap.Polymorphic          as Map
+import           Data.IntMap.Polymorphic.Lazy     (insert)
 import           Data.Text                        (Text)
 import           Data.Word                        (Word32)
 import           Graphics.GPipe.Internal.Buffer   (B (..), B2 (..), B3 (..),
@@ -94,7 +94,7 @@ buildUDecl = buildUDecl' 0 . Map.toAscList
                                               | otherwise = error "buildUDecl: Expected all offsets to be multiple of 4"
           buildUDecl' _ [] = return ()
 
-type OffsetToSType = Map.IntMap SType
+type OffsetToSType = Map.IntMap Int SType
 
 -- | The arrow type for 'toUniform'.
 newtype ToUniform x a b = ToUniform (Kleisli (WriterT OffsetToSType (Reader (Int -> ExprM Text))) a b) deriving (Category, Arrow)

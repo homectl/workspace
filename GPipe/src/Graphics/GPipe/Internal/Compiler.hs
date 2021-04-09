@@ -13,8 +13,8 @@ import           Control.Monad.Trans.Class        (MonadTrans (lift))
 import           Control.Monad.Trans.Except       (throwE)
 import           Control.Monad.Trans.Reader       (ask)
 import           Control.Monad.Trans.State.Strict (get, put)
-import           Data.IntMap                      ((!))
-import qualified Data.IntMap                      as Map
+import           Data.IntMap.Polymorphic ((!))
+import qualified Data.IntMap.Polymorphic                      as Map
 import qualified Data.IntSet                      as Set
 import           Data.Maybe                       (isJust, isNothing)
 import           Graphics.GPipe.Internal.Context
@@ -37,9 +37,11 @@ import           Foreign.Storable                 (peek)
 import           GHC.IORef                        (IORef)
 import           Graphics.GL.Core33
 import           Graphics.GL.Types                (GLuint)
+import Graphics.GPipe.Internal.IDs
 
 
-type WinId = Int
+-- | A compiled shader is just a function that takes an environment and returns a 'Render' action
+type CompiledShader os s = s -> Render os ()
 
 data Drawcall s = Drawcall
     { drawcallFBO        :: s -> (Either WinId (IO FBOKeys, IO ()), IO ())
@@ -63,10 +65,10 @@ type Binding = Int
 --       then create a function that checks that none of the input buffers are used as output, and throws if it is
 
 data RenderIOState s = RenderIOState
-    { uniformNameToRenderIO       :: Map.IntMap (s -> Binding -> IO ()) -- TODO: Return buffer name here when we start writing to buffers during rendering (transform feedback, buffer textures)
-    , samplerNameToRenderIO       :: Map.IntMap (s -> Binding -> IO Int) -- IO returns texturename for validating that it isnt used as render target
-    , rasterizationNameToRenderIO :: Map.IntMap (s -> IO ())
-    , inputArrayToRenderIOs       :: Map.IntMap (s -> [([Binding], GLuint, Int) -> ((IO [VAOKey], IO ()), IO ())])
+    { uniformNameToRenderIO       :: Map.IntMap Int (s -> Binding -> IO ()) -- TODO: Return buffer name here when we start writing to buffers during rendering (transform feedback, buffer textures)
+    , samplerNameToRenderIO       :: Map.IntMap Int (s -> Binding -> IO Int) -- IO returns texturename for validating that it isnt used as render target
+    , rasterizationNameToRenderIO :: Map.IntMap Int (s -> IO ())
+    , inputArrayToRenderIOs       :: Map.IntMap Int (s -> [([Binding], GLuint, Int) -> ((IO [VAOKey], IO ()), IO ())])
     }
 
 newRenderIOState :: RenderIOState s
@@ -77,7 +79,7 @@ mapRenderIOState f (RenderIOState a b c d) (RenderIOState i j k l) = let g x = x
 
 
 -- | May throw a GPipeException
-compile :: (Monad m, MonadIO m, MonadException m, ContextHandler ctx) => [Drawcall s] -> RenderIOState s -> ContextT ctx os m (s -> Render os ())
+compile :: (Monad m, MonadIO m, MonadException m, ContextHandler ctx) => [Drawcall s] -> RenderIOState s -> ContextT ctx os m (CompiledShader os s)
 compile drawcalls s = do
     (maxUnis,
      maxSamplers,
@@ -142,7 +144,7 @@ getLimits = do
 
 type CompInput s = (Drawcall s, [Int], [Int], [Int], [Int])
 
-comp :: (ContextHandler ctx, MonadIO m) => RenderIOState s -> CompInput s -> ContextT ctx os m (Either Text ((IORef GLuint, IO ()), s -> Render os ()))
+comp :: (ContextHandler ctx, MonadIO m) => RenderIOState s -> CompInput s -> ContextT ctx os m (Either Text ((IORef GLuint, IO ()), CompiledShader os s))
 comp s dc@(Drawcall fboSetup primN rastN vsource fsource inps _ _ _ _ pstrUSize', unis, samps, ubinds, sbinds) = do
     let pstrUSize = if 0 `elem` unis then pstrUSize' else 0
     let uNameToRenderIOmap = uniformNameToRenderIO s
@@ -193,7 +195,7 @@ comp s dc@(Drawcall fboSetup primN rastN vsource fsource inps _ _ _ _ pstrUSize'
             return $ Right ((pNameRef, pStrUDeleter), renderer s dc pNameRef uNameToRenderIOmap' pstrUBuf pstrUSize)
 
 
-renderer :: RenderIOState s -> CompInput s -> IORef GLuint -> Map.IntMap (s -> Binding -> IO ()) -> GLuint -> Int -> s -> Render os ()
+renderer :: RenderIOState s -> CompInput s -> IORef GLuint -> Map.IntMap Int (s -> Binding -> IO ()) -> GLuint -> Int -> CompiledShader os s
 renderer s (Drawcall fboSetup primN rastN vsource fsource inps _ _ _ _ pstrUSize', unis, samps, ubinds, sbinds) pNameRef uNameToRenderIOmap' pstrUBuf pstrUSize x = Render $ do
     -- Drawing with program --
     rs <- lift $ lift get
@@ -306,12 +308,12 @@ createUBuffer uSize = liftNonWinContextIO $ do
     return bname
 
 
-addPstrUniform :: Word32 -> Int -> Map.IntMap (s -> Binding -> IO ()) -> Map.IntMap (s -> Binding -> IO ())
+addPstrUniform :: Word32 -> Int -> Map.IntMap Int (s -> Binding -> IO ()) -> Map.IntMap Int (s -> Binding -> IO ())
 addPstrUniform _ 0 = id
 addPstrUniform bname uSize = Map.insert 0 $ \_ bind -> glBindBufferRange GL_UNIFORM_BUFFER (fromIntegral bind) bname 0 (fromIntegral uSize)
 
 
-bind ::  Map.IntMap (s -> Binding -> IO x) -> [(Int, Int)] -> s -> Asserter x -> IO Bool
+bind :: Map.IntMap Int (s -> Binding -> IO x) -> [(Int, Int)] -> s -> Asserter x -> IO Bool
 bind iom ((n,b):xs) s a = do
     ok1 <- bind iom xs s a
     ok2 <- (iom ! n) s b >>= a
@@ -331,7 +333,7 @@ type Asserter x = x -> IO Bool -- Used to assert we may use textures bound as re
 allocate :: Int -> [[Set.Key]] -> [[Int]]
 allocate mx = allocate' mx Map.empty []
 
-allocate' :: Int -> Map.IntMap Int -> [Int] -> [[Set.Key]] -> [[Int]]
+allocate' :: Int -> Map.IntMap Int Int -> [Int] -> [[Set.Key]] -> [[Int]]
 allocate' mx m ys ((x:xs):xss)
     | Just a <- Map.lookup x m  = allocate' mx m (a:ys) (xs:xss)
     | ms <- Map.size m, ms < mx = allocate' mx (Map.insert x ms m) (ms:ys) (xs:xss)

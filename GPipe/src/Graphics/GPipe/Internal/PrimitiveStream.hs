@@ -26,8 +26,8 @@ import           Control.Monad.Trans.State.Strict       (State,
                                                          get, modify, put,
                                                          runState)
 import           Data.Int                               (Int16, Int32, Int8)
-import qualified Data.IntMap                            as Map
-import           Data.IntMap.Lazy                       (insert)
+import qualified Data.IntMap.Polymorphic                as Map
+import           Data.IntMap.Polymorphic.Lazy           (insert)
 import           Data.Text                              (Text)
 import           Data.Word                              (Word16, Word32, Word8)
 import           Foreign.Ptr                            (Ptr, castPtr,
