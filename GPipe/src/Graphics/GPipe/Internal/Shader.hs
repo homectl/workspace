@@ -53,16 +53,18 @@ import           Graphics.GPipe.Internal.Compiler (CompiledShader,
 import           Graphics.GPipe.Internal.Context  (ContextHandler, ContextT,
                                                    Render (..),
                                                    liftNonWinContextIO)
+import Graphics.GPipe.Internal.IDs (Identifier)
 
 data ShaderState s = ShaderState Int (RenderIOState s)
 
 newShaderState :: ShaderState s
 newShaderState = ShaderState 1 newRenderIOState
 
-getName :: ShaderM s Int
+-- getName :: (Integral a, Identifier a) => ShaderM s a
+getName :: Integral a => ShaderM s a
 getName = do ShaderState n r <- ShaderM $ lift $ lift $ lift get
              ShaderM $ lift $ lift $ lift $ put $ ShaderState (n+1) r
-             return n
+             return $ fromIntegral n
 
 askUniformAlignment :: ShaderM s UniformAlignment
 askUniformAlignment = ShaderM ask

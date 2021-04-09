@@ -27,8 +27,9 @@ import           Data.Boolean               (Boolean (..), BooleanOf, EqB (..),
                                              IfB (..), OrdB (..), maxB, minB)
 import           Data.Foldable              (toList)
 import           Data.Int                   (Int16, Int32, Int8)
-import qualified Data.IntMap                as Map
+import qualified Data.IntMap.Polymorphic    as Map
 import           Data.List                  (intercalate)
+import Graphics.GPipe.Internal.IDs ( UniformId )
 import           Data.SNMap                 (SNMapReaderT, memoizeM,
                                              runSNMapReaderT, scopedM)
 import           Data.Text                  (Text)
@@ -73,12 +74,12 @@ stypeSize _             = 4
 
 type ExprM = SNMapReaderT [Text] (StateT ExprState (WriterT Text (StateT NextTempVar IO))) -- IO for stable names
 data ExprState = ExprState
-    { shaderUsedUniformBlocks :: Map.IntMap (GlobDeclM ())
-    , shaderUsedSamplers      :: Map.IntMap (GlobDeclM ())
-    , shaderUsedInput         :: Map.IntMap (GlobDeclM (), (ExprM (), GlobDeclM ())) -- For vertex shaders, the shaderM is always undefined and the int is the parameter name, for later shader stages it uses some name local to the transition instead
+    { shaderUsedUniformBlocks :: Map.IntMap UniformId (GlobDeclM ())
+    , shaderUsedSamplers      :: Map.IntMap Int (GlobDeclM ())
+    , shaderUsedInput         :: Map.IntMap Int (GlobDeclM (), (ExprM (), GlobDeclM ())) -- For vertex shaders, the shaderM is always undefined and the int is the parameter name, for later shader stages it uses some name local to the transition instead
     }
 
-runExprM :: GlobDeclM () -> ExprM () -> IO (Text, [Int], [Int], [Int], GlobDeclM (), ExprM ())
+runExprM :: GlobDeclM () -> ExprM () -> IO (Text, [UniformId], [Int], [Int], GlobDeclM (), ExprM ())
 runExprM d m = do
     (st, body) <- evalStateT (runWriterT (execStateT (runSNMapReaderT (m :: ExprM ())) (ExprState Map.empty Map.empty Map.empty))) 0
     let (unis, uniDecls) = unzip $ Map.toAscList (shaderUsedUniformBlocks st)
@@ -181,7 +182,7 @@ useFInput qual prefix stype i v =
                         tellGlobalLn $ tshow i
 
 
-useUniform :: GlobDeclM () -> Int -> Int -> ExprM Text
+useUniform :: GlobDeclM () -> UniformId -> Int -> ExprM Text
 useUniform decls blockI offset =
              do T.lift $ modify $ \ s -> s { shaderUsedUniformBlocks = Map.insert blockI gDeclUniformBlock $ shaderUsedUniformBlocks s }
                 return $ "u"<>tshow blockI <> ".u"<> tshow offset -- "u8.u4"

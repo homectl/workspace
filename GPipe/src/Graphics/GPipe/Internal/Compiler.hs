@@ -4,6 +4,7 @@
 {-# LANGUAGE PatternSynonyms   #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 {-# OPTIONS_GHC -Wno-unused-matches #-}
+{-# LANGUAGE ViewPatterns #-}
 module Graphics.GPipe.Internal.Compiler where
 
 import           Control.Monad                    (forM_, void, when, (>=>))
@@ -50,9 +51,9 @@ data Drawcall s = Drawcall
     , vertexsSource      :: Text
     , fragmentSource     :: Text
     , usedInputs         :: [Int]
-    , usedVUniforms      :: [Int]
+    , usedVUniforms      :: [UniformId]
     , usedVSamplers      :: [Int]
-    , usedFUniforms      :: [Int]
+    , usedFUniforms      :: [UniformId]
     , usedFSamplers      :: [Int]
     , primStrUBufferSize :: Int -- The size of the ubuffer for uniforms in primitive stream
     }
@@ -65,7 +66,7 @@ type Binding = Int
 --       then create a function that checks that none of the input buffers are used as output, and throws if it is
 
 data RenderIOState s = RenderIOState
-    { uniformNameToRenderIO       :: Map.IntMap Int (s -> Binding -> IO ()) -- TODO: Return buffer name here when we start writing to buffers during rendering (transform feedback, buffer textures)
+    { uniformNameToRenderIO       :: Map.IntMap UniformId (s -> Binding -> IO ()) -- TODO: Return buffer name here when we start writing to buffers during rendering (transform feedback, buffer textures)
     , samplerNameToRenderIO       :: Map.IntMap Int (s -> Binding -> IO Int) -- IO returns texturename for validating that it isnt used as render target
     , rasterizationNameToRenderIO :: Map.IntMap Int (s -> IO ())
     , inputArrayToRenderIOs       :: Map.IntMap Int (s -> [([Binding], GLuint, Int) -> ((IO [VAOKey], IO ()), IO ())])
@@ -95,9 +96,9 @@ compile drawcalls s = do
         unisPerDc = zipWith orderedUnion vUnisPerDc fUnisPerDc
         sampsPerDc = zipWith orderedUnion vSampsPerDc fSampsPerDc
 
-        limitError kind target maxCnt elts =
+        limitError kind target (fromIntegral -> maxCnt) elts =
             let err = "Too many " <> kind <> " used in a single " <> target in
-            [err | any (\ xs -> length xs >= maxCnt) elts]
+            [err | any (\xs -> length xs >= maxCnt) elts]
         limitErrors = concat
             [ limitError "uniform blocks" "shader program" maxUnis unisPerDc
             , limitError "textures" "shader program" maxSamplers sampsPerDc
@@ -125,7 +126,7 @@ compile drawcalls s = do
             liftIO $ throwIO $ GPipeException $ Text.concat allErrs
 
 
-getLimits :: IO (Int, Int, Int, Int, Int, Int)
+getLimits :: IO (UniformId, Int, UniformId, Int, UniformId, Int)
 getLimits = do
     maxUnis <- alloca (\ptr -> glGetIntegerv GL_MAX_COMBINED_UNIFORM_BLOCKS ptr >> peek ptr)
     maxSamplers <- alloca (\ptr -> glGetIntegerv GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS ptr >> peek ptr)
@@ -142,7 +143,7 @@ getLimits = do
         , fromIntegral maxFSamplers)
 
 
-type CompInput s = (Drawcall s, [Int], [Int], [Int], [Int])
+type CompInput s = (Drawcall s, [UniformId], [Int], [UniformId], [Int])
 
 comp :: (ContextHandler ctx, MonadIO m) => RenderIOState s -> CompInput s -> ContextT ctx os m (Either Text ((IORef GLuint, IO ()), CompiledShader os s))
 comp s dc@(Drawcall fboSetup primN rastN vsource fsource inps _ _ _ _ pstrUSize', unis, samps, ubinds, sbinds) = do
@@ -195,7 +196,7 @@ comp s dc@(Drawcall fboSetup primN rastN vsource fsource inps _ _ _ _ pstrUSize'
             return $ Right ((pNameRef, pStrUDeleter), renderer s dc pNameRef uNameToRenderIOmap' pstrUBuf pstrUSize)
 
 
-renderer :: RenderIOState s -> CompInput s -> IORef GLuint -> Map.IntMap Int (s -> Binding -> IO ()) -> GLuint -> Int -> CompiledShader os s
+renderer :: RenderIOState s -> CompInput s -> IORef GLuint -> Map.IntMap UniformId (s -> Binding -> IO ()) -> GLuint -> Int -> CompiledShader os s
 renderer s (Drawcall fboSetup primN rastN vsource fsource inps _ _ _ _ pstrUSize', unis, samps, ubinds, sbinds) pNameRef uNameToRenderIOmap' pstrUBuf pstrUSize x = Render $ do
     -- Drawing with program --
     rs <- lift $ lift get
@@ -308,15 +309,15 @@ createUBuffer uSize = liftNonWinContextIO $ do
     return bname
 
 
-addPstrUniform :: Word32 -> Int -> Map.IntMap Int (s -> Binding -> IO ()) -> Map.IntMap Int (s -> Binding -> IO ())
+addPstrUniform :: Word32 -> Int -> Map.IntMap UniformId (s -> Binding -> IO ()) -> Map.IntMap UniformId (s -> Binding -> IO ())
 addPstrUniform _ 0 = id
 addPstrUniform bname uSize = Map.insert 0 $ \_ bind -> glBindBufferRange GL_UNIFORM_BUFFER (fromIntegral bind) bname 0 (fromIntegral uSize)
 
 
-bind :: Map.IntMap Int (s -> Binding -> IO x) -> [(Int, Int)] -> s -> Asserter x -> IO Bool
+bind :: Integral a => Map.IntMap a (s -> Binding -> IO x) -> [(a, a)] -> s -> Asserter x -> IO Bool
 bind iom ((n,b):xs) s a = do
     ok1 <- bind iom xs s a
-    ok2 <- (iom ! n) s b >>= a
+    ok2 <- (iom ! n) s (fromIntegral b) >>= a
     return $ ok1 && ok2
 bind _ [] _ _ = return True
 
@@ -330,13 +331,13 @@ orderedUnion [] ys = ys
 
 type Asserter x = x -> IO Bool -- Used to assert we may use textures bound as render targets
 
-allocate :: Int -> [[Set.Key]] -> [[Int]]
+allocate :: Integral a => a -> [[a]] -> [[a]]
 allocate mx = allocate' mx Map.empty []
 
-allocate' :: Int -> Map.IntMap Int Int -> [Int] -> [[Set.Key]] -> [[Int]]
+allocate' :: Integral a => a -> Map.IntMap a a -> [a] -> [[a]] -> [[a]]
 allocate' mx m ys ((x:xs):xss)
     | Just a <- Map.lookup x m  = allocate' mx m (a:ys) (xs:xss)
-    | ms <- Map.size m, ms < mx = allocate' mx (Map.insert x ms m) (ms:ys) (xs:xss)
+    | ms <- fromIntegral $ Map.size m, ms < mx = allocate' mx (Map.insert x ms m) (ms:ys) (xs:xss)
     | otherwise =
         let (ek,ev) = findLastUsed m mx (ys ++ xs ++ concat xss) in
         allocate' mx (Map.insert x ev (Map.delete ek m)) (ev:ys) (xs:xss)

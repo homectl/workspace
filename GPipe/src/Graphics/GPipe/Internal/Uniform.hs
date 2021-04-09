@@ -46,6 +46,7 @@ import           Linear.V1                        (V1 (..))
 import           Linear.V2                        (V2 (..))
 import           Linear.V3                        (V3 (..))
 import           Linear.V4                        (V4 (..))
+import Graphics.GPipe.Internal.IDs (UniformId)
 
 -- | This class constraints which buffer types can be loaded as uniforms, and what type those values have.
 class BufferFormat a => UniformInput a where
@@ -79,7 +80,7 @@ getUniform sf = Shader $ do
     ToUniform (Kleisli shaderGenF) = toUniform :: ToUniform x b (UniformFormat b x)
     fromBUnifom (Uniform b) = b
 
-    doForUniform :: Int -> (s -> Binding -> IO()) -> ShaderM s ()
+    doForUniform :: UniformId -> (s -> Binding -> IO()) -> ShaderM s ()
     doForUniform n io = modifyRenderIO (\s -> s { uniformNameToRenderIO = insert n io (uniformNameToRenderIO s) } )
 
 buildUDecl :: OffsetToSType -> GlobDeclM ()
