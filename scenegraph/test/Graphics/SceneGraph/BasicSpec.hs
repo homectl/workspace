@@ -15,6 +15,7 @@ import           Graphics.SceneGraph.Basic
 import           Linear                    (R1 (..), R2 (..), R3 (..), V3 (..),
                                             V4 (..), (!*))
 import qualified Linear                    as L
+import Linear.Vector
 
 
 instance Arbitrary a => Arbitrary (V3 a) where
@@ -22,8 +23,11 @@ instance Arbitrary a => Arbitrary (V3 a) where
 
 infix 1 `shouldBeApproximately`
 
-shouldBeApproximately :: Float -> Float -> Expectation
-shouldBeApproximately a b = round a `shouldBe` round b
+shouldBeApproximately :: V3 Float -> V3 Float -> Expectation
+shouldBeApproximately a b = roundV a `shouldBe` roundV b
+  where
+    roundV :: V3 Float -> V3 Float
+    roundV v = fmap ((/ 100.0) . fromIntegral . round) (v ^* 100)
 
 
 origin :: V4 Float
@@ -56,16 +60,14 @@ spec = do
             rotateX theta (translate p camera)
       let camNode = findCamera testScene 0
       (getTransformTo testScene camNode !* origin) ^. _x
-        `shouldBeApproximately` p ^. _x
+        `shouldBe` p ^. _x
 
     it "should turn a Y unit vector into a Z unit vector" $ do
       testScene <- osg $ do
             rotateX 90 (translate (V3 0 1 0) camera)
       let camNode = findCamera testScene 0
-      -- TODO: the rotation matrix is super imprecise, this rounding shouldn't
-      -- be necessary.
-      fmap round ((getTransformTo testScene camNode !* origin) ^. _xyz)
-        `shouldBe` V3 0 0 1
+      (getTransformTo testScene camNode !* origin) ^. _xyz
+        `shouldBeApproximately` V3 0 0 1
 
 
   describe "rotateY" $ do
@@ -74,16 +76,14 @@ spec = do
             rotateY theta (translate p camera)
       let camNode = findCamera testScene 0
       (getTransformTo testScene camNode !* origin) ^. _y
-        `shouldBeApproximately` p ^. _y
+        `shouldBe` p ^. _y
 
     it "should turn an X unit vector into a Z unit vector" $ do
       testScene <- osg $ do
             rotateY 90 (translate (V3 1 0 0) camera)
       let camNode = findCamera testScene 0
-      -- TODO: the rotation matrix is super imprecise, this rounding shouldn't
-      -- be necessary.
-      fmap round ((getTransformTo testScene camNode !* origin) ^. _xyz)
-        `shouldBe` V3 0 0 (-1)
+      (getTransformTo testScene camNode !* origin) ^. _xyz
+        `shouldBeApproximately` V3 0 0 (-1)
 
 
   describe "rotateZ" $ do
@@ -92,16 +92,14 @@ spec = do
             rotateZ theta (translate p camera)
       let camNode = findCamera testScene 0
       (getTransformTo testScene camNode !* origin) ^. _z
-        `shouldBeApproximately` p ^. _z
+        `shouldBe` p ^. _z
 
     it "should turn an X unit vector into a Y unit vector" $ do
       testScene <- osg $ do
             rotateZ 90 (translate (V3 1 0 0) camera)
       let camNode = findCamera testScene 0
-      -- TODO: the rotation matrix is super imprecise, this rounding shouldn't
-      -- be necessary.
-      fmap round ((getTransformTo testScene camNode !* origin) ^. _xyz)
-        `shouldBe` V3 0 1 0
+      (getTransformTo testScene camNode !* origin) ^. _xyz
+        `shouldBeApproximately` V3 0 1 0
 
 
   describe "bounds" $ do
