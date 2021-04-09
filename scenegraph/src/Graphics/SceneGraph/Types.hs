@@ -10,36 +10,39 @@ import           Linear               (M44, V2 (..), V3 (..), V4 (..))
 
 
 -- | Scene Graph based on a Graph
-type SceneGraph = G.Gr SceneNode SceneLabel
+type SceneGraph g = G.Gr (SceneNode g) SceneEdge
 
--- | Empty label for scene graphs.
-data SceneLabel = EmptyLabel
+-- | Empty edge label for scene graphs.
+data SceneEdge = DefaultEdge
   deriving (Eq, Ord)
 
-instance Show SceneLabel where
+instance Show SceneEdge where
   show = const "()"
 
 -- | Scene Node. Made up of data and maybe a widget
-data SceneNode = SceneNode (Node, String) SceneData deriving Show
+data SceneNode g =
+  SceneNode (Node, String) (SceneData g)
+  deriving (Show)
 
 -- | Creates an empty scene graph
-nullNode :: Node -> SceneNode
+nullNode :: Node -> SceneNode g
 nullNode n = SceneNode (n, show n) Group
 
 -- | Creates a scene graph containing the supplied node
-trivialGr :: SceneNode -> SceneGraph
+trivialGr :: SceneNode g -> SceneGraph g
 trivialGr n = ([], 1, n, []) & G.empty
 
 -- | Scene Graph with indicate root node
-type Scene = (SceneGraph, Node)
+type Scene g = (SceneGraph g, Node)
 
 -- | View port refers to a camera node and has its own Scene which is drawn flattened
-data Viewport = Viewport Node Scene
+data Viewport g =
+  Viewport Node (Scene g)
 
 -- | A scene with a number of view ports looking onto it.
-type World = (Scene, [Viewport])
+type World g = (Scene g, [Viewport g])
 
-instance Eq SceneNode where
+instance Eq (SceneNode g) where
   (SceneNode n _) == (SceneNode m _) = m == n
 
 data KeyState
@@ -47,34 +50,34 @@ data KeyState
   | Down
   deriving (Eq, Show)
 
-type ClickHandler = Scene -> KeyState -> IO SceneGraph
-type DragHandler = Scene -> V3 Float -> IO (SceneGraph, Float)
+type ClickHandler g = Scene g -> KeyState -> IO (SceneGraph g)
+type DragHandler g = Scene g -> V3 Float -> IO (SceneGraph g, Float)
 
-instance Show ClickHandler where
+instance Show (ClickHandler g) where
   show _ = "<a ClickHandler>"
 
-instance Show DragHandler where
+instance Show (DragHandler g) where
   show _ = "<a DragHandler>"
 
 type Sink a = a -> IO ()
 
 -- | Scene Node Data.
-data SceneData
+data SceneData g
   = Group
-  | Geode Geometry
+  | Geode T.Text g
   | LOD
   | MatrixTransform (M44 Float)
   | Switch Int
   | Material Phong
-  | Handler (Maybe (ClickHandler, Sink ())) (Maybe (DragHandler, Sink Float))
+  | Handler (Maybe (ClickHandler g, Sink ())) (Maybe (DragHandler g, Sink Float))
   | Light
   | Camera
   | Texture FilePath
   | Text T.Text
 
-instance Show SceneData where
+instance Show (SceneData g) where
   show Group               = "Group"
-  show (Geode _)           = "Geode"
+  show (Geode n _)         = "Geode " ++ show n
   show LOD                 = "LOD"
   show (MatrixTransform _) = "MatrixTransform"
   show (Switch i)          = "Switch " ++ show i
@@ -141,3 +144,19 @@ colour2Phong c = def
   , phSpecular = Just $ V4 0.4 0.4 0.4 1.0
   , phShine = Just 5.0
   }
+
+
+llab :: SceneGraph g -> Node -> SceneNode g
+llab gr n =
+  case G.lab gr n of
+    Nothing -> error $ "Should not happen gr=" ++ show gr ++ "n = " ++ show n
+    Just n' -> n'
+
+
+mapSceneData :: (SceneData g1 -> SceneData g2) -> SceneGraph g1 -> SceneGraph g2
+mapSceneData f =
+  G.nmap (\(SceneNode sn sd) -> SceneNode sn (f sd))
+
+foldSceneData :: (SceneData g -> a -> a) -> a -> SceneGraph g -> a
+foldSceneData f =
+  G.ufold (\(_, _, SceneNode _ sd, _) acc -> f sd acc)

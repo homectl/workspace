@@ -1,14 +1,17 @@
 {-# LANGUAGE DeriveFunctor       #-}
 {-# LANGUAGE NamedFieldPuns      #-}
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module LambdaCNC.Pipeline where
 
 import           Control.Applicative               (liftA2)
+import           Control.Lens                      ((^.))
 import           Control.Lens.Indexed              (iforM_)
 import           Control.Monad                     (foldM_, forM, forM_)
 import           Control.Monad.IO.Class            (liftIO)
 import           Data.Foldable                     (toList)
+import           Data.Functor                      (void)
 import           Data.Int                          (Int32)
 import qualified Data.Time.Clock                   as Time
 import           Data.Word                         (Word32)
@@ -16,6 +19,8 @@ import           Graphics.GPipe
 import qualified Graphics.GPipe.Context.GLFW.Input as Input
 import qualified Graphics.GPipe.Engine.STL         as STL
 import           Graphics.GPipe.Engine.TimeIt      (timeIt)
+import           Graphics.SceneGraph               ((<+>))
+import qualified Graphics.SceneGraph               as SG
 import           LambdaCNC.Config                  (GlobalUniformBuffer,
                                                     GlobalUniforms (..),
                                                     LightUniforms (..),
@@ -144,6 +149,7 @@ data Shaders os = Shaders
 data PipelineData os = PipelineData
     { startTime  :: Time.UTCTime
     , solids     :: Solids (Shaders.Buffer3D os)
+    , scene      :: SG.Scene (Shaders.Buffer3D os)
     , lightbulb  :: Shaders.Buffer3D os
     , quad       :: Shaders.Buffer2D os
     , globalUni  :: GlobalUniformBuffer os
@@ -199,14 +205,14 @@ initData win = do
     writeTexture2D tex 0 0 (V2 8 8) (cycle (take 8 whiteBlack ++ take 8 blackWhite))
 
     let lights = LightInfo.fromList
-            [ LightUniforms (V3 (-60000) (-60000) 30000) (V3 0.7 0.0 0.0)
-            , LightUniforms (V3 (-60000)   60000  30000) (V3 0.0 0.7 0.0)
-            , LightUniforms (V3   60000  (-60000) 30000) (V3 0.0 0.0 0.7)
-            , LightUniforms (V3   60000    60000  30000) (V3 0.3 0.3 0.0)
-            , LightUniforms (V3   80000        0  30000) (V3 0.0 0.3 0.3)
-            , LightUniforms (V3       0    80000  30000) (V3 0.3 0.0 0.3)
-            , LightUniforms (V3 (-80000)       0  30000) (V3 0.3 0.3 0.3)
-            , LightUniforms (V3       0  (-80000) 30000) (V3 0.8 0.5 0.3)
+            [ LightUniforms (V3 (-60000) (-60000) 30000) (V3 1.3 1.0 1.0)
+            -- , LightUniforms (V3 (-60000)   60000  30000) (V3 0.0 0.7 0.0)
+            -- , LightUniforms (V3   60000  (-60000) 30000) (V3 0.0 0.0 0.7)
+            -- , LightUniforms (V3   60000    60000  30000) (V3 0.3 0.3 0.0)
+            -- , LightUniforms (V3   80000        0  30000) (V3 0.0 0.3 0.3)
+            -- , LightUniforms (V3       0    80000  30000) (V3 0.3 0.0 0.3)
+            -- , LightUniforms (V3 (-80000)       0  30000) (V3 0.3 0.3 0.3)
+            -- , LightUniforms (V3       0  (-80000) 30000) (V3 0.8 0.5 0.3)
             ]
     shadowMaps <- sequence $ (`fmap` lights) $ const $
         Shaders.ShadowMap
@@ -237,6 +243,22 @@ initData win = do
         <*> timeIt "Compiling final frame shader..." (QuadShader.solidShader objectUni id win)
         <*> timeIt "Compiling lightbulb shader..." (BulbShader.solidShader globalUni lightUni)
         <*> timeIt "Compiling lightbulb wireframe shader..." (BulbShader.wireframeShader globalUni lightUni)
+
+    scene <- SG.osg $
+        -- SG.group =<< sequence
+        --     [ SG.mesh (objBed solids)
+        --     , SG.mesh (objGround solids)
+        --     , SG.translate (V3 0 0 24500) $ SG.mesh (objXAxis solids)
+        --     , SG.mesh (objYAxis solids)
+        --     , SG.mesh (objZAxis solids)
+        --     ]
+        SG.mesh "Ground" (objGround solids)
+        <+> SG.mesh "Bed" (objBed solids)
+        <+> SG.translate (V3 0 4000 24500) (
+            SG.mesh "XAxis" (objXAxis solids)
+            <+> SG.translate (V3 0 (-8000) 0) (SG.mesh "ZAxis" (objZAxis solids)))
+        <+> SG.translate (V3 0 0 5000) (SG.mesh "YAxis" (objYAxis solids))
+    liftIO $ void $ SG.toSvg scene "scene.svg"
 
     return PipelineData{..}
 
@@ -297,7 +319,8 @@ renderings win PipelineData{shaders=Shaders{..}, ..} PipelineState{stFrameBuffer
         clearImageColor imgTmp 0
 
     -- Render each object on the window frame buffer.
-    forM_ solidsWithPos $ \(solid, objectPos) -> do
+    SG.drawScene scene $ \mat solid -> do
+        let objectPos = (mat !* point (pure 0)) ^. _xyz
         writeBuffer objectUni 0 [defaultObjectUniforms{objectPos}]
         render $ do
             envColorFb <- getTexture2DImage fbColor 0

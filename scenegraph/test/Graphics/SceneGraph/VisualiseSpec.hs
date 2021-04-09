@@ -1,8 +1,5 @@
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# OPTIONS_GHC -Wno-deferred-type-errors #-}
-{-# OPTIONS_GHC -Wno-orphans #-}
-{-# OPTIONS_GHC -Wno-type-defaults #-}
 module Graphics.SceneGraph.VisualiseSpec where
 
 import           Test.Hspec                    (Spec, describe, it, shouldBe)

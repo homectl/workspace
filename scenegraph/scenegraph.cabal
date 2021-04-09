@@ -24,7 +24,9 @@ library
   hs-source-dirs: src
   exposed-modules:
       Graphics.SceneGraph.Basic
+      Graphics.SceneGraph.BoundingBox
       Graphics.SceneGraph.Matrix
+      Graphics.SceneGraph.Render
       Graphics.SceneGraph.Types
       Graphics.SceneGraph.Visualise
       Graphics.SceneGraph
@@ -47,6 +49,7 @@ test-suite testsuite
   main-is:          testsuite.hs
   other-modules:
       Graphics.SceneGraph.BasicSpec
+      Graphics.SceneGraph.BoundingBoxSpec
       Graphics.SceneGraph.VisualiseSpec
   ghc-options:
       -Wall

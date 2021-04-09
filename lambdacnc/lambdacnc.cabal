@@ -43,6 +43,7 @@ library
     , directory
     , filepath
     , lens
+    , scenegraph
     , time
 
 executable lambdacnc

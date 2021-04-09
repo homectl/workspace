@@ -18,15 +18,15 @@ import           Linear                          (M44, V4 (..))
 
 -------------------- Graph Visualisation --------------------
 
-instance GV.Labellable SceneNode where
+instance GV.Labellable (SceneNode g) where
   toLabelValue (SceneNode (_, _) sd) = GV.toLabelValue sd
 
-instance GV.Labellable SceneLabel where
-  toLabelValue EmptyLabel = GV.toLabelValue ""
+instance GV.Labellable SceneEdge where
+  toLabelValue DefaultEdge = GV.toLabelValue ""
 
-instance GV.Labellable SceneData where
+instance GV.Labellable (SceneData g) where
   toLabelValue Group               = GV.toLabelValue "Group"
-  toLabelValue (Geode _)           = GV.toLabelValue "Geode"
+  toLabelValue (Geode n _)         = GV.toLabelValue $ "Geode " ++ show n
   toLabelValue LOD                 = GV.toLabelValue "LOD"
   toLabelValue (MatrixTransform m) = GV.toLabelValue $ matrixToHtml m
   toLabelValue (Switch i)          = GV.toLabelValue $ "Switch " ++ show i
@@ -88,8 +88,8 @@ materialToHtml Phong{..} = table rows
       ]
 
 
-toDot :: Scene -> FilePath -> IO FilePath
+toDot :: Scene g -> FilePath -> IO FilePath
 toDot (sg, _) = GV.runGraphviz (GV.graphToDot GV.quickParams sg) GV.Canon
 
-toSvg :: Scene -> FilePath -> IO FilePath
+toSvg :: Scene g -> FilePath -> IO FilePath
 toSvg (sg, _) = GV.runGraphviz (GV.graphToDot GV.quickParams sg) GV.Svg
