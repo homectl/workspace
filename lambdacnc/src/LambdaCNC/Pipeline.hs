@@ -38,6 +38,7 @@ import qualified LambdaCNC.Shaders.LightInfo       as LightInfo
 import qualified LambdaCNC.Shaders.Quad            as QuadShader
 import qualified LambdaCNC.Shaders.Shadow          as ShadowShader
 import qualified LambdaCNC.Shaders.Solids          as SolidsShader
+import Data.Maybe (fromMaybe)
 
 --------------------------------------------------
 --
@@ -252,12 +253,12 @@ initData win = do
         --     , SG.mesh (objYAxis solids)
         --     , SG.mesh (objZAxis solids)
         --     ]
-        SG.mesh "Ground" (objGround solids)
+        SG.color SG.LightBlue (SG.mesh "Ground" (objGround solids))
         <+> SG.mesh "Bed" (objBed solids)
         <+> SG.translate (V3 0 4000 24500) (
             SG.mesh "XAxis" (objXAxis solids)
-            <+> SG.translate (V3 0 (-8000) 0) (SG.mesh "ZAxis" (objZAxis solids)))
-        <+> SG.translate (V3 0 0 5000) (SG.mesh "YAxis" (objYAxis solids))
+            <+> SG.translate (V3 0 (-8000) 0) (SG.color SG.Yellow $ SG.mesh "ZAxis" (objZAxis solids)))
+        <+> SG.translate (V3 0 0 5000) (SG.color SG.Red $ SG.mesh "YAxis" (objYAxis solids))
     liftIO $ void $ SG.toSvg scene "scene.svg"
 
     return PipelineData{..}
@@ -319,9 +320,10 @@ renderings win PipelineData{shaders=Shaders{..}, ..} PipelineState{stFrameBuffer
         clearImageColor imgTmp 0
 
     -- Render each object on the window frame buffer.
-    SG.drawScene scene $ \mat solid -> do
+    SG.drawScene scene $ \mat SG.Phong{..} solid -> do
         let objectPos = (mat !* point (pure 0)) ^. _xyz
-        writeBuffer objectUni 0 [defaultObjectUniforms{objectPos}]
+        let objectColor = fromMaybe (point (pure 1)) phDiffuse
+        writeBuffer objectUni 0 [defaultObjectUniforms{objectPos, objectColor}]
         render $ do
             envColorFb <- getTexture2DImage fbColor 0
             envBrightFb <- getTexture2DImage fbBright 0
@@ -375,7 +377,7 @@ renderings win PipelineData{shaders=Shaders{..}, ..} PipelineState{stFrameBuffer
         clearWindowDepth win 1
 
     -- Paint the final image onto a full screen quad.
-    writeBuffer objectUni 0 [ObjectUniforms{objectPos=V3 0 0 0, objectScale=1}]
+    writeBuffer objectUni 0 [defaultObjectUniforms{objectPos=V3 0 0 0, objectScale=1}]
     render $ do
         envPrimitives <- toPrimitiveArray TriangleList <$> newVertexArray quad
         let envTexture = fbTmp
@@ -383,7 +385,7 @@ renderings win PipelineData{shaders=Shaders{..}, ..} PipelineState{stFrameBuffer
 
     -- Render the shadow maps as small pictures on quads at the bottom of the screen.
     iforM_ shadowMaps $ \i Shaders.ShadowMap{..} -> do
-        writeBuffer objectUni 0 [ObjectUniforms{objectPos=V3 (1/5 * fromIntegral i) 0 0, objectScale=1/10}]
+        writeBuffer objectUni 0 [defaultObjectUniforms{objectPos=V3 (1/5 * fromIntegral i) 0 0, objectScale=1/10}]
         render $ do
             envPrimitives <- toPrimitiveArray TriangleList <$> newVertexArray quad
             let envTexture = shadowColorTex

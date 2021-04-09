@@ -16,7 +16,7 @@ spec = do
     it "should match the golden test file" $ do
       testScene <- osg $ do
             let cam = translate (V3 4 0 (-2)) camera
-            let lamp = rotateX 90 $ colour Yellow $ translate (V3 0 5 3) light
+            let lamp = rotateX 90 $ color Yellow $ translate (V3 0 5 3) light
             cam <+> lamp
       svgFile <- GV.toSvg testScene "test.svg"
       svgFile `shouldBe` "test.svg"

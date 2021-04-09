@@ -89,7 +89,7 @@ materialToHtml Phong{..} = table rows
 
 
 toDot :: Scene g -> FilePath -> IO FilePath
-toDot (sg, _) = GV.runGraphviz (GV.graphToDot GV.quickParams sg) GV.Canon
+toDot (Scene sg _) = GV.runGraphviz (GV.graphToDot GV.quickParams sg) GV.Canon
 
 toSvg :: Scene g -> FilePath -> IO FilePath
-toSvg (sg, _) = GV.runGraphviz (GV.graphToDot GV.quickParams sg) GV.Svg
+toSvg (Scene sg _) = GV.runGraphviz (GV.graphToDot GV.quickParams sg) GV.Svg

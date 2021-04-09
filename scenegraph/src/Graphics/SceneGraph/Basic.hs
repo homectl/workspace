@@ -10,11 +10,11 @@ import qualified Data.Graph.Inductive       as G
 import qualified Data.Text                  as T
 import           Graphics.SceneGraph.Matrix (rotateM, rotatePostM, scaleM,
                                              translateM, translatePostM)
-import           Graphics.SceneGraph.Types  (ClickHandler, Colour, DragHandler,
-                                             KeyState (Down), Phong, Scene,
+import           Graphics.SceneGraph.Types  (ClickHandler, Color, DragHandler,
+                                             KeyState (Down), Phong, Scene (..),
                                              SceneData (..), SceneEdge (..),
                                              SceneGraph, SceneNode (..),
-                                             colour2Phong, llab, nullNode)
+                                             colorToPhong, llab, nullNode)
 import           Linear                     (M44, R1 (..), R3 (..), V3 (..),
                                              (!*!))
 import qualified Linear                     as L
@@ -59,7 +59,7 @@ runOSGShow f = do
 osg :: Monad m => OSGSceneT m g -> m (Scene g)
 osg f = do
   (n, state, _) <- runOSG emptyState f
-  return (graph state, idd n)
+  return $ Scene (graph state) (idd n)
 
 
 idd :: SceneNode g -> Node
@@ -299,9 +299,9 @@ translatePostSG' sg nde v = transformSG' sg nde (translatePostM v)
 rotatePostSG' :: SceneGraph g -> Node -> V3 Float -> Float -> SceneGraph g
 rotatePostSG' sg nde v theta = transformSG' sg nde (rotatePostM theta v)
 
--- | Add colour to a node
-colour ::  Monad m => Colour -> OSGSceneT m g -> OSGSceneT m g
-colour c n = colourSG n (const $ colour2Phong c) (colour c)
+-- | Add color to a node
+color ::  Monad m => Color -> OSGSceneT m g -> OSGSceneT m g
+color c n = colourSG n (const $ colorToPhong c) (color c)
 
 -- | Label a node
 label :: Monad m => OSGSceneT m g -> String -> OSGSceneT m g
@@ -362,7 +362,7 @@ handler2 n (f,g) = do
 
 -- | Create a DragHandler
 dragHandler :: DragHandler g
-dragHandler (sg,nde) vec = do
+dragHandler (Scene sg nde) vec = do
   let tnde = head $ G.pre sg nde
       sg' = translateSG' sg tnde vec
       SceneNode _ (MatrixTransform m) = llab sg' tnde
@@ -371,7 +371,7 @@ dragHandler (sg,nde) vec = do
 
 -- | Create a ClickHandler
 switchHandler :: ClickHandler g
-switchHandler (sg, nde) ev = do
+switchHandler (Scene sg nde) ev = do
   let sn = head $ G.suc sg nde
       sn' = llab sg sn
   let sg' = switchNode sn' (if ev == Down then 1 else 0) sg
@@ -422,7 +422,7 @@ group (n:ns) =
   addNode n [] <+> n'
 
 emptyScene :: Scene g
-emptyScene = (G.empty, 0)
+emptyScene = Scene G.empty 0
 
 
 getHitAction :: Scene g -> (Int -> IO ())
@@ -474,35 +474,35 @@ findTextDown gr num =
 
 -- | Handle some event
 handleClickEvent :: Scene g -> Int -> KeyState -> IO (Scene g, Maybe (Scene g), Maybe (SceneGraph g -> SceneGraph g))
-handleClickEvent (gr, start) n ks = do
+handleClickEvent (Scene gr start) n ks = do
   -- putStrLn $ "handle event" ++ show ks
   case findHandler gr n of
-    Just (SceneNode (nodeId, _) (Handler (Just (fn, snk)) _ )) -> do
-      sg <-  fn (gr, nodeId) ks
+    Just (SceneNode (nid, _) (Handler (Just (fn, snk)) _ )) -> do
+      sg <- fn (Scene gr nid) ks
       case ks of
         Down -> snk ()
         _    -> return ()
-      return ((sg, start), Just (sg, nodeId), Nothing)
-    _ -> return ((gr, start), Nothing, Nothing)
+      return (Scene sg start, Just (Scene sg nid), Nothing)
+    _ -> return (Scene gr start, Nothing, Nothing)
 
 emptyOSG :: SceneGraph g
 emptyOSG = G.empty
 
 findCamera :: Scene g -> Int -> Node
-findCamera (gr, _) _ = head . filter (\x ->
+findCamera (Scene gr _) _ = head . filter (\x ->
     case llab gr x of
       SceneNode _ Camera -> True
       _                  -> False) . G.nodes $ gr
 
 findCameraPath :: Scene g -> Int -> G.Path
-findCameraPath (gr, nde) i =
-  let nde2 = findCamera (gr, nde) i in
+findCameraPath (Scene gr nde) i =
+  let nde2 = findCamera (Scene gr nde) i in
   G.esp nde nde2 gr
 
 
 -- | Return the matrix got by traversing down the Node
 getTransformTo :: Scene g -> Node -> M44 Float
-getTransformTo (gr, start) nde =
+getTransformTo (Scene gr start) nde =
   foldr trans L.identity $ G.esp start nde gr
   where
     trans n mat1 =

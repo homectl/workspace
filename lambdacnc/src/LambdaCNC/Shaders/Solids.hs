@@ -105,11 +105,11 @@ diffuseLight fragPos normal lightPos lightColor =
     diffuse
 
 
-frag :: GlobalUniforms FFloat -> LightInfo FragLight -> (V2 FFloat -> FFloat) -> SolidShaderAttachment F -> (V4 FFloat, V4 FFloat)
-frag GlobalUniforms{..} lights texSamp (uv, fragPos, normal, fragPosLightSpace) =
+frag :: GlobalUniforms FFloat -> ObjectUniforms FFloat -> LightInfo FragLight -> (V2 FFloat -> FFloat) -> SolidShaderAttachment F -> (V4 FFloat, V4 FFloat)
+frag GlobalUniforms{..} ObjectUniforms{..} lights texSamp (uv, fragPos, normal, fragPosLightSpace) =
     (toV4 1 fragColor, toV4 1 brightColor)
   where
-    objectColor = pure 1 ^* texSamp (uv ^/ 100000)
+    objColor = objectColor ^* texSamp (uv ^/ 100000)
 
     diffuse =
         sum $ liftA2
@@ -120,7 +120,7 @@ frag GlobalUniforms{..} lights texSamp (uv, fragPos, normal, fragPosLightSpace) 
             lights
             fragPosLightSpace
 
-    fragColor = exposure *^ diffuse * objectColor
+    fragColor = exposure *^ diffuse * (objColor ^. _xyz)
     brightness = dot fragColor (V3 0.2126 0.7152 0.0722)
     brightColor = ifThenElse' (brightness >* 1.0) fragColor 0
 
@@ -140,6 +140,7 @@ solidShader globalUni objectUni lightUni shadowTextures tex = compileShader $ do
     vertLight <- sequence $ liftA2 (\_ i -> getUniform (const (lightUni, i))) shadowTextures $ LightInfo.fromList [0..]
 
     fragGlobal <- getUniform (const (globalUni, 0))
+    fragObject <- getUniform (const (objectUni, 0))
     fragLight <- sequence $ liftA2 (\_ i -> getUniform (const (lightUni, i))) shadowTextures $ LightInfo.fromList [0..]
 
     primitiveStream <- fmap (vert vertGlobal vertObject vertLight) <$>
@@ -153,7 +154,7 @@ solidShader globalUni objectUni lightUni shadowTextures tex = compileShader $ do
             (fmap (\sampler -> sample2D sampler SampleAuto Nothing Nothing) shadowSamplers)
     let texSamp = sample2D texSampler SampleAuto Nothing Nothing
 
-    fragmentStream <- withRasterizedInfo (\a r -> (frag fragGlobal shadowSamp texSamp a, rasterizedFragCoord r ^. _z)) <$>
+    fragmentStream <- withRasterizedInfo (\a r -> (frag fragGlobal fragObject shadowSamp texSamp a, rasterizedFragCoord r ^. _z)) <$>
         rasterize (\env -> (Front, PolygonFill, ViewPort (V2 0 0) (envScreenSize env), DepthRange 0 1)) primitiveStream
 
     drawDepth (\s -> (NoBlending, envDepthFb s, DepthOption Less True)) fragmentStream $

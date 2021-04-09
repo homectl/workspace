@@ -4,14 +4,14 @@
 {-# OPTIONS_GHC -Wno-type-defaults #-}
 module Graphics.SceneGraph.BasicSpec where
 
-import           Test.Hspec                (Spec, describe, it,
-                                            shouldBe, shouldSatisfy)
-import           Test.Hspec.QuickCheck     (prop)
-import           Test.QuickCheck           (Arbitrary (arbitrary))
+import           Test.Hspec                      (Spec, describe, it, shouldBe,
+                                                  shouldSatisfy)
+import           Test.Hspec.QuickCheck           (prop)
+import           Test.QuickCheck                 (Arbitrary (arbitrary))
 
 import           Graphics.SceneGraph.Basic
 import           Graphics.SceneGraph.BoundingBox
-import           Linear                    (V3 (..))
+import           Linear                          (V3 (..))
 
 
 instance Arbitrary a => Arbitrary (V3 a) where

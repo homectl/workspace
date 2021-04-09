@@ -20,8 +20,10 @@ instance Show SceneEdge where
   show = const "()"
 
 -- | Scene Node. Made up of data and maybe a widget
-data SceneNode g =
-  SceneNode (Node, String) (SceneData g)
+data SceneNode g = SceneNode
+  { nodeId   :: (Node, String)
+  , nodeData :: SceneData g
+  }
   deriving (Show)
 
 -- | Creates an empty scene graph
@@ -33,14 +35,22 @@ trivialGr :: SceneNode g -> SceneGraph g
 trivialGr n = ([], 1, n, []) & G.empty
 
 -- | Scene Graph with indicate root node
-type Scene g = (SceneGraph g, Node)
+data Scene g = Scene
+  { sceneGraph :: SceneGraph g
+  , sceneRoot  :: Node
+  }
 
 -- | View port refers to a camera node and has its own Scene which is drawn flattened
-data Viewport g =
-  Viewport Node (Scene g)
+data Viewport g = Viewport
+  { viewCamera :: Node
+  , viewScene  :: Scene g
+  }
 
 -- | A scene with a number of view ports looking onto it.
-type World g = (Scene g, [Viewport g])
+data World g = World
+  { worldScene     :: Scene g
+  , worldViewports :: [Viewport g]
+  }
 
 instance Eq (SceneNode g) where
   (SceneNode n _) == (SceneNode m _) = m == n
@@ -95,8 +105,8 @@ data Geometry
   | Mesh3D [(V3 Float, V3 Float)]
   deriving (Eq, Show)
 
--- | Simple colours
-data Colour
+-- | Simple colors
+data Color
   = Grey
   | JustWhite
   | Red
@@ -108,18 +118,18 @@ data Colour
   | Yellow
   deriving (Show, Eq)
 
-mapColour :: Colour -> V4 Float
-mapColour Red       = V4 1 0 0 1
-mapColour Green     = V4 0 1 0 1
-mapColour Blue      = V4 0 0 1 1
-mapColour Grey      = V4 0.4 0.4 0.4 1
-mapColour LightBlue = V4 0.3 0.3 1.0 1
-mapColour Black     = V4 0 0 0 1
-mapColour White     = V4 1 1 1 1
-mapColour Yellow    = V4 1 1 0 1
-mapColour JustWhite = V4 0.9 0.9 0.9 1
+mapColor :: Color -> V4 Float
+mapColor Red       = V4 1 0 0 1
+mapColor Green     = V4 0 1 0 1
+mapColor Blue      = V4 0 0 1 1
+mapColor Grey      = V4 0.4 0.4 0.4 1
+mapColor LightBlue = V4 0.3 0.3 1.0 1
+mapColor Black     = V4 0 0 0 1
+mapColor White     = V4 1 1 1 1
+mapColor Yellow    = V4 1 1 0 1
+mapColor JustWhite = V4 0.9 0.9 0.9 1
 
--- | Phong colouring
+-- | Phong lighting
 data Phong = Phong
   { phEmission     :: Maybe (V4 Float)
   , phAmbient      :: Maybe (V4 Float)
@@ -136,11 +146,11 @@ data Phong = Phong
 instance Default Phong where
   def = Phong Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
 
--- | Convert from simple colour to Phong
-colour2Phong :: Colour -> Phong
-colour2Phong c = def
-  { phDiffuse = Just $ mapColour c
-  , phAmbient = Just $ mapColour c
+-- | Convert from simple color to Phong
+colorToPhong :: Color -> Phong
+colorToPhong c = def
+  { phDiffuse = Just $ mapColor c
+  , phAmbient = Just $ mapColor c
   , phSpecular = Just $ V4 0.4 0.4 0.4 1.0
   , phShine = Just 5.0
   }
@@ -151,12 +161,3 @@ llab gr n =
   case G.lab gr n of
     Nothing -> error $ "Should not happen gr=" ++ show gr ++ "n = " ++ show n
     Just n' -> n'
-
-
-mapSceneData :: (SceneData g1 -> SceneData g2) -> SceneGraph g1 -> SceneGraph g2
-mapSceneData f =
-  G.nmap (\(SceneNode sn sd) -> SceneNode sn (f sd))
-
-foldSceneData :: (SceneData g -> a -> a) -> a -> SceneGraph g -> a
-foldSceneData f =
-  G.ufold (\(_, _, SceneNode _ sd, _) acc -> f sd acc)

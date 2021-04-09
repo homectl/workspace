@@ -26,7 +26,7 @@ union :: Box Float -> Box Float -> Box Float
 union (v1,v2) (w1,w2) = (liftA2 min v1 w1, liftA2 max v2 w2)
 
 bounds :: Scene g -> Box Float
-bounds (gr, nde) =
+bounds (Scene gr nde) =
   let sn = llab gr nde in
   boundsSceneNode gr sn
 
@@ -38,7 +38,7 @@ boundsSceneNode gr (SceneNode (nde, _) (MatrixTransform mt)) =
 
 boundsSceneNode gr (SceneNode (nde, _) (Switch i)) =
   let nde' = G.suc gr nde !! i in
-  bounds (gr, nde')
+  bounds (Scene gr nde')
 
 boundsSceneNode _ (SceneNode _  (Geode _ _)) = smallBox
 
@@ -48,5 +48,5 @@ boundsOfChildren :: SceneGraph g -> Node -> Box Float
 boundsOfChildren gr =
   fromMaybe smallBox . foldr f Nothing . G.suc gr
   where
-    f nde Nothing  = Just $ bounds (gr, nde)
-    f nde (Just b) = Just $ b `union` bounds (gr, nde)
+    f nde Nothing  = Just $ bounds (Scene gr nde)
+    f nde (Just b) = Just $ b `union` bounds (Scene gr nde)

@@ -6,10 +6,9 @@ module LambdaCNC.Config where
 
 import           Control.Applicative          (Applicative (..))
 import           Control.Arrow                (returnA)
-import           Data.Default                 (Default (..))
 import           Graphics.GPipe               (B, Buffer, BufferFormat (..),
                                                Uniform, UniformInput (..),
-                                               V2 (..), V3 (..))
+                                               V2 (..), V3 (..), V4 (..))
 import qualified Graphics.GPipe.Engine.TimeIt as TimeIt
 
 
@@ -70,6 +69,7 @@ defaultGlobalUniforms = GlobalUniforms
 
 data ObjectUniforms a = ObjectUniforms
     { objectPos :: V3 a
+    , objectColor :: V4 a
     , objectScale :: a
     }
 
@@ -77,19 +77,20 @@ type ObjectUniformBuffer os = Buffer os (Uniform (ObjectUniforms (B Float)))
 
 instance UniformInput a => UniformInput (ObjectUniforms a) where
     type UniformFormat (ObjectUniforms a) x = (ObjectUniforms (UniformFormat a x))
-    toUniform = proc ~(ObjectUniforms a b) -> do
-        (a', b') <- toUniform -< (a, b)
-        returnA -< ObjectUniforms a' b'
+    toUniform = proc ~(ObjectUniforms a b c) -> do
+        (a', b', c') <- toUniform -< (a, b, c)
+        returnA -< ObjectUniforms a' b' c'
 
 instance BufferFormat a => BufferFormat (ObjectUniforms a) where
     type HostFormat (ObjectUniforms a) = ObjectUniforms (HostFormat a)
-    toBuffer = proc ~(ObjectUniforms a b) -> do
-        (a', b') <- toBuffer -< (a, b)
-        returnA -< ObjectUniforms a' b'
+    toBuffer = proc ~(ObjectUniforms a b c) -> do
+        (a', b', c') <- toBuffer -< (a, b, c)
+        returnA -< ObjectUniforms a' b' c'
 
-defaultObjectUniforms :: (Num a, Default a) => ObjectUniforms a
+defaultObjectUniforms :: Num a => ObjectUniforms a
 defaultObjectUniforms = ObjectUniforms
-    { objectPos = pure def
+    { objectPos = pure 0
+    , objectColor = pure 1
     , objectScale = 1
     }
 
