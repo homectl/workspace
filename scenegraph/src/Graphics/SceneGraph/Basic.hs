@@ -1,6 +1,3 @@
-{-# LANGUAGE FlexibleInstances    #-}
-{-# LANGUAGE ScopedTypeVariables  #-}
-{-# LANGUAGE TypeSynonymInstances #-}
 module Graphics.SceneGraph.Basic where
 
 import           Control.Applicative        (liftA2)
@@ -9,175 +6,47 @@ import           Control.Monad.Identity     (Identity)
 import           Control.Monad.State        (lift)
 import qualified Control.Monad.State        as ST
 import           Data.Default               (Default (..))
-import           Data.Graph.Inductive       (DynGraph ((&)), Gr,
-                                             Graph (empty, match), Node, Path,
-                                             esp, lab, nodes, pre, suc)
-import           Data.Graph.Inductive.Dot   (fglToDot, showDot)
-import           Data.IntMap                (IntMap)
-import qualified Data.IntMap                as IntMap
+import           Data.Graph.Inductive       (Node, (&))
+import qualified Data.Graph.Inductive       as G
 import           Data.Maybe                 (fromMaybe)
 import qualified Data.Text                  as T
-import           Graphics.SceneGraph.Matrix
-import           Linear                     (M44, V2 (..), V3 (..), V4 (..), _x,
-                                             _xyz, _z, (!*!), (!*))
+import           Graphics.SceneGraph.Matrix (rotateM, rotatePostM, scaleM,
+                                             translateM, translatePostM)
+import           Graphics.SceneGraph.Types  (ClickHandler, Colour, DragHandler,
+                                             KeyState (Down), Phong, Scene,
+                                             SceneData (..), SceneGraph,
+                                             SceneLabel (..), SceneNode (..),
+                                             colour2Phong, nullNode)
+import           Linear                     (M44, R1 (..), R3 (..), V3 (..),
+                                             (!*!), (!*))
 import qualified Linear                     as L
 
-
--- | Scene Graph based on a Graph
-type SceneGraph = Gr SceneNode ()
-
--- | Scene Node. Made up of data and maybe a widget
-data SceneNode = SceneNode (Node, String) SceneData deriving Show
-
--- | Creates an empty scene graph
-nullNode :: Node -> SceneNode
-nullNode n = SceneNode (n, show n) Group
-
--- | Creates a scene graph containing the supplied node
-trivialGr :: SceneNode -> SceneGraph
-trivialGr n = ([], 1, n, []) & empty
-
--- | Scene Graph with indicate root node
-type Scene = (SceneGraph, Node)
-
-visualise :: Scene -> String
-visualise = showDot . fglToDot . fst
-
--- | View port refers to a camera node and has its own Scene which is drawn flattened
-data Viewport = Viewport Node Scene
-
--- | A scene with a number of view ports looking onto it.
-type World = (Scene, [Viewport])
-
-instance Eq SceneNode where
-  (SceneNode n _) == (SceneNode m _) = m == n
-
-data KeyState
-  = Up
-  | Down
-  deriving (Eq, Show)
-
-type ClickHandler = Scene -> KeyState -> IO SceneGraph
-type DragHandler = Scene -> V3 Float -> IO (SceneGraph, Float)
-
-instance Show ClickHandler where
-  show _ = "<a ClickHandler>"
-
-instance Show DragHandler where
-  show _ = "<a DragHandler>"
-
-type Sink a = a -> IO ()
-
--- | Scene Node Data.
-data SceneData
-  = Group
-  | Geode Geometry
-  | LOD
-  | MatrixTransform (M44 Float)
-  | Switch Int
-  | Material Phong
-  | Handler (Maybe (ClickHandler, Sink ())) (Maybe (DragHandler, Sink Float))
-  | Light
-  | Camera
-  | Texture FilePath
-  | Text T.Text
-
-instance Show SceneData where
-  show Group               = "Group"
-  show (Geode _)           = "Geode"
-  show LOD                 = "LOD"
-  show (MatrixTransform _) = "MatrixTransform"
-  show (Switch i)          = "Switch " ++ show i
-  show (Material _)        = "Material"
-  show (Handler _ _)       = "Handler"
-  show Light               = "Light"
-  show Camera              = "Camera"
-  show (Texture _)         = "Texture"
-  show (Text t)            = "Text " ++ T.unpack t
-
--- | Geometry. Either a basic GL object or a mesh.
---
-data Geometry
-  = Mesh2D [V2 Float]
-  | Mesh3D [(V3 Float, V3 Float)]
-  deriving (Eq, Show)
-
--- | Simple colours
-data Colour
-  = Grey
-  | JustWhite
-  | Red
-  | Green
-  | Blue
-  | Black
-  | LightBlue
-  | White
-  | Yellow
-  deriving (Show, Eq)
-
-mapColour :: Colour -> V4 Float
-mapColour Red       = V4 1 0 0 1
-mapColour Green     = V4 0 1 0 1
-mapColour Blue      = V4 0 0 1 1
-mapColour Grey      = V4 0.4 0.4 0.4 1
-mapColour LightBlue = V4 0.3 0.3 1.0 1
-mapColour Black     = V4 0 0 0 1
-mapColour White     = V4 1 1 1 1
-mapColour Yellow    = V4 1 1 0 1
-mapColour JustWhite = V4 0.9 0.9 0.9 1
-
--- | Phong colouring
-data Phong = Phong
-  { emissionPh     :: Maybe (V4 Float)
-  , ambientPh      :: Maybe (V4 Float)
-  , diffusePh      :: Maybe (V4 Float)
-  , specularPh     :: Maybe (V4 Float)
-  , shinePh        :: Maybe Float
-  , reflectivePh   :: Maybe (V4 Float)
-  , reflectivityPh :: Maybe Float
-  , transparentPh  :: Maybe (V4 Float)
-  , tranparencyPh  :: Maybe Float
-  }
-  deriving (Eq, Show)
-
-instance Default Phong where
-  def = Phong Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing Nothing
-
--- | Convert from simple colour to Phong
-colour2Phong :: Colour -> Phong
-colour2Phong c = def
-  { diffusePh = Just $ mapColour c
-  , ambientPh = Just $ mapColour c
-  , specularPh = Just $ V4 0.4 0.4 0.4 1.0
-  , shinePh = Just 5.0
-  }
 
 -- | Holds state of graph as it is built.
 data OSGState = OSGState
   { graph     :: SceneGraph
   , context   :: [SceneNode]
-  , heap      :: IntMap SceneNode
   , startNode :: Int
   , root      :: Int
   }
   deriving (Eq, Show)
 
 instance Default OSGState where
-  def = OSGState empty [] IntMap.empty 0 0
+  def = OSGState emptyOSG [] 0 0
 
 emptyState :: OSGState
 emptyState = def
 
 -- | The OSG monad within which construction of scene graphs occur.
 -- was 'type OSGT m = ErrorT Throwable (ST.StateT OSGState m)'
-type OSGT m = (ST.StateT OSGState m)
+type OSGT m = ST.StateT OSGState m
 
 type OSG = OSGT Identity
 
 -- | Create and run a OSG monad to return a scene graph and root node.
 runOSG :: Monad m => OSGState -> OSGT m SceneNode -> m (SceneNode, OSGState, Node)
 runOSG state f = do
-  (ret, state') <- ST.runStateT  f state
+  (ret, state') <- ST.runStateT f state
   return (ret, state', root state')
 
 
@@ -215,7 +84,7 @@ addNullNode :: Monad m => OSGT m SceneNode
 addNullNode = addNodeBasic $ nullNode 0
 
 -- | Add a node to a scene graph with supplied children
-addNode :: Monad m => SceneNode -> [((), Node)] -> OSGT m SceneNode
+addNode :: Monad m => SceneNode -> [(SceneLabel, Node)] -> OSGT m SceneNode
 addNode nde children = do
   s <- ST.get
   let (sn, s') = addNode' s nde children
@@ -223,12 +92,12 @@ addNode nde children = do
   return sn
 
 -- | Non-monadic form of addNode
-addNode' :: OSGState -> SceneNode -> [((), Node)] -> (SceneNode, OSGState)
+addNode' :: OSGState -> SceneNode -> [(SceneLabel, Node)] -> (SceneNode, OSGState)
 addNode' s (SceneNode (m, l) d) children =
   let n = if m == 0 then startNode s + 2 else m
       sn = SceneNode (n, l) d
       g' = ([], n, sn, children) & graph s
-      s' = s { graph = g', startNode = n,root=n }
+      s' = s { graph = g', startNode = n, root = n }
   in (sn, s')
 
 -- | Replace a Scene Node
@@ -246,10 +115,10 @@ replaceNode' gr nn = return $ replaceNode'' gr nn
 -- | Actually does the job of replacing node in a scene graph
 replaceNode'' :: SceneGraph -> SceneNode -> SceneGraph
 replaceNode'' gr nn =
-  let (m, gr') = match (idd nn) gr
-  in case m of
-      Nothing           -> gr
-      Just (i, n, _, o) -> (i, n, nn, o) & gr'
+  let (m, gr') = G.match (idd nn) gr in
+  case m of
+    Nothing           -> gr
+    Just (i, n, _, o) -> (i, n, nn, o) & gr'
 
 -- | Run the monad but keep it in the family.
 runOSGL :: Monad m => OSGState -> OSGT m SceneNode -> OSGT m (SceneNode, OSGState, Node)
@@ -357,35 +226,35 @@ fi = fromIntegral
 --  where d = 0.66 * r
 
 -- | Scale a node by equal amounts in all directions
-scaleS :: Monad m => OSGT m SceneNode -> Float -> OSGT m SceneNode
-scaleS n f = scale n (pure f)
+scaleS :: Monad m => Float -> OSGT m SceneNode -> OSGT m SceneNode
+scaleS f = scale (pure f)
 
 -- | Scale a node
-scale :: Monad m => OSGT m SceneNode -> V3 Float -> OSGT m SceneNode
-scale n v = transformSG n (scaleM v) (`scale` v)
+scale :: Monad m => V3 Float -> OSGT m SceneNode -> OSGT m SceneNode
+scale v = transformSG (scaleM v) (scale v)
 
 -- | Translate a node
-translate :: Monad m => OSGT m SceneNode -> V3 Float -> OSGT m SceneNode
-translate n v = transformSG n (translateM v) (`translate` v)
+translate :: Monad m => V3 Float -> OSGT m SceneNode -> OSGT m SceneNode
+translate v = transformSG (translateM v) (translate v)
 
 -- | Rotate a node by an angle around a vector.
-rotate :: Monad m => OSGT m SceneNode -> (Float, V3 Float) -> OSGT m SceneNode
-rotate n a@(theta, v) = transformSG n (rotateM theta v) (`rotate` a)
+rotate :: Monad m => (Float, V3 Float) -> OSGT m SceneNode -> OSGT m SceneNode
+rotate a@(theta, v) = transformSG (rotateM theta v) (rotate a)
 
 rad :: Float -> Float
 rad x = x * pi / 180
 
 -- | Rotate a node around X axis
-rotateX :: Monad m => OSGT m SceneNode -> Float -> OSGT m SceneNode
-rotateX n theta = rotate n (rad theta, V3 1 0 0 )
+rotateX :: Monad m => Float -> OSGT m SceneNode -> OSGT m SceneNode
+rotateX theta = rotate (rad theta, V3 1 0 0 )
 
 -- | Rotate a node around Y axis
-rotateY :: Monad m => OSGT m SceneNode -> Float -> OSGT m SceneNode
-rotateY n theta = rotate n (rad theta, V3 0 1 0)
+rotateY :: Monad m => Float -> OSGT m SceneNode -> OSGT m SceneNode
+rotateY theta = rotate (rad theta, V3 0 1 0)
 
 -- | Rotate a node around Z axis
-rotateZ :: Monad m => OSGT m SceneNode -> Float -> OSGT m SceneNode
-rotateZ n theta = rotate n (rad theta, V3 0 0 1)
+rotateZ :: Monad m => Float -> OSGT m SceneNode -> OSGT m SceneNode
+rotateZ theta = rotate (rad theta, V3 0 0 1)
 
 -- | Apply colour to the node
 colourSG :: Monad m => OSGT m SceneNode -> (Phong -> Phong) -> (OSGT m SceneNode -> OSGT m SceneNode) -> OSGT m SceneNode
@@ -396,19 +265,19 @@ colourSG sn action self = do
       let p' = action p
       replaceNode (SceneNode n (Material p'))
     _ -> do
-      let n'' = addNode (SceneNode (0, "") (Material def)) [((), i)]
+      let n'' = addNode (SceneNode (0, "") (Material def)) [(EmptyLabel, i)]
       self n''
 
 -- | Transform the node of a scene graph within the Monad with the supplied matrix transform
-transformSG :: Monad m => OSGT m SceneNode -> (M44 Float -> M44 Float) -> (OSGT m SceneNode -> OSGT m SceneNode) -> OSGT m SceneNode
-transformSG n action self = do
+transformSG :: Monad m => (M44 Float -> M44 Float) -> (OSGT m SceneNode -> OSGT m SceneNode) -> OSGT m SceneNode -> OSGT m SceneNode
+transformSG action self n = do
   (n1, i) <- runOSGL' n
   case n1 of
     (SceneNode num (MatrixTransform m)) -> do
       let m' = action m
       replaceNode (SceneNode num (MatrixTransform m'))
     _ -> do
-      let n'' = addNode (SceneNode (0, "") (MatrixTransform L.identity)) [((), i)]
+      let n'' = addNode (SceneNode (0, "") (MatrixTransform L.identity)) [(EmptyLabel, i)]
       self n''
 
 -- | Transform the node of a scene graph with the supplied matrix transform
@@ -427,8 +296,8 @@ rotatePostSG' :: SceneGraph -> Node -> V3 Float -> Float -> SceneGraph
 rotatePostSG' sg nde v theta = transformSG' sg nde (rotatePostM theta v)
 
 -- | Add colour to a node
-colour ::  Monad m => OSGT m SceneNode -> Colour -> OSGT m SceneNode
-colour n c = colourSG n (const $ colour2Phong c) (`colour` c)
+colour ::  Monad m => Colour -> OSGT m SceneNode -> OSGT m SceneNode
+colour c n = colourSG n (const $ colour2Phong c) (colour c)
 
 -- | Label a node
 label :: Monad m => OSGT m SceneNode -> String -> OSGT m SceneNode
@@ -441,7 +310,7 @@ label anode lbl = do
 texture :: Monad m => OSGT m SceneNode -> String -> OSGT m SceneNode
 texture n texName = do
   i <- snd <$> runOSGL' n
-  addNode (SceneNode (0, "") (Texture texName ))  [((), i)]
+  addNode (SceneNode (0, "") (Texture texName ))  [(EmptyLabel, i)]
 
 -- -- | Add Text
 text :: Monad m => T.Text -> OSGT m SceneNode
@@ -458,19 +327,19 @@ infixl 9 </>
 (<+>) ::  Monad m => OSGT m SceneNode -> OSGT m SceneNode -> OSGT m SceneNode
 (<+>) a b = do
   s <- ST.get
-  (a', s', i) <- runOSGL s a
-  (b', s'', j) <- runOSGL s' b
+  (_, s', i) <- runOSGL s a
+  (_, s'', j) <- runOSGL s' b
   ST.put s''
-  addNode (SceneNode (0,"") Group) [((), i), ((), j)]
+  addNode (SceneNode (0, "") Group) [(EmptyLabel, i), (EmptyLabel, j)]
 
 
 -- | Translate a node
 (<->) :: Monad m => OSGT m SceneNode -> V3 Float -> OSGT m SceneNode
-(<->) = translate
+(<->) = flip translate
 
 -- | Scale a node
 (</>) :: Monad m => OSGT m SceneNode -> V3 Float -> OSGT m SceneNode
-(</>) = scale
+(</>) = flip scale
 
 
 doNothing :: Monad m => p -> m ()
@@ -480,17 +349,17 @@ doNothing _ = return ()
 handler :: Monad m => OSGT m SceneNode -> ClickHandler -> OSGT m SceneNode
 handler n f = do
   (_, i) <- runOSGL' n
-  addNode (SceneNode (0, "") (Handler (Just (f, doNothing)) Nothing)) [((), i)]
+  addNode (SceneNode (0, "") (Handler (Just (f, doNothing)) Nothing)) [(EmptyLabel, i)]
 
 handler2 :: Monad m =>  OSGT m SceneNode -> (ClickHandler, DragHandler) -> OSGT m SceneNode
 handler2 n (f,g) = do
   (_, i) <- runOSGL' n
-  addNode (SceneNode (0, "") (Handler (Just (f, doNothing)) (Just (g, doNothing)))) [((), i)]
+  addNode (SceneNode (0, "") (Handler (Just (f, doNothing)) (Just (g, doNothing)))) [(EmptyLabel, i)]
 
 -- | Create a DragHandler
 dragHandler :: DragHandler
 dragHandler (sg,nde) vec = do
-  let tnde = head $ pre sg nde
+  let tnde = head $ G.pre sg nde
       sg' = translateSG' sg tnde vec
       SceneNode _ (MatrixTransform m) = llab sg' tnde
       posx = m^.(_x._z)
@@ -499,7 +368,7 @@ dragHandler (sg,nde) vec = do
 -- | Create a ClickHandler
 switchHandler :: ClickHandler
 switchHandler (sg, nde) ev = do
-  let sn = head $ suc sg nde
+  let sn = head $ G.suc sg nde
       sn' = llab sg sn
   let sg' = switchNode sn' (if ev == Down then 1 else 0) sg
   return sg'
@@ -525,7 +394,7 @@ switch' nde a b = do
   (_, s', i) <- runOSGL s a
   (_, s'', j) <- runOSGL s' b
   ST.put s''
-  addNode (SceneNode (nde, show nde) (Switch 0)) [((), i), ((), j)]
+  addNode (SceneNode (nde, show nde) (Switch 0)) [(EmptyLabel, i), (EmptyLabel, j)]
 
 
 -- -- | Get a strip mesh
@@ -549,7 +418,7 @@ makeGroup (n:ns) =
   addNode n [] <+> n'
 
 emptyScene :: Scene
-emptyScene = (empty, 0)
+emptyScene = (G.empty, 0)
 
 
 getHitAction :: Scene -> (Int -> IO ())
@@ -562,7 +431,7 @@ findHandler gr num =
       findUp num' =
         case llab gr num' of
           SceneNode (n, _) (Handler _ _) -> [llab gr n]
-          _                              -> concatMap findUp (pre gr num')
+          _                              -> concatMap findUp (G.pre gr num')
   in
   case findUp start of
     []    -> Nothing
@@ -575,7 +444,7 @@ findHandlerDown gr num =
   let findDown num' =
         case llab gr num' of
           SceneNode (n, _) (Handler _ _) -> [n]
-          _                              -> concatMap findDown (suc gr num')
+          _                              -> concatMap findDown (G.suc gr num')
   in
   case findDown num of
     []    -> error "findHandlerDown failed"
@@ -587,7 +456,7 @@ findTextDown gr num =
   let findDown num' =
         case llab gr num' of
           SceneNode (n, _) (Text _ ) -> [n]
-          _                          -> concatMap findDown (suc gr num')
+          _                          -> concatMap findDown (G.suc gr num')
   in
   case findDown num of
     []    -> error "findHandlerDown failed"
@@ -614,29 +483,29 @@ handleClickEvent (gr, start) n ks = do
 
 llab :: SceneGraph -> Node -> SceneNode
 llab gr n =
-  case lab gr n of
+  case G.lab gr n of
     Nothing -> error $ "Should not happen gr=" ++ show gr ++ "n = " ++ show n
     Just n' -> n'
 
 emptyOSG :: SceneGraph
-emptyOSG = empty
+emptyOSG = G.empty
 
 findCamera :: Scene -> Int -> Node
 findCamera (gr, _) _ = head . filter (\x ->
     case llab gr x of
       SceneNode _ Camera -> True
-      _                  -> False) . nodes $ gr
+      _                  -> False) . G.nodes $ gr
 
-findCameraPath :: Scene -> Int -> Path
+findCameraPath :: Scene -> Int -> G.Path
 findCameraPath (gr, nde) i =
-  let nde2 = findCamera (gr,nde) i in
-  esp nde nde2 gr
+  let nde2 = findCamera (gr, nde) i in
+  G.esp nde nde2 gr
 
 
 -- | Return the matrix got by traversing down the Node
 getTransformTo :: Scene -> Node -> M44 Float
 getTransformTo (gr, start) nde =
-  foldr trans L.identity $ esp start nde gr
+  foldr trans L.identity $ G.esp start nde gr
   where
     trans n mat1 =
       case llab gr n of
@@ -645,7 +514,11 @@ getTransformTo (gr, start) nde =
 
 
 getByLabel :: SceneGraph -> String -> Node
-getByLabel gr lbl = head $ filter (\n -> let (SceneNode (_,lbl') _) = llab gr n in lbl == lbl') (nodes gr)
+getByLabel gr lbl =
+  head
+  . filter (\n -> let (SceneNode (_,lbl') _) = llab gr n in lbl == lbl')
+  . G.nodes
+  $ gr
 
 
 -- | A box. Used for calculating bounds
@@ -676,16 +549,16 @@ boundsSceneNode gr (SceneNode (nde, _) (MatrixTransform mt)) =
   ((mt !* L.point v1) ^. _xyz, (mt !* L.point v2) ^. _xyz)
 
 boundsSceneNode gr (SceneNode (nde, _) (Switch i)) =
-  let nde' = suc gr nde !! i in
+  let nde' = G.suc gr nde !! i in
   bounds (gr, nde')
 
 boundsSceneNode _ (SceneNode _  (Geode _)) = smallBox
 
 boundsSceneNode gr (SceneNode (nde, _) _) = boundsOfChildren gr nde
 
-boundsOfChildren :: Gr SceneNode () -> Node -> Box Float
+boundsOfChildren :: SceneGraph -> Node -> Box Float
 boundsOfChildren gr =
-  fromMaybe smallBox . foldr f Nothing . suc gr
+  fromMaybe smallBox . foldr f Nothing . G.suc gr
   where
     f nde Nothing  = Just $ bounds (gr, nde)
     f nde (Just b) = Just $ b `union` bounds (gr, nde)

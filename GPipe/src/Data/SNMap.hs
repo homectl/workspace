@@ -37,7 +37,8 @@ memoize getter m = do s <- liftIO $ makeStableName $! m
                                               liftIO $ HT.insert h' s a
                                               return a
 
-newtype SNMapReaderT a m b = SNMapReaderT (StateT (SNMap (SNMapReaderT a m) a) m b) deriving (Functor, Applicative, Monad, MonadIO, MonadException, MonadAsyncException)
+newtype SNMapReaderT a m b = SNMapReaderT (StateT (SNMap (SNMapReaderT a m) a) m b)
+    deriving (Functor, Applicative, Monad, MonadIO, MonadException, MonadAsyncException)
 
 runSNMapReaderT :: MonadIO m => SNMapReaderT a m b -> m b
 runSNMapReaderT (SNMapReaderT m) = do h <- liftIO newSNMap

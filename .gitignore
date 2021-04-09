@@ -2,6 +2,9 @@
 *.frag
 *.vert
 
+test.dot
+test.svg
+
 dist
 dist-*
 cabal-dev

@@ -6,10 +6,9 @@
 module Graphics.SceneGraph.BasicSpec where
 
 import           Test.Hspec                (Expectation, Spec, describe, it,
-                                            shouldBe, shouldNotBe,
-                                            shouldSatisfy)
+                                            shouldBe, shouldSatisfy)
 import           Test.Hspec.QuickCheck     (prop)
-import           Test.QuickCheck
+import           Test.QuickCheck           (Arbitrary (arbitrary))
 
 import           Control.Lens              ((^.))
 import           Graphics.SceneGraph.Basic
@@ -28,19 +27,11 @@ shouldBeApproximately a b = round a `shouldBe` round b
 
 
 origin :: V4 Float
-origin = V4 0 0 0 1
+origin = L.point $ pure 0
 
 
 spec :: Spec
 spec = do
-  describe "visualise" $ do
-    it "should produce a non-empty string" $ do
-      let testScene = do
-            translate camera (V3 1 0 0)
-      dotText <- visualise <$> osg testScene
-      dotText `shouldNotBe` ""
-
-
   describe "union" $ do
     prop "should be idempotent" $ \(box :: Box Float) ->
       union box box `shouldBe` box
@@ -54,7 +45,7 @@ spec = do
   describe "translate" $ do
     prop "should move a point linearly" $ \p -> do
       testScene <- osg $ do
-            translate camera p
+            translate p camera
       let camNode = findCamera testScene 0
       getTransformTo testScene camNode !* origin `shouldBe` L.point p
 
@@ -62,14 +53,14 @@ spec = do
   describe "rotateX" $ do
     prop "should not modify the X coordinate" $ \p theta -> do
       testScene <- osg $ do
-            rotateX (translate camera p) theta
+            rotateX theta (translate p camera)
       let camNode = findCamera testScene 0
       (getTransformTo testScene camNode !* origin) ^. _x
         `shouldBeApproximately` p ^. _x
 
     it "should turn a Y unit vector into a Z unit vector" $ do
       testScene <- osg $ do
-            rotateX (translate camera $ V3 0 1 0) 90
+            rotateX 90 (translate (V3 0 1 0) camera)
       let camNode = findCamera testScene 0
       -- TODO: the rotation matrix is super imprecise, this rounding shouldn't
       -- be necessary.
@@ -80,14 +71,14 @@ spec = do
   describe "rotateY" $ do
     prop "should not modify the Y coordinate" $ \p theta -> do
       testScene <- osg $ do
-            rotateY (translate camera p) theta
+            rotateY theta (translate p camera)
       let camNode = findCamera testScene 0
       (getTransformTo testScene camNode !* origin) ^. _y
         `shouldBeApproximately` p ^. _y
 
     it "should turn an X unit vector into a Z unit vector" $ do
       testScene <- osg $ do
-            rotateY (translate camera $ V3 1 0 0) 90
+            rotateY 90 (translate (V3 1 0 0) camera)
       let camNode = findCamera testScene 0
       -- TODO: the rotation matrix is super imprecise, this rounding shouldn't
       -- be necessary.
@@ -98,14 +89,14 @@ spec = do
   describe "rotateZ" $ do
     prop "should not modify the Z coordinate" $ \p theta -> do
       testScene <- osg $ do
-            rotateZ (translate camera p) theta
+            rotateZ theta (translate p camera)
       let camNode = findCamera testScene 0
       (getTransformTo testScene camNode !* origin) ^. _z
         `shouldBeApproximately` p ^. _z
 
     it "should turn an X unit vector into a Y unit vector" $ do
       testScene <- osg $ do
-            rotateZ (translate camera $ V3 1 0 0) 90
+            rotateZ 90 (translate (V3 1 0 0) camera)
       let camNode = findCamera testScene 0
       -- TODO: the rotation matrix is super imprecise, this rounding shouldn't
       -- be necessary.
@@ -117,9 +108,9 @@ spec = do
     it "should yield the a bounding box that's at least as large as the items within" $ do
       testScene <- osg $ do
             makeGroup =<< sequence
-              [ translate camera (V3 2 0 0)
-              , translate camera (V3 1 0 3)
-              , translate camera (V3 0 (-4) 0)
+              [ translate (V3 2 0 0) camera
+              , translate (V3 1 0 3) camera
+              , translate (V3 0 (-4) 0) camera
               ]
 
       let sz = boxSize (bounds testScene)

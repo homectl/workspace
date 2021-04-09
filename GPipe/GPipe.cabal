@@ -22,17 +22,6 @@ data-files:     CHANGELOG.md
 library
   hs-source-dirs: src
   default-language: Haskell2010
-  build-depends:
-      base < 5
-    , Boolean
-    , containers
-    , exception-transformers
-    , gl
-    , hashtables
-    , lens
-    , linear
-    , text
-    , transformers
   exposed-modules:
       Graphics.GPipe
       Graphics.GPipe.Buffer
@@ -69,6 +58,17 @@ library
       -- Data structures, not useful for users of the library.
       Data.IntMap.Polymorphic
       Data.SNMap
+  build-depends:
+      base < 5
+    , Boolean
+    , containers
+    , exception-transformers
+    , gl
+    , hashtables
+    , lens
+    , linear
+    , text
+    , transformers
 
 test-suite testsuite
   default-language: Haskell2010

@@ -25,13 +25,14 @@ library
   exposed-modules:
       Graphics.SceneGraph.Basic
       Graphics.SceneGraph.Matrix
+      Graphics.SceneGraph.Types
+      Graphics.SceneGraph.Visualise
       Graphics.SceneGraph
   build-depends:
       base
-    , containers
     , data-default
+    , graphviz
     , fgl
-    , fgl-visualize
     , lens
     , linear
     , mtl
@@ -46,6 +47,7 @@ test-suite testsuite
   main-is:          testsuite.hs
   other-modules:
       Graphics.SceneGraph.BasicSpec
+      Graphics.SceneGraph.VisualiseSpec
   ghc-options:
       -Wall
       -threaded
