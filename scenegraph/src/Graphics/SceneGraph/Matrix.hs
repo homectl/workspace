@@ -1,7 +1,13 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE TypeSynonymInstances   #-}
-module Graphics.SceneGraph.Matrix where
+module Graphics.SceneGraph.Matrix
+  ( translateM
+  , translatePostM
+  , scaleM
+  , rotateM
+  , rotatePostM
+  ) where
 
 -- Warning: Because this matrix is going to get passed directly to GL we convert to GL space
 -- here.
@@ -33,8 +39,8 @@ scaleM v m = m !*! V4
 
 -- | Build rotational transform matrix for rotate of ''theta'' around a vector.
 rotateM' :: Float -> V3 Float -> M44 Float
-rotateM' theta (V3 x' y' z') = V4
-  (V4 (t*x*x  + c) (t*x*y-s*z) (t*x*z + s*y) 0)
+rotateM' theta (V3 x y z) = V4
+  (V4 (t*x*x + c) (t*x*y-s*z) (t*x*z + s*y) 0)
   (V4 (t*x*y+s*z) (t*y*y + c) (t*y*z - s*x)  0)
   (V4 (t*x*z-s*y) (t*y*z + s*x) (t*z*z+c) 0)
   (V4 0 0 0 1)
@@ -42,7 +48,6 @@ rotateM' theta (V3 x' y' z') = V4
     t = 1 - cos theta
     c = cos theta
     s = sin theta
-    (x, y, z) = (x', z', -y')
 
 rotateM :: Float -> V3 Float -> M44 Float -> M44 Float
 rotateM theta v m = rotateM' theta v !*! m

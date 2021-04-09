@@ -1,6 +1,9 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 {-# LANGUAGE RecordWildCards #-}
-module Graphics.SceneGraph.Visualise where
+module Graphics.SceneGraph.Visualise
+  ( toDot
+  , toSvg
+  ) where
 
 import qualified Data.GraphViz                   as GV
 import qualified Data.GraphViz.Attributes.Colors as C
