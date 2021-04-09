@@ -39,6 +39,7 @@ import           Graphics.GPipe.Internal.Shader   (Shader (..), ShaderM,
 import           Data.IORef                       (readIORef)
 import           Data.Int                         (Int32)
 import           Graphics.GL.Core33
+import           Graphics.GPipe.Internal.IDs      (UniformId)
 import           Linear.Plucker                   (Plucker (..))
 import           Linear.Quaternion                (Quaternion (..))
 import           Linear.V0                        (V0 (..))
@@ -46,7 +47,6 @@ import           Linear.V1                        (V1 (..))
 import           Linear.V2                        (V2 (..))
 import           Linear.V3                        (V3 (..))
 import           Linear.V4                        (V4 (..))
-import Graphics.GPipe.Internal.IDs (UniformId)
 
 -- | This class constraints which buffer types can be loaded as uniforms, and what type those values have.
 class BufferFormat a => UniformInput a where

@@ -38,6 +38,7 @@ import           Graphics.GPipe.Internal.Format               (ColorRenderable,
                                                                Format,
                                                                TextureFormat (..),
                                                                getGlInternalFormat)
+import           Graphics.GPipe.Internal.IDs                  (SamplerId)
 import           Graphics.GPipe.Internal.Shader               (Shader (..),
                                                                ShaderM, getName,
                                                                modifyRenderIO)
@@ -967,17 +968,17 @@ setSamplerFilter' t magf minf lodf a = do
 
 
 
-doForSampler :: Int -> (s -> Binding -> IO Int) -> ShaderM s ()
+doForSampler :: SamplerId -> (s -> Binding -> IO Int) -> ShaderM s ()
 doForSampler n io = modifyRenderIO (\s -> s { samplerNameToRenderIO = insert n io (samplerNameToRenderIO s) } )
 
 -- | Used instead of 'Format' for shadow samplers. These samplers have specialized sampler values, see 'sample1DShadow' and friends.
 data Shadow
-data Sampler1D f = Sampler1D Int Bool Text
-data Sampler1DArray f = Sampler1DArray Int Bool Text
-data Sampler2D f = Sampler2D Int Bool Text
-data Sampler2DArray f = Sampler2DArray Int Bool Text
-data Sampler3D f = Sampler3D Int Bool Text
-data SamplerCube f = SamplerCube Int Bool Text
+data Sampler1D f = Sampler1D SamplerId Bool Text
+data Sampler1DArray f = Sampler1DArray SamplerId Bool Text
+data Sampler2D f = Sampler2D SamplerId Bool Text
+data Sampler2DArray f = Sampler2DArray SamplerId Bool Text
+data Sampler3D f = Sampler3D SamplerId Bool Text
+data SamplerCube f = SamplerCube SamplerId Bool Text
 
 -- | A GADT to specify where the level of detail and/or partial derivates should be taken from. Some values of this GADT are restricted to
 --   only 'FragmentStream's.
@@ -1075,22 +1076,22 @@ samplerCubeSize (SamplerCube sampId shadow prefix) = (\(V2 x _) -> x) . vec2S (S
 addShadowPrefix :: Bool -> Text -> Text
 addShadowPrefix shadow = if shadow then (<> "Shadow") else id
 
-getTextureSize :: Text -> Int -> Text -> S c Int -> ExprM Text
+getTextureSize :: Text -> SamplerId -> Text -> S c Int -> ExprM Text
 getTextureSize prefix sampId sName l = do s <- useSampler prefix sName sampId
                                           l' <- unS l
                                           return $ "textureSize(" <> s <> "," <> l' <> ")"
 
-sample :: e -> Text -> Text -> Text -> Int -> SampleLod lcoord x -> SampleProj x -> Maybe off -> coord -> (coord -> ExprM Text) -> (lcoord -> ExprM Text) -> (off -> Text) -> (coord -> S x Float -> ExprM Text) -> V4 (S x e)
+sample :: e -> Text -> Text -> Text -> SamplerId -> SampleLod lcoord x -> SampleProj x -> Maybe off -> coord -> (coord -> ExprM Text) -> (lcoord -> ExprM Text) -> (off -> Text) -> (coord -> S x Float -> ExprM Text) -> V4 (S x e)
 sample _ prefix sDynType sName sampId lod proj off coord vToS lvToS ivToS pvToS =
     vec4S (STypeDyn sDynType) $ do s <- useSampler prefix sName sampId
                                    sampleFunc s proj lod off coord vToS lvToS ivToS pvToS
 
-sampleShadow :: Text -> Int -> SampleLod lcoord x -> SampleProj x -> Maybe off -> coord -> (coord -> ExprM Text) -> (lcoord -> ExprM Text) -> (off -> Text) -> (coord -> S x Float -> ExprM Text) -> S x Float
+sampleShadow :: Text -> SamplerId -> SampleLod lcoord x -> SampleProj x -> Maybe off -> coord -> (coord -> ExprM Text) -> (lcoord -> ExprM Text) -> (off -> Text) -> (coord -> S x Float -> ExprM Text) -> S x Float
 sampleShadow sName sampId lod proj off coord vToS lvToS civToS pvToS =
     scalarS STypeFloat $ do s <- useSampler "" (sName <> "Shadow") sampId
                             sampleFunc s proj lod off coord vToS lvToS civToS pvToS
 
-fetch :: e -> Text -> Text -> Text -> Int -> S x Int -> Maybe off -> coord -> (coord -> ExprM Text) -> (off -> Text) -> V4 (S x e)
+fetch :: e -> Text -> Text -> Text -> SamplerId -> S x Int -> Maybe off -> coord -> (coord -> ExprM Text) -> (off -> Text) -> V4 (S x e)
 fetch _ prefix sDynType sName sampId lod off coord ivToS civToS =
     vec4S (STypeDyn sDynType) $ do s <- useSampler prefix sName sampId
                                    fetchFunc s off coord lod ivToS civToS

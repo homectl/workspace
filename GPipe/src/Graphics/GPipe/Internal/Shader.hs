@@ -53,7 +53,7 @@ import           Graphics.GPipe.Internal.Compiler (CompiledShader,
 import           Graphics.GPipe.Internal.Context  (ContextHandler, ContextT,
                                                    Render (..),
                                                    liftNonWinContextIO)
-import Graphics.GPipe.Internal.IDs (Identifier)
+import           Graphics.GPipe.Internal.IDs      (Identifier)
 
 data ShaderState s = ShaderState Int (RenderIOState s)
 

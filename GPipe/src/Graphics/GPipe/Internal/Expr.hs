@@ -13,39 +13,39 @@
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
 module Graphics.GPipe.Internal.Expr where
 
-import           Control.Applicative        (liftA, liftA2, liftA3)
-import           Control.Category           (Category (id, (.)))
-import           Control.Monad              (void, when)
-import qualified Control.Monad.Trans.Class  as T (lift)
-import           Control.Monad.Trans.Reader (ReaderT (runReaderT), ask)
-import           Control.Monad.Trans.State  (State, StateT, evalState,
-                                             evalStateT, execStateT, get,
-                                             modify, put)
-import           Control.Monad.Trans.Writer (Writer, WriterT (runWriterT),
-                                             execWriter, execWriterT, tell)
-import           Data.Boolean               (Boolean (..), BooleanOf, EqB (..),
-                                             IfB (..), OrdB (..), maxB, minB)
-import           Data.Foldable              (toList)
-import           Data.Int                   (Int16, Int32, Int8)
-import qualified Data.IntMap.Polymorphic    as Map
-import           Data.List                  (intercalate)
-import Graphics.GPipe.Internal.IDs ( UniformId )
-import           Data.SNMap                 (SNMapReaderT, memoizeM,
-                                             runSNMapReaderT, scopedM)
-import           Data.Text                  (Text)
-import qualified Data.Text                  as Text
-import           Data.Word                  (Word16, Word32, Word8)
-import           Linear.Affine              (distanceA)
-import           Linear.Conjugate           (Conjugate, TrivialConjugate)
-import           Linear.Matrix              ((!*!), (!*), (*!))
-import           Linear.Metric              (Metric (distance, dot, norm, signorm))
-import           Linear.V0                  (V0 (..))
-import           Linear.V1                  (V1 (..))
-import           Linear.V2                  (V2 (..))
-import           Linear.V3                  (V3 (..), cross)
-import           Linear.V4                  (V4 (..))
-import           Linear.Vector              (outer)
-import           Prelude                    hiding (id, (.), (<*))
+import           Control.Applicative         (liftA, liftA2, liftA3)
+import           Control.Category            (Category (id, (.)))
+import           Control.Monad               (void, when)
+import qualified Control.Monad.Trans.Class   as T (lift)
+import           Control.Monad.Trans.Reader  (ReaderT (runReaderT), ask)
+import           Control.Monad.Trans.State   (State, StateT, evalState,
+                                              evalStateT, execStateT, get,
+                                              modify, put)
+import           Control.Monad.Trans.Writer  (Writer, WriterT (runWriterT),
+                                              execWriter, execWriterT, tell)
+import           Data.Boolean                (Boolean (..), BooleanOf, EqB (..),
+                                              IfB (..), OrdB (..), maxB, minB)
+import           Data.Foldable               (toList)
+import           Data.Int                    (Int16, Int32, Int8)
+import qualified Data.IntMap.Polymorphic     as Map
+import           Data.List                   (intercalate)
+import           Data.SNMap                  (SNMapReaderT, memoizeM,
+                                              runSNMapReaderT, scopedM)
+import           Data.Text                   (Text)
+import qualified Data.Text                   as Text
+import           Data.Word                   (Word16, Word32, Word8)
+import           Graphics.GPipe.Internal.IDs (SamplerId, UniformId)
+import           Linear.Affine               (distanceA)
+import           Linear.Conjugate            (Conjugate, TrivialConjugate)
+import           Linear.Matrix               ((!*!), (!*), (*!))
+import           Linear.Metric               (Metric (distance, dot, norm, signorm))
+import           Linear.V0                   (V0 (..))
+import           Linear.V1                   (V1 (..))
+import           Linear.V2                   (V2 (..))
+import           Linear.V3                   (V3 (..), cross)
+import           Linear.V4                   (V4 (..))
+import           Linear.Vector               (outer)
+import           Prelude                     hiding (id, (.), (<*))
 
 tshow :: Show a => a -> Text
 tshow = Text.pack . show
@@ -75,11 +75,11 @@ stypeSize _             = 4
 type ExprM = SNMapReaderT [Text] (StateT ExprState (WriterT Text (StateT NextTempVar IO))) -- IO for stable names
 data ExprState = ExprState
     { shaderUsedUniformBlocks :: Map.IntMap UniformId (GlobDeclM ())
-    , shaderUsedSamplers      :: Map.IntMap Int (GlobDeclM ())
+    , shaderUsedSamplers      :: Map.IntMap SamplerId (GlobDeclM ())
     , shaderUsedInput         :: Map.IntMap Int (GlobDeclM (), (ExprM (), GlobDeclM ())) -- For vertex shaders, the shaderM is always undefined and the int is the parameter name, for later shader stages it uses some name local to the transition instead
     }
 
-runExprM :: GlobDeclM () -> ExprM () -> IO (Text, [UniformId], [Int], [Int], GlobDeclM (), ExprM ())
+runExprM :: GlobDeclM () -> ExprM () -> IO (Text, [UniformId], [SamplerId], [Int], GlobDeclM (), ExprM ())
 runExprM d m = do
     (st, body) <- evalStateT (runWriterT (execStateT (runSNMapReaderT (m :: ExprM ())) (ExprState Map.empty Map.empty Map.empty))) 0
     let (unis, uniDecls) = unzip $ Map.toAscList (shaderUsedUniformBlocks st)
@@ -196,7 +196,7 @@ useUniform decls blockI offset =
                 tellGlobal "} u"
                 tellGlobalLn blockStr
 
-useSampler :: Text -> Text -> Int -> ExprM Text
+useSampler :: Text -> Text -> SamplerId -> ExprM Text
 useSampler prefix str name =
              do T.lift $ modify $ \ s -> s { shaderUsedSamplers = Map.insert name gDeclSampler $ shaderUsedSamplers s }
                 return $ "s"<>tshow name

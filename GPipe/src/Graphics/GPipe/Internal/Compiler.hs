@@ -4,7 +4,7 @@
 {-# LANGUAGE PatternSynonyms   #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 {-# OPTIONS_GHC -Wno-unused-matches #-}
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE ViewPatterns      #-}
 module Graphics.GPipe.Internal.Compiler where
 
 import           Control.Monad                    (forM_, void, when, (>=>))
@@ -14,8 +14,8 @@ import           Control.Monad.Trans.Class        (MonadTrans (lift))
 import           Control.Monad.Trans.Except       (throwE)
 import           Control.Monad.Trans.Reader       (ask)
 import           Control.Monad.Trans.State.Strict (get, put)
-import           Data.IntMap.Polymorphic ((!))
-import qualified Data.IntMap.Polymorphic                      as Map
+import           Data.IntMap.Polymorphic          ((!))
+import qualified Data.IntMap.Polymorphic          as Map
 import qualified Data.IntSet                      as Set
 import           Data.Maybe                       (isJust, isNothing)
 import           Graphics.GPipe.Internal.Context
@@ -38,7 +38,7 @@ import           Foreign.Storable                 (peek)
 import           GHC.IORef                        (IORef)
 import           Graphics.GL.Core33
 import           Graphics.GL.Types                (GLuint)
-import Graphics.GPipe.Internal.IDs
+import           Graphics.GPipe.Internal.IDs
 
 
 -- | A compiled shader is just a function that takes an environment and returns a 'Render' action
@@ -52,9 +52,9 @@ data Drawcall s = Drawcall
     , fragmentSource     :: Text
     , usedInputs         :: [Int]
     , usedVUniforms      :: [UniformId]
-    , usedVSamplers      :: [Int]
+    , usedVSamplers      :: [SamplerId]
     , usedFUniforms      :: [UniformId]
-    , usedFSamplers      :: [Int]
+    , usedFSamplers      :: [SamplerId]
     , primStrUBufferSize :: Int -- The size of the ubuffer for uniforms in primitive stream
     }
 
@@ -67,7 +67,7 @@ type Binding = Int
 
 data RenderIOState s = RenderIOState
     { uniformNameToRenderIO       :: Map.IntMap UniformId (s -> Binding -> IO ()) -- TODO: Return buffer name here when we start writing to buffers during rendering (transform feedback, buffer textures)
-    , samplerNameToRenderIO       :: Map.IntMap Int (s -> Binding -> IO Int) -- IO returns texturename for validating that it isnt used as render target
+    , samplerNameToRenderIO       :: Map.IntMap SamplerId (s -> Binding -> IO Int) -- IO returns texturename for validating that it isnt used as render target
     , rasterizationNameToRenderIO :: Map.IntMap Int (s -> IO ())
     , inputArrayToRenderIOs       :: Map.IntMap Int (s -> [([Binding], GLuint, Int) -> ((IO [VAOKey], IO ()), IO ())])
     }
@@ -126,7 +126,7 @@ compile drawcalls s = do
             liftIO $ throwIO $ GPipeException $ Text.concat allErrs
 
 
-getLimits :: IO (UniformId, Int, UniformId, Int, UniformId, Int)
+getLimits :: IO (UniformId, SamplerId, UniformId, SamplerId, UniformId, SamplerId)
 getLimits = do
     maxUnis <- alloca (\ptr -> glGetIntegerv GL_MAX_COMBINED_UNIFORM_BLOCKS ptr >> peek ptr)
     maxSamplers <- alloca (\ptr -> glGetIntegerv GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS ptr >> peek ptr)
@@ -143,7 +143,7 @@ getLimits = do
         , fromIntegral maxFSamplers)
 
 
-type CompInput s = (Drawcall s, [UniformId], [Int], [UniformId], [Int])
+type CompInput s = (Drawcall s, [UniformId], [SamplerId], [UniformId], [SamplerId])
 
 comp :: (ContextHandler ctx, MonadIO m) => RenderIOState s -> CompInput s -> ContextT ctx os m (Either Text ((IORef GLuint, IO ()), CompiledShader os s))
 comp s dc@(Drawcall fboSetup primN rastN vsource fsource inps _ _ _ _ pstrUSize', unis, samps, ubinds, sbinds) = do
