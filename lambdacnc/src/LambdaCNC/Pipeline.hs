@@ -6,12 +6,10 @@
 module LambdaCNC.Pipeline where
 
 import           Control.Applicative               (liftA2)
-import           Control.Lens                      ((^.))
 import           Control.Lens.Indexed              (iforM_)
 import           Control.Monad                     (foldM_, forM, forM_)
 import           Control.Monad.IO.Class            (liftIO)
 import           Data.Foldable                     (toList)
-import           Data.Functor                      (void)
 import           Data.Int                          (Int32)
 import qualified Data.Time.Clock                   as Time
 import           Data.Word                         (Word32)
@@ -19,8 +17,6 @@ import           Graphics.GPipe
 import qualified Graphics.GPipe.Context.GLFW.Input as Input
 import qualified Graphics.GPipe.Engine.STL         as STL
 import           Graphics.GPipe.Engine.TimeIt      (timeIt)
-import           Graphics.SceneGraph               ((<+>))
-import qualified Graphics.SceneGraph               as SG
 import           LambdaCNC.Config                  (GlobalUniformBuffer,
                                                     GlobalUniforms (..),
                                                     LightUniforms (..),
@@ -38,7 +34,6 @@ import qualified LambdaCNC.Shaders.LightInfo       as LightInfo
 import qualified LambdaCNC.Shaders.Quad            as QuadShader
 import qualified LambdaCNC.Shaders.Shadow          as ShadowShader
 import qualified LambdaCNC.Shaders.Solids          as SolidsShader
-import Data.Maybe (fromMaybe)
 
 --------------------------------------------------
 --
@@ -150,7 +145,6 @@ data Shaders os = Shaders
 data PipelineData os = PipelineData
     { startTime  :: Time.UTCTime
     , solids     :: Solids (Shaders.Buffer3D os)
-    , scene      :: SG.Scene (Shaders.Buffer3D os)
     , lightbulb  :: Shaders.Buffer3D os
     , quad       :: Shaders.Buffer2D os
     , globalUni  :: GlobalUniformBuffer os
@@ -245,22 +239,6 @@ initData win = do
         <*> timeIt "Compiling lightbulb shader..." (BulbShader.solidShader globalUni lightUni)
         <*> timeIt "Compiling lightbulb wireframe shader..." (BulbShader.wireframeShader globalUni lightUni)
 
-    scene <- SG.osg $
-        -- SG.group =<< sequence
-        --     [ SG.mesh (objBed solids)
-        --     , SG.mesh (objGround solids)
-        --     , SG.translate (V3 0 0 24500) $ SG.mesh (objXAxis solids)
-        --     , SG.mesh (objYAxis solids)
-        --     , SG.mesh (objZAxis solids)
-        --     ]
-        SG.color SG.LightBlue (SG.mesh "Ground" (objGround solids))
-        <+> SG.mesh "Bed" (objBed solids)
-        <+> SG.translate (V3 0 4000 24500) (
-            SG.mesh "XAxis" (objXAxis solids)
-            <+> SG.translate (V3 0 (-8000) 0) (SG.color SG.Yellow $ SG.mesh "ZAxis" (objZAxis solids)))
-        <+> SG.translate (V3 0 0 5000) (SG.color SG.Red $ SG.mesh "YAxis" (objYAxis solids))
-    liftIO $ void $ SG.toSvg scene "scene.svg"
-
     return PipelineData{..}
 
 --------------------------------------------------
@@ -320,10 +298,8 @@ renderings win PipelineData{shaders=Shaders{..}, ..} PipelineState{stFrameBuffer
         clearImageColor imgTmp 0
 
     -- Render each object on the window frame buffer.
-    SG.drawScene scene $ \mat SG.Phong{..} solid -> do
-        let objectPos = (mat !* point (pure 0)) ^. _xyz
-        let objectColor = fromMaybe (point (pure 1)) phDiffuse
-        writeBuffer objectUni 0 [defaultObjectUniforms{objectPos, objectColor}]
+    forM_ solidsWithPos $ \(solid, objectPos) -> do
+        writeBuffer objectUni 0 [defaultObjectUniforms{objectPos}]
         render $ do
             envColorFb <- getTexture2DImage fbColor 0
             envBrightFb <- getTexture2DImage fbBright 0

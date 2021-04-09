@@ -55,7 +55,6 @@ interpret modName = GHC.runGhc (Just libdir) $ do
                 , "directory"
                 , "filepath"
                 , "lens"
-                , "scenegraph"
                 , "time"
                 ]
             ]
