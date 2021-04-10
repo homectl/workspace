@@ -92,24 +92,28 @@ rasterize sf (PrimitiveStream xs) = Shader $ do
         let (side, polygonMode, ViewPort (V2 x y) (V2 w h), DepthRange dmin dmax) = sf s in
         if w < 0 || h < 0
             then error "ViewPort, negative size"
-            else do setGlCullFace side
-                    setGlPolygonMode polygonMode
-                    glScissor (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h)
-                    glViewport (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h)
-                    glDepthRange (realToFrac dmin) (realToFrac dmax)
-                    setGLPointSize
+            else do 
+                setGlCullFace side
+                setGlPolygonMode polygonMode
+                glScissor (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h)
+                glViewport (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h)
+                glDepthRange (realToFrac dmin) (realToFrac dmax)
+                setGLPointSize
 
     setGlCullFace Front        = glEnable GL_CULL_FACE >> glCullFace GL_BACK -- Back is culled when front is rasterized
     setGlCullFace Back         = glEnable GL_CULL_FACE >> glCullFace GL_FRONT
     setGlCullFace FrontAndBack = glDisable GL_CULL_FACE
 
-    setGlPolygonMode PolygonFill = glPolygonMode GL_FRONT_AND_BACK GL_FILL
+    setGlPolygonMode PolygonFill      = glPolygonMode GL_FRONT_AND_BACK GL_FILL
+    setGlPolygonMode PolygonPoint     = do
+        glEnable GL_PROGRAM_POINT_SIZE
+        glPolygonMode GL_FRONT_AND_BACK GL_POINT
     setGlPolygonMode (PolygonLine lw) = do
         glLineWidth (realToFrac lw)
         glPolygonMode GL_FRONT_AND_BACK GL_LINE
 
     setGLPointSize =
-        if any (isJust.fst.snd) xs
+        if any (isJust . fst . snd) xs
             then glEnable GL_PROGRAM_POINT_SIZE
             else glDisable GL_PROGRAM_POINT_SIZE
 
@@ -128,7 +132,7 @@ makePointSize (Just (S ps)) = ps >>= tellAssignment' "gl_PointSize"
 -- | Defines which side to rasterize. Non triangle primitives only has a front side.
 data Side = Front | Back | FrontAndBack
 -- | Defines whether to fill the polygon or to show points or wireframes.
-data PolygonMode = PolygonFill | PolygonLine Float
+data PolygonMode = PolygonFill | PolygonLine Float | PolygonPoint
 -- | The viewport in pixel coordinates (where (0,0) is the lower left corner) in to which the canonical view volume [(-1,-1,-1),(1,1,1)] is transformed and clipped/scissored.
 data ViewPort = ViewPort { viewPortLowerLeft :: V2 Int, viewPortSize :: V2 Int }
 -- | The fragment depth range to map the canonical view volume's z-coordinate to. Depth values are clamped to [0,1], so @DepthRange 0 1@ gives maximum depth resolution.

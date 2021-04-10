@@ -1,11 +1,11 @@
 {-# LANGUAGE Arrows                     #-}
+{-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE FlexibleContexts #-}
 module Graphics.GPipe.Internal.GeometryStream where
 
 import           Control.Arrow                           (Arrow (arr, first),
@@ -426,22 +426,27 @@ generateAndRasterize sf maxVertices (GeometryStream xs) = Shader $ do
         let (side, polygonMode, ViewPort (V2 x y) (V2 w h), DepthRange dmin dmax) = sf s in
         if w < 0 || h < 0
             then error "ViewPort, negative size"
-            else do setGlCullFace side
-                    setGlPolygonMode polygonMode
-                    glScissor (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h)
-                    glViewport (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h)
-                    glDepthRange (realToFrac dmin) (realToFrac dmax)
-                    setGLPointSize
+            else do
+                setGlCullFace side
+                setGlPolygonMode polygonMode
+                glScissor (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h)
+                glViewport (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h)
+                glDepthRange (realToFrac dmin) (realToFrac dmax)
+                setGLPointSize
 
-    setGlCullFace Front = glEnable GL_CULL_FACE >> glCullFace GL_BACK -- Back is culled when front is rasterized
-    setGlCullFace Back  = glEnable GL_CULL_FACE >> glCullFace GL_FRONT
-    setGlCullFace _     = glDisable GL_CULL_FACE
+    setGlCullFace Front        = glEnable GL_CULL_FACE >> glCullFace GL_BACK -- Back is culled when front is rasterized
+    setGlCullFace Back         = glEnable GL_CULL_FACE >> glCullFace GL_FRONT
+    setGlCullFace FrontAndBack = glDisable GL_CULL_FACE
 
-    setGlPolygonMode PolygonFill = glPolygonMode GL_FRONT_AND_BACK GL_FILL
+    setGlPolygonMode PolygonFill      = glPolygonMode GL_FRONT_AND_BACK GL_FILL
+    setGlPolygonMode PolygonPoint     = do
+        glEnable GL_PROGRAM_POINT_SIZE
+        glPolygonMode GL_FRONT_AND_BACK GL_POINT
     setGlPolygonMode (PolygonLine lw) = do
         glLineWidth (realToFrac lw)
         glPolygonMode GL_FRONT_AND_BACK GL_LINE
 
+    -- TODO: why is it always disabled in the geometry stream?
     setGLPointSize = glDisable GL_PROGRAM_POINT_SIZE
 
 ------------------------------------------------------------------------------------------------------------------------------------
