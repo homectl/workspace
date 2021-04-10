@@ -32,17 +32,17 @@ bounds (Scene gr nde) =
 
 -- | Determine bounds of a @SceneNode@
 boundsSceneNode :: SceneGraph g -> SceneNode g -> Box Float
-boundsSceneNode gr (SceneNode (nde, _) (MatrixTransform mt)) =
+boundsSceneNode gr (SceneNode nde _ (MatrixTransform mt)) =
   let (v1, v2) = boundsOfChildren gr nde in
   ((mt !* L.point v1) ^. _xyz, (mt !* L.point v2) ^. _xyz)
 
-boundsSceneNode gr (SceneNode (nde, _) (Switch i)) =
+boundsSceneNode gr (SceneNode nde _ (Switch i)) =
   let nde' = G.suc gr nde !! i in
   bounds (Scene gr nde')
 
-boundsSceneNode _ (SceneNode _  (Geode _ _)) = smallBox
+boundsSceneNode _ (SceneNode _ _ (Geode _ _)) = smallBox
 
-boundsSceneNode gr (SceneNode (nde, _) _) = boundsOfChildren gr nde
+boundsSceneNode gr (SceneNode nde _ _) = boundsOfChildren gr nde
 
 boundsOfChildren :: SceneGraph g -> Node -> Box Float
 boundsOfChildren gr =

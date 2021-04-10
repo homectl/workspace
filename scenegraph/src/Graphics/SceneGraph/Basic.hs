@@ -63,7 +63,7 @@ osg f = do
 
 
 idd :: SceneNode g -> Node
-idd (SceneNode (i, _)  _) = i
+idd (SceneNode i _ _) = i
 
 
 -- | Basic add node
@@ -72,11 +72,11 @@ addNodeBasic nde = addNode nde []
 
 -- | Add node with scene data
 addBasicNode :: Monad m => SceneData g -> OSGSceneT m g
-addBasicNode g = addNode (SceneNode (0, "") g) []
+addBasicNode g = addNode (SceneNode 0 "" g) []
 
 -- | Add node with scene data
 addBasicNamedNode :: Monad m => String -> SceneData g -> OSGSceneT m g
-addBasicNamedNode name g = addNode (SceneNode (0, name) g) []
+addBasicNamedNode name g = addNode (SceneNode 0 name g) []
 
 -- | Add empty node
 addNullNode :: Monad m => OSGSceneT m g
@@ -92,9 +92,9 @@ addNode nde children = do
 
 -- | Non-monadic form of addNode
 addNode' :: OSGState g -> SceneNode g -> [(SceneEdge, Node)] -> (SceneNode g, OSGState g)
-addNode' s (SceneNode (m, l) d) children =
+addNode' s (SceneNode m l d) children =
   let n = if m == 0 then startNode s + 2 else m
-      sn = SceneNode (n, l) d
+      sn = SceneNode n l d
       g' = ([], n, sn, children) & graph s
       s' = s { graph = g', startNode = n, root = n }
   in (sn, s')
@@ -104,7 +104,7 @@ replaceNode :: Monad m => SceneNode g -> OSGSceneT m g
 replaceNode n = do
   s <- ST.get
   g' <- lift $ replaceNode' (graph s) n
-  ST.put (s { graph = g' })
+  ST.put s{ graph = g' }
   return n
 
 -- | Inner monad version of replace node
@@ -265,11 +265,11 @@ colourSG :: Monad m => OSGSceneT m g -> (Phong -> Phong) -> (OSGSceneT m g -> OS
 colourSG sn action self = do
   (n1, i) <- runOSGL' sn
   case n1 of
-    (SceneNode n (Material p)) -> do
+    SceneNode n lbl (Material p) -> do
       let p' = action p
-      replaceNode (SceneNode n (Material p'))
+      replaceNode (SceneNode n lbl (Material p'))
     _ -> do
-      let n'' = addNode (SceneNode (0, "") (Material def)) [(DefaultEdge, i)]
+      let n'' = addNode (SceneNode 0 "" (Material def)) [(DefaultEdge, i)]
       self n''
 
 -- | Transform the node of a scene graph within the Monad with the supplied matrix transform
@@ -277,18 +277,19 @@ transformSG :: Monad m => (M44 Float -> M44 Float) -> (OSGSceneT m g -> OSGScene
 transformSG action self n = do
   (n1, i) <- runOSGL' n
   case n1 of
-    (SceneNode num (MatrixTransform m)) -> do
+    SceneNode num lbl (MatrixTransform m) -> do
       let m' = action m
-      replaceNode (SceneNode num (MatrixTransform m'))
+      replaceNode (SceneNode num lbl (MatrixTransform m'))
     _ -> do
-      let n'' = addNode (SceneNode (0, "") (MatrixTransform L.identity)) [(DefaultEdge, i)]
+      let n'' = addNode (SceneNode 0 "" (MatrixTransform L.identity)) [(DefaultEdge, i)]
       self n''
 
 -- | Transform the node of a scene graph with the supplied matrix transform
 transformSG' :: SceneGraph g -> Node -> (M44 Float -> M44 Float) -> SceneGraph g
-transformSG' sg nde mf = case llab sg nde of
-  (SceneNode _ (MatrixTransform m)) -> replaceNode'' sg (SceneNode (nde,show nde) (MatrixTransform (mf m)))
-  _ -> error "FIXME: Not a transform node"
+transformSG' sg nde mf =
+  case llab sg nde of
+    SceneNode _ _ (MatrixTransform m) -> replaceNode'' sg (SceneNode nde (show nde) (MatrixTransform (mf m)))
+    _ -> error "FIXME: Not a transform node"
 
 translateSG' :: SceneGraph g -> Node -> V3 Float -> SceneGraph g
 translateSG' sg nde v = transformSG' sg nde (translateM v)
@@ -306,15 +307,15 @@ color c n = colourSG n (const $ colorToPhong c) (color c)
 -- | Label a node
 label :: Monad m => OSGSceneT m g -> String -> OSGSceneT m g
 label anode lbl = do
-  (SceneNode (nde,_) dte, _) <- runOSGL' anode
-  replaceNode (SceneNode (nde, lbl) dte)
+  (SceneNode nde _ dte, _) <- runOSGL' anode
+  replaceNode (SceneNode nde lbl dte)
 
 
 -- | Add texture
 texture :: Monad m => OSGSceneT m g -> String -> OSGSceneT m g
 texture n texName = do
   i <- snd <$> runOSGL' n
-  addNode (SceneNode (0, "") (Texture texName ))  [(DefaultEdge, i)]
+  addNode (SceneNode 0 "" (Texture texName))  [(DefaultEdge, i)]
 
 -- -- | Add Text
 text :: Monad m => T.Text -> OSGSceneT m g
@@ -334,7 +335,7 @@ infixl 9 </>
   (_, s', i) <- runOSGL s a
   (_, s'', j) <- runOSGL s' b
   ST.put s''
-  addNode (SceneNode (0, "") Group) [(DefaultEdge, i), (DefaultEdge, j)]
+  addNode (SceneNode 0 "" Group) [(DefaultEdge, i), (DefaultEdge, j)]
 
 
 -- | Translate a node
@@ -353,19 +354,19 @@ doNothing _ = return ()
 handler :: Monad m => OSGSceneT m g -> ClickHandler g -> OSGSceneT m g
 handler n f = do
   (_, i) <- runOSGL' n
-  addNode (SceneNode (0, "") (Handler (Just (f, doNothing)) Nothing)) [(DefaultEdge, i)]
+  addNode (SceneNode 0 "" (Handler (Just (f, doNothing)) Nothing)) [(DefaultEdge, i)]
 
 handler2 :: Monad m => OSGSceneT m g -> (ClickHandler g, DragHandler g) -> OSGSceneT m g
 handler2 n (f,g) = do
   (_, i) <- runOSGL' n
-  addNode (SceneNode (0, "") (Handler (Just (f, doNothing)) (Just (g, doNothing)))) [(DefaultEdge, i)]
+  addNode (SceneNode 0 "" (Handler (Just (f, doNothing)) (Just (g, doNothing)))) [(DefaultEdge, i)]
 
 -- | Create a DragHandler
 dragHandler :: DragHandler g
 dragHandler (Scene sg nde) vec = do
   let tnde = head $ G.pre sg nde
       sg' = translateSG' sg tnde vec
-      SceneNode _ (MatrixTransform m) = llab sg' tnde
+      SceneNode _ _ (MatrixTransform m) = llab sg' tnde
       posx = m^.(_x._z)
   return (if abs posx < 1 then sg' else sg,posx)
 
@@ -378,13 +379,13 @@ switchHandler (Scene sg nde) ev = do
   return sg'
 
 switchNode' :: Node -> Int -> SceneGraph g -> SceneGraph g
-switchNode' nde n gr = replaceNode'' gr (SceneNode (nde,show nde) (Switch n))
+switchNode' nde n gr = replaceNode'' gr (SceneNode nde (show nde) (Switch n))
 
 
 switchNode ::  SceneNode g -> Int -> SceneGraph g -> SceneGraph g
-switchNode (SceneNode nde (Switch _)) n gr =
+switchNode (SceneNode nde lbl (Switch _)) n gr =
   replaceNode'' gr newNode
-  where newNode = SceneNode nde (Switch n)
+  where newNode = SceneNode nde lbl (Switch n)
 switchNode _ _ _ = error "no Switch"
 
 -- | Create a switch node
@@ -398,19 +399,19 @@ switch' nde a b = do
   (_, s', i) <- runOSGL s a
   (_, s'', j) <- runOSGL s' b
   ST.put s''
-  addNode (SceneNode (nde, show nde) (Switch 0)) [(DefaultEdge, i), (DefaultEdge, j)]
+  addNode (SceneNode nde (show nde) (Switch 0)) [(DefaultEdge, i), (DefaultEdge, j)]
 
 
 -- -- | Get a strip mesh
 -- strip :: Monad m => OSGSceneT m g
 -- strip = do
---            let n = SceneNode (0,"") (Geode $ Mesh1 [(TriangleStrip,0,3)] [
---                                     vector3 (-2) 0 (-2),
---                                     vector3 (2)  0 (-2),
---                                     vector3 0 0 0 ] [
---                                     vector3 0 (-1) 0,
---                                     vector3 0 (-1) 0,
---                                     vector3 0 (-1) 0 ] )
+--            let n = SceneNode 0 "" (Geode $ Mesh1 [(TriangleStrip,0,3)] [
+--                                    vector3 (-2) 0 (-2),
+--                                    vector3 (2)  0 (-2),
+--                                    vector3 0 0 0 ] [
+--                                    vector3 0 (-1) 0,
+--                                    vector3 0 (-1) 0,
+--                                    vector3 0 (-1) 0 ] )
 --            addNode n []
 
 -- | Make a group node from list of nodes
@@ -434,8 +435,8 @@ findHandler gr num =
   let start = fromEnum num
       findUp num' =
         case llab gr num' of
-          SceneNode (n, _) (Handler _ _) -> [llab gr n]
-          _                              -> concatMap findUp (G.pre gr num')
+          SceneNode n _ (Handler _ _) -> [llab gr n]
+          _                           -> concatMap findUp (G.pre gr num')
   in
   case findUp start of
     []    -> Nothing
@@ -447,8 +448,8 @@ findHandlerDown :: SceneGraph g -> Int -> Int
 findHandlerDown gr num =
   let findDown num' =
         case llab gr num' of
-          SceneNode (n, _) (Handler _ _) -> [n]
-          _                              -> concatMap findDown (G.suc gr num')
+          SceneNode n _ (Handler _ _) -> [n]
+          _                           -> concatMap findDown (G.suc gr num')
   in
   case findDown num of
     []    -> error "findHandlerDown failed"
@@ -459,8 +460,8 @@ findTextDown :: SceneGraph g -> Int -> Int
 findTextDown gr num =
   let findDown num' =
         case llab gr num' of
-          SceneNode (n, _) (Text _ ) -> [n]
-          _                          -> concatMap findDown (G.suc gr num')
+          SceneNode n _ (Text _ ) -> [n]
+          _                       -> concatMap findDown (G.suc gr num')
   in
   case findDown num of
     []    -> error "findHandlerDown failed"
@@ -477,7 +478,7 @@ handleClickEvent :: Scene g -> Int -> KeyState -> IO (Scene g, Maybe (Scene g), 
 handleClickEvent (Scene gr start) n ks = do
   -- putStrLn $ "handle event" ++ show ks
   case findHandler gr n of
-    Just (SceneNode (nid, _) (Handler (Just (fn, snk)) _ )) -> do
+    Just (SceneNode nid _ (Handler (Just (fn, snk)) _ )) -> do
       sg <- fn (Scene gr nid) ks
       case ks of
         Down -> snk ()
@@ -491,8 +492,8 @@ emptyOSG = G.empty
 findCamera :: Scene g -> Int -> Node
 findCamera (Scene gr _) _ = head . filter (\x ->
     case llab gr x of
-      SceneNode _ Camera -> True
-      _                  -> False) . G.nodes $ gr
+      SceneNode _ _ Camera -> True
+      _                    -> False) . G.nodes $ gr
 
 findCameraPath :: Scene g -> Int -> G.Path
 findCameraPath (Scene gr nde) i =
@@ -507,13 +508,13 @@ getTransformTo (Scene gr start) nde =
   where
     trans n mat1 =
       case llab gr n of
-        SceneNode _ (MatrixTransform mat2) -> mat1 !*! mat2
-        _                                  -> mat1
+        SceneNode _ _ (MatrixTransform mat2) -> mat1 !*! mat2
+        _                                    -> mat1
 
 
 getByLabel :: SceneGraph g -> String -> Node
 getByLabel gr lbl =
   head
-  . filter (\n -> let (SceneNode (_,lbl') _) = llab gr n in lbl == lbl')
+  . filter (\n -> let (SceneNode _ lbl' _) = llab gr n in lbl == lbl')
   . G.nodes
   $ gr

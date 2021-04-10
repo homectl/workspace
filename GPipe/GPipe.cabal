@@ -67,6 +67,7 @@ library
     , Boolean
     , containers
     , exception-transformers
+    , fgl
     , gl
     , hashtables
     , lens
@@ -90,3 +91,4 @@ test-suite testsuite
       base < 5
     , GPipe
     , hspec
+    , text

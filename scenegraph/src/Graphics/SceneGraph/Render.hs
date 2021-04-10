@@ -19,11 +19,11 @@ drawScene = drawScene' L.identity (colorToPhong White)
 drawScene' :: Monad m => M44 Float -> Phong -> Scene g -> (M44 Float -> Phong -> g -> m ()) -> m ()
 drawScene' curMat curPhong (Scene gr n) drawGeode = do
   case llab gr n of
-    SceneNode _ (MatrixTransform m) -> do
+    SceneNode _ _ (MatrixTransform m) -> do
       recurse (m !*! curMat) curPhong
-    SceneNode _ (Material phong) -> do
+    SceneNode _ _ (Material phong) -> do
       recurse curMat phong
-    SceneNode _ (Geode _ g) -> do
+    SceneNode _ _ (Geode _ g) -> do
       drawGeode curMat curPhong g
       recurse curMat curPhong
     _ -> do
@@ -37,8 +37,8 @@ drawScene' curMat curPhong (Scene gr n) drawGeode = do
 
 mapSceneData :: (SceneData g1 -> SceneData g2) -> SceneGraph g1 -> SceneGraph g2
 mapSceneData f =
-  G.nmap (\(SceneNode sn sd) -> SceneNode sn (f sd))
+  G.nmap (\(SceneNode nde lbl sd) -> SceneNode nde lbl (f sd))
 
 foldSceneData :: (SceneData g -> a -> a) -> a -> SceneGraph g -> a
 foldSceneData f =
-  G.ufold (\(_, _, SceneNode _ sd, _) acc -> f sd acc)
+  G.ufold (\(_, _, SceneNode _ _ sd, _) acc -> f sd acc)

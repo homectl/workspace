@@ -21,14 +21,15 @@ instance Show SceneEdge where
 
 -- | Scene Node. Made up of data and maybe a widget
 data SceneNode g = SceneNode
-  { nodeId   :: (Node, String)
-  , nodeData :: SceneData g
+  { nodeId    :: Node
+  , nodeLabel :: String
+  , nodeData  :: SceneData g
   }
   deriving (Show)
 
 -- | Creates an empty scene graph
 nullNode :: Node -> SceneNode g
-nullNode n = SceneNode (n, show n) Group
+nullNode n = SceneNode n (show n) Group
 
 -- | Creates a scene graph containing the supplied node
 trivialGr :: SceneNode g -> SceneGraph g
@@ -53,7 +54,7 @@ data World g = World
   }
 
 instance Eq (SceneNode g) where
-  (SceneNode n _) == (SceneNode m _) = m == n
+  (SceneNode id1 lbl1 _) == (SceneNode id2 lbl2 _) = id1 == id2 && lbl1 == lbl2
 
 data KeyState
   = Up

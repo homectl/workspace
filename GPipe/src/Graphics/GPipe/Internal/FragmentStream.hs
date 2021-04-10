@@ -49,7 +49,7 @@ data FragmentStreamData = FragmentStreamData RasterizationName ExprPos Primitive
 newtype FragmentStream a = FragmentStream [(a, FragmentStreamData)] deriving (Semigroup, Monoid)
 
 instance Functor FragmentStream where
-        fmap f (FragmentStream xs) = FragmentStream $ map (first f) xs
+    fmap f (FragmentStream xs) = FragmentStream $ map (first f) xs
 
 -- | The arrow type for 'toFragment'.
 newtype ToFragment a b = ToFragment (Kleisli (State Int) a b) deriving (Category, Arrow)
@@ -68,46 +68,55 @@ class FragmentInput a where
 -- | Rasterize a stream of primitives into fragments, using a 'Side', 'Viewport' and 'DepthRange' from the shader environment.
 --   Primitives will be transformed from canonical view space, i.e. [(-1,-1,-1),(1,1,1)], to the 2D space defined by the 'ViewPort' parameter and the depth range
 --   defined by the 'DepthRange' parameter.
-rasterize:: forall p a s os f. FragmentInput a
-          => (s -> (Side, PolygonMode, ViewPort, DepthRange))
-          -> PrimitiveStream p (VPos, a)
-          -> Shader os s (FragmentStream (FragmentFormat a))
+rasterize
+    :: forall p a s os f. FragmentInput a
+    => (s -> (Side, PolygonMode, ViewPort, DepthRange))
+    -> PrimitiveStream p (VPos, a)
+    -> Shader os s (FragmentStream (FragmentFormat a))
 rasterize sf (PrimitiveStream xs) = Shader $ do
-        n <- getName
-        modifyRenderIO (\s -> s { rasterizationNameToRenderIO = insert n io (rasterizationNameToRenderIO s) } )
-        return (FragmentStream $ map (f n) xs)
-    where
-        ToFragment (Kleisli m) = toFragment :: ToFragment a (FragmentFormat a)
-        f n ((p, x),(ps, s)) = (evalState (m x) 0, FragmentStreamData n (makePos p >> makePointSize ps) s true)
-        makePos (V4 (S x) (S y) (S z) (S w)) = do
-                                       x' <- x
-                                       y' <- y
-                                       z' <- z
-                                       w' <- w
-                                       tellAssignment' "gl_Position" $ "vec4("<>x'<>","<>y'<>","<>z'<>","<>w'<>")"
-        makePointSize Nothing       = return ()
-        makePointSize (Just (S ps)) = ps >>= tellAssignment' "gl_PointSize"
-        io s =
-            let (side, polygonMode, ViewPort (V2 x y) (V2 w h), DepthRange dmin dmax) = sf s in
-            if w < 0 || h < 0
-                then error "ViewPort, negative size"
-                else do setGlCullFace side
-                        setGlPolygonMode polygonMode
-                        glScissor (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h)
-                        glViewport (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h)
-                        glDepthRange (realToFrac dmin) (realToFrac dmax)
-                        setGLPointSize
+    n <- getName
+    modifyRenderIO (\s -> s{ rasterizationNameToRenderIO = insert n io (rasterizationNameToRenderIO s) })
+    return (FragmentStream $ map (f n) xs)
+  where
+    ToFragment (Kleisli m) = toFragment :: ToFragment a (FragmentFormat a)
+    f n ((p, x),(ps, s)) = (evalState (m x) 0, FragmentStreamData n (makePos p >> makePointSize ps) s true)
 
-        setGlCullFace Front        = glEnable GL_CULL_FACE >> glCullFace GL_BACK -- Back is culled when front is rasterized
-        setGlCullFace Back         = glEnable GL_CULL_FACE >> glCullFace GL_FRONT
-        setGlCullFace FrontAndBack = glDisable GL_CULL_FACE
+    io s =
+        let (side, polygonMode, ViewPort (V2 x y) (V2 w h), DepthRange dmin dmax) = sf s in
+        if w < 0 || h < 0
+            then error "ViewPort, negative size"
+            else do setGlCullFace side
+                    setGlPolygonMode polygonMode
+                    glScissor (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h)
+                    glViewport (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h)
+                    glDepthRange (realToFrac dmin) (realToFrac dmax)
+                    setGLPointSize
 
-        setGlPolygonMode PolygonFill = glPolygonMode GL_FRONT_AND_BACK GL_FILL
-        setGlPolygonMode (PolygonLine lw) = do
-            glLineWidth (realToFrac lw)
-            glPolygonMode GL_FRONT_AND_BACK GL_LINE
+    setGlCullFace Front        = glEnable GL_CULL_FACE >> glCullFace GL_BACK -- Back is culled when front is rasterized
+    setGlCullFace Back         = glEnable GL_CULL_FACE >> glCullFace GL_FRONT
+    setGlCullFace FrontAndBack = glDisable GL_CULL_FACE
 
-        setGLPointSize = if any (isJust.fst.snd) xs then glEnable GL_PROGRAM_POINT_SIZE else glDisable GL_PROGRAM_POINT_SIZE
+    setGlPolygonMode PolygonFill = glPolygonMode GL_FRONT_AND_BACK GL_FILL
+    setGlPolygonMode (PolygonLine lw) = do
+        glLineWidth (realToFrac lw)
+        glPolygonMode GL_FRONT_AND_BACK GL_LINE
+
+    setGLPointSize =
+        if any (isJust.fst.snd) xs
+            then glEnable GL_PROGRAM_POINT_SIZE
+            else glDisable GL_PROGRAM_POINT_SIZE
+
+makePos :: V4 VFloat -> ExprM ()
+makePos (V4 (S x) (S y) (S z) (S w)) = do
+    x' <- x
+    y' <- y
+    z' <- z
+    w' <- w
+    tellAssignment' "gl_Position" $ "vec4("<>x'<>","<>y'<>","<>z'<>","<>w'<>")"
+
+makePointSize :: Maybe VFloat -> ExprM ()
+makePointSize Nothing       = return ()
+makePointSize (Just (S ps)) = ps >>= tellAssignment' "gl_PointSize"
 
 -- | Defines which side to rasterize. Non triangle primitives only has a front side.
 data Side = Front | Back | FrontAndBack
@@ -123,10 +132,10 @@ filterFragments :: (a -> FBool) -> FragmentStream a -> FragmentStream a
 filterFragments f (FragmentStream xs) = FragmentStream $ map g xs
     where g (a,FragmentStreamData x y z w) = (a,FragmentStreamData x y z (w &&* f a))
 
-data RasterizedInfo = RasterizedInfo {
-        rasterizedFragCoord   :: V4 FFloat,
-        rasterizedFrontFacing :: FBool,
-        rasterizedPointCoord  :: V2 FFloat
+data RasterizedInfo = RasterizedInfo
+    { rasterizedFragCoord   :: V4 FFloat
+    , rasterizedFrontFacing :: FBool
+    , rasterizedPointCoord  :: V2 FFloat
     }
 
 -- | Like 'fmap', but where various auto generated information from the rasterization is provided for each vertex.

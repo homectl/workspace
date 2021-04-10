@@ -53,18 +53,17 @@ import           Graphics.GPipe.Internal.Compiler (CompiledShader,
 import           Graphics.GPipe.Internal.Context  (ContextHandler, ContextT,
                                                    Render (..),
                                                    liftNonWinContextIO)
-import           Graphics.GPipe.Internal.IDs      (Identifier)
 
 data ShaderState s = ShaderState Int (RenderIOState s)
 
 newShaderState :: ShaderState s
 newShaderState = ShaderState 1 newRenderIOState
 
--- getName :: (Integral a, Identifier a) => ShaderM s a
 getName :: Integral a => ShaderM s a
-getName = do ShaderState n r <- ShaderM $ lift $ lift $ lift get
-             ShaderM $ lift $ lift $ lift $ put $ ShaderState (n+1) r
-             return $ fromIntegral n
+getName = do
+    ShaderState n r <- ShaderM $ lift $ lift $ lift get
+    ShaderM $ lift $ lift $ lift $ put $ ShaderState (n+1) r
+    return $ fromIntegral n
 
 askUniformAlignment :: ShaderM s UniformAlignment
 askUniformAlignment = ShaderM ask
@@ -78,12 +77,14 @@ tellDrawcall dc = ShaderM $ lift $ tell ([dc], mempty)
 mapDrawcall :: (s -> s') -> Drawcall s' -> Drawcall s
 mapDrawcall f (Drawcall a b c d e g h i j k m) = Drawcall (a . f) b c d e g h i j k m
 
-newtype ShaderM s a = ShaderM (ReaderT UniformAlignment (WriterT ([IO (Drawcall s)], s -> All) (ListT (State (ShaderState s)))) a) deriving (MonadPlus, Monad, Alternative, Applicative, Functor)
+newtype ShaderM s a = ShaderM (ReaderT UniformAlignment (WriterT ([IO (Drawcall s)], s -> All) (ListT (State (ShaderState s)))) a)
+    deriving (MonadPlus, Monad, Alternative, Applicative, Functor)
 
 -- | The monad in which all GPU computations are done. 'Shader os s a' lives in an object space 'os' and a context with format 'f', closing over an environent of type 's'.
-newtype Shader os s a = Shader (ShaderM s a)  deriving (MonadPlus, Monad, Alternative, Applicative, Functor)
+newtype Shader os s a = Shader (ShaderM s a)
+    deriving (MonadPlus, Monad, Alternative, Applicative, Functor)
 
--- | Map the environment to a different environment and run a Shader in that sub environment, returning it's result.
+-- | Map the environment to a different environment and run a Shader in that sub environment, returning its result.
 mapShader :: (s -> s') -> Shader os s' a -> Shader os s a
 mapShader f (Shader (ShaderM m)) = Shader $ ShaderM $ do
     uniAl <- ask

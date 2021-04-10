@@ -28,7 +28,7 @@ import           Data.Word                        (Word32)
 import           Graphics.GPipe.Internal.Buffer   (B (..), B2 (..), B3 (..),
                                                    B4 (..), BInput (BInput),
                                                    Buffer (..), BufferFormat,
-                                                   Uniform (..), makeBuffer)
+                                                   Uniform (..), makeBuffer, UniformAlignment)
 import           Graphics.GPipe.Internal.Compiler (Binding,
                                                    RenderIOState (uniformNameToRenderIO))
 import           Graphics.GPipe.Internal.Expr
@@ -50,38 +50,49 @@ import           Linear.V4                        (V4 (..))
 
 -- | This class constraints which buffer types can be loaded as uniforms, and what type those values have.
 class BufferFormat a => UniformInput a where
-    -- | The type the buffer value will be turned into once it becomes a vertex or fragment value (the @x@ parameter is either 'V' or 'F').
+    -- | The type the buffer value will be turned into once it becomes a vertex
+    --   or fragment value (the @x@ parameter is either 'V' or 'F').
     type UniformFormat a x
-    -- | An arrow action that turns a value from it's buffer representation to it's vertex or fragment representation. Use 'toUniform' from
-    --   the GPipe provided instances to operate in this arrow. Also note that this arrow needs to be able to return a value
-    --   lazily, so ensure you use
+    -- | An arrow action that turns a value from it's buffer representation to
+    --   its vertex or fragment representation. Use 'toUniform' from the GPipe
+    --   provided instances to operate in this arrow. Also note that this arrow
+    --   needs to be able to return a value lazily, so ensure you use
     --
     --  @proc ~pattern -> do ...@.
     toUniform :: ToUniform x a (UniformFormat a x)
 
--- | Load a uniform value from a 'Buffer' into a 'Shader'. The argument function is used to retrieve the buffer and the index into this buffer from the shader environment.
+-- | Load a uniform value from a 'Buffer' into a 'Shader'. The argument function
+--   is used to retrieve the buffer and the index into this buffer from the shader environment.
 getUniform :: forall os f s b x. (UniformInput b) => (s -> (Buffer os (Uniform b), Int)) -> Shader os s (UniformFormat b x)
 getUniform sf = Shader $ do
     uniAl <- askUniformAlignment
     blockId <- getName
-    let (u, offToStype) = shaderGen (useUniform (buildUDecl offToStype) blockId)
-        sampleBuffer = makeBuffer undefined undefined uniAl :: Buffer os (Uniform b)
-        shaderGen :: (Int -> ExprM Text) -> (UniformFormat b x, OffsetToSType) -- Int is name of uniform block
-        shaderGen = runReader $ runWriterT $ shaderGenF $ fromBUnifom $ bufBElement sampleBuffer $ BInput 0 0
-    doForUniform blockId $ \s bind ->
-        let (ub, i) = sf s in
-        if i < 0 || i >= bufferLength ub
-            then error "toUniformBlock, uniform buffer offset out of bounds"
-            else do
-                bname <- readIORef $ bufName ub
-                glBindBufferRange GL_UNIFORM_BUFFER (fromIntegral bind) bname (fromIntegral $ i * bufElementSize ub) (fromIntegral $ bufElementSize ub)
+    let (u, offToStype) = shaderGen uniAl (useUniform (buildUDecl offToStype) blockId)
+    doForUniform blockId $ bindUniformBuffer sf
     return u
   where
+    sampleBuffer :: UniformAlignment -> Buffer os (Uniform b)
+    sampleBuffer uniAl = makeBuffer undefined undefined uniAl
+
+    shaderGen :: UniformAlignment -> (Int -> ExprM Text) -> (UniformFormat b x, OffsetToSType) -- Int is offset in uniform block
+    shaderGen uniAl = runReader $ runWriterT $ shaderGenF $ fromBUnifom $ bufBElement (sampleBuffer uniAl) $ BInput 0 0
+
     ToUniform (Kleisli shaderGenF) = toUniform :: ToUniform x b (UniformFormat b x)
     fromBUnifom (Uniform b) = b
 
-    doForUniform :: UniformId -> (s -> Binding -> IO()) -> ShaderM s ()
-    doForUniform n io = modifyRenderIO (\s -> s { uniformNameToRenderIO = insert n io (uniformNameToRenderIO s) } )
+    doForUniform :: UniformId -> (s -> Binding -> IO ()) -> ShaderM s ()
+    doForUniform n io = modifyRenderIO (\s -> s{ uniformNameToRenderIO = insert n io (uniformNameToRenderIO s) })
+
+bindUniformBuffer :: (s -> (Buffer os (Uniform b), Int)) -> s -> Binding -> IO ()
+bindUniformBuffer sf s bind =
+    let (ub, i) = sf s in
+    if i < 0 || i >= bufferLength ub
+        then error "toUniformBlock, uniform buffer offset out of bounds"
+        else do
+            bname <- readIORef $ bufName ub
+            let offset = fromIntegral $ i * bufElementSize ub
+                size = fromIntegral $ bufElementSize ub
+            glBindBufferRange GL_UNIFORM_BUFFER (fromIntegral bind) bname offset size
 
 buildUDecl :: OffsetToSType -> GlobDeclM ()
 buildUDecl = buildUDecl' 0 . Map.toAscList

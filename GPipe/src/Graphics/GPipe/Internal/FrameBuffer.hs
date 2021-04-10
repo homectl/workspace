@@ -25,9 +25,11 @@ import           Graphics.GPipe.Internal.Context         (FBOKey,
                                                           asSync, getFBO,
                                                           getLastRenderWin,
                                                           setFBO)
-import           Graphics.GPipe.Internal.Expr            (ExprM, F, FFloat,
-                                                          GlobDeclM, S (..),
-                                                          discard, runExprM,
+import           Graphics.GPipe.Internal.Expr            (ExprM,
+                                                          ExprResult (ExprResult),
+                                                          F, FFloat, GlobDeclM,
+                                                          S (..), discard,
+                                                          runExprM,
                                                           tellAssignment',
                                                           tellGlobal,
                                                           tellGlobalLn, tshow)
@@ -192,8 +194,8 @@ tellDrawcalls (FragmentStream xs) f = do
 
 makeDrawcall :: DrawcallInfo s -> FragmentStreamData -> IO (Drawcall s)
 makeDrawcall (sh, shd, wOrIo) (FragmentStreamData rastN shaderpos (PrimitiveStreamData primN ubuff) keep) = do
-    (fsource, funis, fsamps, _, prevDecls, prevS) <- runExprM shd (discard keep >> sh)
-    (vsource, vunis, vsamps, vinps, _, _) <- runExprM prevDecls (prevS >> shaderpos)
+    ExprResult fsource funis fsamps _ prevDecls prevS <- runExprM shd (discard keep >> sh)
+    ExprResult vsource vunis vsamps vinps _ _ <- runExprM prevDecls (prevS >> shaderpos)
     let prefix = "generated-shaders/shader" <> show primN
     dumpGeneratedFile (prefix <> ".frag") fsource
     dumpGeneratedFile (prefix <> ".vert") vsource
@@ -221,9 +223,10 @@ setColor ct n c = let    name = "out" <> tshow n
                          tellGlobalLn name)
 
 setDepth :: FFloat -> ExprM ()
-setDepth (S d) = do d' <- d
-                    when (d' /= "gl_FragDepth") $
-                        tellAssignment' "gl_FragDepth" d'
+setDepth (S d) = do
+    d' <- d
+    when (d' /= "gl_FragDepth") $
+        tellAssignment' "gl_FragDepth" d'
 
 make3 :: (t, t1) -> t2 -> (t, t1, t2)
 make3 (a,b) c = (a,b,c)
@@ -233,31 +236,32 @@ type FragDepth = FFloat
 
 setGlColorMask :: ColorSampleable f => f -> GLuint -> Color f Bool -> IO ()
 setGlColorMask c i mask = glColorMaski i x y z w
-    where [x,y,z,w] = map fromBool $ take 4 $ fromColor c mask ++ [False, False, False]
+  where [x,y,z,w] = map fromBool $ take 4 $ fromColor c mask ++ [False, False, False]
 
 setGlContextColorOptions :: ColorSampleable f => f -> ContextColorOption f -> IO ()
 setGlContextColorOptions c (ContextColorOption blend mask) = do
-        setGlColorMask c 0 mask
-        setGlBlend blend
-        case blend of
-            NoBlending -> glDisable GL_BLEND
-            LogicOp _  -> glDisable GL_BLEND
-            _          -> glEnable GL_BLEND
+    setGlColorMask c 0 mask
+    setGlBlend blend
+    case blend of
+        NoBlending -> glDisable GL_BLEND
+        LogicOp _  -> glDisable GL_BLEND
+        _          -> glEnable GL_BLEND
 
 setGlBlend :: Blending -> IO ()
 setGlBlend NoBlending = return ()
 setGlBlend (BlendRgbAlpha (e, ea) (BlendingFactors sf df, BlendingFactors sfa dfa) (V4 r g b a)) = do
-                            glBlendEquationSeparate (getGlBlendEquation e) (getGlBlendEquation ea)
-                            glBlendFuncSeparate (getGlBlendFunc sf) (getGlBlendFunc df) (getGlBlendFunc sfa) (getGlBlendFunc dfa)
-                            when (usesConstantColor sf || usesConstantColor df || usesConstantColor sfa || usesConstantColor dfa) $
-                                glBlendColor (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
+    glBlendEquationSeparate (getGlBlendEquation e) (getGlBlendEquation ea)
+    glBlendFuncSeparate (getGlBlendFunc sf) (getGlBlendFunc df) (getGlBlendFunc sfa) (getGlBlendFunc dfa)
+    when (usesConstantColor sf || usesConstantColor df || usesConstantColor sfa || usesConstantColor dfa) $
+        glBlendColor (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
 setGlBlend (LogicOp op) = glEnable GL_COLOR_LOGIC_OP >> glLogicOp (getGlLogicOp op)
 
 
 setGlDepthOptions :: DepthOption -> IO ()
-setGlDepthOptions (DepthOption df dm) = do glEnable GL_DEPTH_TEST
-                                           glDepthFunc (getGlCompFunc df)
-                                           glDepthMask $ fromBool dm
+setGlDepthOptions (DepthOption df dm) = do
+    glEnable GL_DEPTH_TEST
+    glDepthFunc (getGlCompFunc df)
+    glDepthMask $ fromBool dm
 
 setGlStencilOptions :: FrontBack StencilOption -> StencilOp -> StencilOp -> IO ()
 setGlStencilOptions (FrontBack (StencilOption ft fr ff fp frm fwm) (StencilOption bt br bf bp brm bwm)) fdf bdf = do
@@ -278,19 +282,19 @@ data ContextColorOption f = ContextColorOption Blending (ColorMask f)
 
 data DepthOption = DepthOption DepthFunction DepthMask
 type StencilOptions = FrontBack StencilOption
-data StencilOption = StencilOption {
-                            stencilTest         :: ComparisonFunction,
-                            stencilReference    :: Int,
-                            opWhenStencilFail   :: StencilOp,
-                            opWhenStencilPass   :: StencilOp,
-                            stencilReadBitMask  :: Word,
-                            stencilWriteBitMask :: Word
-                            }
-data DepthStencilOption = DepthStencilOption {
-                            dsStencilOptions              :: StencilOptions,
-                            dsDepthOption                 :: DepthOption ,
-                            opWhenStencilPassButDepthFail :: FrontBack StencilOp
-                            }
+data StencilOption = StencilOption
+    { stencilTest         :: ComparisonFunction
+    , stencilReference    :: Int
+    , opWhenStencilFail   :: StencilOp
+    , opWhenStencilPass   :: StencilOp
+    , stencilReadBitMask  :: Word
+    , stencilWriteBitMask :: Word
+    }
+data DepthStencilOption = DepthStencilOption
+    { dsStencilOptions              :: StencilOptions
+    , dsDepthOption                 :: DepthOption
+    , opWhenStencilPassButDepthFail :: FrontBack StencilOp
+    }
 
 data FrontBack a = FrontBack { front :: a, back :: a }
 
@@ -388,110 +392,113 @@ data StencilOp =
 
 -- | Fill a color image with a constant color value
 clearImageColor :: forall c os. ColorRenderable c => Image (Format c) -> Color c (ColorElement c) -> Render os ()
-clearImageColor i c = do (cwid, cd, doAsync) <- getLastRenderWin
-                         key <- Render $ lift $ lift $ lift $ getImageFBOKey i
-                         let fbokey = FBOKeys [key] Nothing Nothing
-                         mfbo <- Render $ lift $ lift $ lift $ getFBO cd fbokey
-                         case mfbo of
-                                Just fbo -> Render $ liftIO $ doAsync $ do
-                                                                      fbo' <- readIORef fbo
-                                                                      glBindFramebuffer GL_DRAW_FRAMEBUFFER fbo'
-                                Nothing -> Render $ maybeThrow $ liftIO $ asSync doAsync $ do
-                                                  fbo' <- alloca (\ptr -> glGenFramebuffers 1 ptr >> peek ptr)
-                                                  fbo <- newIORef fbo'
-                                                  void $ mkWeakIORef fbo (doAsync $ with fbo' $ glDeleteFramebuffers 1)
-                                                  setFBO cd fbokey fbo
-                                                  glBindFramebuffer GL_DRAW_FRAMEBUFFER fbo'
-                                                  glEnable GL_FRAMEBUFFER_SRGB
-                                                  getImageBinding i GL_COLOR_ATTACHMENT0
-                                                  withArray [GL_COLOR_ATTACHMENT0] $ glDrawBuffers 1
-                                                  getFBOerror
+clearImageColor i c = do
+    (cwid, cd, doAsync) <- getLastRenderWin
+    key <- Render $ lift $ lift $ lift $ getImageFBOKey i
+    let fbokey = FBOKeys [key] Nothing Nothing
+    mfbo <- Render $ lift $ lift $ lift $ getFBO cd fbokey
+    case mfbo of
+        Just fbo -> Render $ liftIO $ doAsync $ do
+            fbo' <- readIORef fbo
+            glBindFramebuffer GL_DRAW_FRAMEBUFFER fbo'
+        Nothing -> Render $ maybeThrow $ liftIO $ asSync doAsync $ do
+            fbo' <- alloca (\ptr -> glGenFramebuffers 1 ptr >> peek ptr)
+            fbo <- newIORef fbo'
+            void $ mkWeakIORef fbo (doAsync $ with fbo' $ glDeleteFramebuffers 1)
+            setFBO cd fbokey fbo
+            glBindFramebuffer GL_DRAW_FRAMEBUFFER fbo'
+            glEnable GL_FRAMEBUFFER_SRGB
+            getImageBinding i GL_COLOR_ATTACHMENT0
+            withArray [GL_COLOR_ATTACHMENT0] $ glDrawBuffers 1
+            getFBOerror
 
-                         Render $ liftIO $ doAsync $ do
-                                                   glDisable GL_SCISSOR_TEST
-                                                   glColorMask glTrue glTrue glTrue glTrue
-                                                   clearColor (undefined :: c) c
-                                                   glEnable GL_SCISSOR_TEST
+    Render $ liftIO $ doAsync $ do
+        glDisable GL_SCISSOR_TEST
+        glColorMask glTrue glTrue glTrue glTrue
+        clearColor (undefined :: c) c
+        glEnable GL_SCISSOR_TEST
 
 -- | Fill a depth image with a constant depth value (in the range [0,1])
 clearImageDepth :: DepthRenderable d => Image (Format d) -> Float -> Render os ()
-clearImageDepth i d = do (cwid, cd, doAsync) <- getLastRenderWin
-                         key <- Render $ lift $ lift $ lift $ getImageFBOKey i
-                         let fbokey = FBOKeys [] (Just key) Nothing
-                         mfbo <- Render $ lift $ lift $ lift $ getFBO cd fbokey
-                         case mfbo of
-                                Just fbo -> Render $ liftIO $ doAsync $ do
-                                                                      fbo' <- readIORef fbo
-                                                                      glBindFramebuffer GL_DRAW_FRAMEBUFFER fbo'
-                                Nothing -> Render $ maybeThrow $ liftIO $ asSync doAsync $ do
-                                                  fbo' <- alloca (\ptr -> glGenFramebuffers 1 ptr >> peek ptr)
-                                                  fbo <- newIORef fbo'
-                                                  void $ mkWeakIORef fbo (doAsync $ with fbo' $ glDeleteFramebuffers 1)
-                                                  setFBO cd fbokey fbo
-                                                  glBindFramebuffer GL_DRAW_FRAMEBUFFER fbo'
-                                                  glEnable GL_FRAMEBUFFER_SRGB
-                                                  getImageBinding i GL_DEPTH_ATTACHMENT
-                                                  glDrawBuffers 0 nullPtr
-                                                  getFBOerror
-                         Render $ liftIO $ doAsync $ do
-                                                   glDisable GL_SCISSOR_TEST
-                                                   glDepthMask glTrue
-                                                   with (realToFrac d) $ glClearBufferfv GL_DEPTH 0
-                                                   glEnable GL_SCISSOR_TEST
+clearImageDepth i d = do
+    (cwid, cd, doAsync) <- getLastRenderWin
+    key <- Render $ lift $ lift $ lift $ getImageFBOKey i
+    let fbokey = FBOKeys [] (Just key) Nothing
+    mfbo <- Render $ lift $ lift $ lift $ getFBO cd fbokey
+    case mfbo of
+        Just fbo -> Render $ liftIO $ doAsync $ do
+            fbo' <- readIORef fbo
+            glBindFramebuffer GL_DRAW_FRAMEBUFFER fbo'
+        Nothing -> Render $ maybeThrow $ liftIO $ asSync doAsync $ do
+            fbo' <- alloca (\ptr -> glGenFramebuffers 1 ptr >> peek ptr)
+            fbo <- newIORef fbo'
+            void $ mkWeakIORef fbo (doAsync $ with fbo' $ glDeleteFramebuffers 1)
+            setFBO cd fbokey fbo
+            glBindFramebuffer GL_DRAW_FRAMEBUFFER fbo'
+            glEnable GL_FRAMEBUFFER_SRGB
+            getImageBinding i GL_DEPTH_ATTACHMENT
+            glDrawBuffers 0 nullPtr
+            getFBOerror
+    Render $ liftIO $ doAsync $ do
+        glDisable GL_SCISSOR_TEST
+        glDepthMask glTrue
+        with (realToFrac d) $ glClearBufferfv GL_DEPTH 0
+        glEnable GL_SCISSOR_TEST
 
 -- | Fill a depth image with a constant stencil value
 clearImageStencil :: StencilRenderable s => Image (Format s) -> Int -> Render os ()
-clearImageStencil i s = do (cwid, cd, doAsync) <- getLastRenderWin
-                           key <- Render $ lift $ lift $ lift $ getImageFBOKey i
-                           let fbokey = FBOKeys [] Nothing (Just key)
-                           mfbo <- Render $ lift $ lift $ lift $ getFBO cd fbokey
-                           case mfbo of
-                                Just fbo -> Render $ liftIO $ doAsync $ do
-                                                                      fbo' <- readIORef fbo
-                                                                      glBindFramebuffer GL_DRAW_FRAMEBUFFER fbo'
-                                Nothing -> Render $ maybeThrow $ liftIO $ asSync doAsync $ do
-                                                  fbo' <- alloca (\ptr -> glGenFramebuffers 1 ptr >> peek ptr)
-                                                  fbo <- newIORef fbo'
-                                                  void $ mkWeakIORef fbo (doAsync $ with fbo' $ glDeleteFramebuffers 1)
-                                                  setFBO cd fbokey fbo
-                                                  glBindFramebuffer GL_DRAW_FRAMEBUFFER fbo'
-                                                  glEnable GL_FRAMEBUFFER_SRGB
-                                                  getImageBinding i GL_STENCIL_ATTACHMENT
-                                                  glDrawBuffers 0 nullPtr
-                                                  getFBOerror
-                           Render $ liftIO $ doAsync $ do
-                                                     glDisable GL_SCISSOR_TEST
-                                                     glStencilMask maxBound
-                                                     with (fromIntegral s) $ glClearBufferiv GL_STENCIL 0
-                                                     glEnable GL_SCISSOR_TEST
+clearImageStencil i s = do
+    (cwid, cd, doAsync) <- getLastRenderWin
+    key <- Render $ lift $ lift $ lift $ getImageFBOKey i
+    let fbokey = FBOKeys [] Nothing (Just key)
+    mfbo <- Render $ lift $ lift $ lift $ getFBO cd fbokey
+    case mfbo of
+        Just fbo -> Render $ liftIO $ doAsync $ do
+            fbo' <- readIORef fbo
+            glBindFramebuffer GL_DRAW_FRAMEBUFFER fbo'
+        Nothing -> Render $ maybeThrow $ liftIO $ asSync doAsync $ do
+            fbo' <- alloca (\ptr -> glGenFramebuffers 1 ptr >> peek ptr)
+            fbo <- newIORef fbo'
+            void $ mkWeakIORef fbo (doAsync $ with fbo' $ glDeleteFramebuffers 1)
+            setFBO cd fbokey fbo
+            glBindFramebuffer GL_DRAW_FRAMEBUFFER fbo'
+            glEnable GL_FRAMEBUFFER_SRGB
+            getImageBinding i GL_STENCIL_ATTACHMENT
+            glDrawBuffers 0 nullPtr
+            getFBOerror
+    Render $ liftIO $ doAsync $ do
+        glDisable GL_SCISSOR_TEST
+        glStencilMask maxBound
+        with (fromIntegral s) $ glClearBufferiv GL_STENCIL 0
+        glEnable GL_SCISSOR_TEST
 
 -- | Fill a combined depth stencil image with a constant depth value (in the range [0,1]) and a constant stencil value
 clearImageDepthStencil :: Image (Format DepthStencil) -> Float -> Int -> Render os ()
 clearImageDepthStencil i d s = do
-                           (cwid, cd, doAsync) <- getLastRenderWin
-                           key <- Render $ lift $ lift $ lift $ getImageFBOKey i
-                           let fbokey = FBOKeys [] Nothing (Just key)
-                           mfbo <- Render $ lift $ lift $ lift $ getFBO cd fbokey
-                           case mfbo of
-                                Just fbo -> Render $ liftIO $ doAsync $ do
-                                                                      fbo' <- readIORef fbo
-                                                                      glBindFramebuffer GL_DRAW_FRAMEBUFFER fbo'
-                                Nothing -> Render $ maybeThrow $ liftIO $ asSync doAsync $ do
-                                                  fbo' <- alloca (\ptr -> glGenFramebuffers 1 ptr >> peek ptr)
-                                                  fbo <- newIORef fbo'
-                                                  void $ mkWeakIORef fbo (doAsync $ with fbo' $ glDeleteFramebuffers 1)
-                                                  setFBO cd fbokey fbo
-                                                  glBindFramebuffer GL_DRAW_FRAMEBUFFER fbo'
-                                                  glEnable GL_FRAMEBUFFER_SRGB
-                                                  getImageBinding i GL_DEPTH_STENCIL_ATTACHMENT
-                                                  glDrawBuffers 0 nullPtr
-                                                  getFBOerror
-                           Render $ liftIO $ doAsync $ do
-                                                     glDisable GL_SCISSOR_TEST
-                                                     glDepthMask glTrue
-                                                     glStencilMask maxBound
-                                                     glClearBufferfi GL_DEPTH_STENCIL 0 (realToFrac d) (fromIntegral s)
-                                                     glEnable GL_SCISSOR_TEST
+    (cwid, cd, doAsync) <- getLastRenderWin
+    key <- Render $ lift $ lift $ lift $ getImageFBOKey i
+    let fbokey = FBOKeys [] Nothing (Just key)
+    mfbo <- Render $ lift $ lift $ lift $ getFBO cd fbokey
+    case mfbo of
+        Just fbo -> Render $ liftIO $ doAsync $ do
+            fbo' <- readIORef fbo
+            glBindFramebuffer GL_DRAW_FRAMEBUFFER fbo'
+        Nothing -> Render $ maybeThrow $ liftIO $ asSync doAsync $ do
+            fbo' <- alloca (\ptr -> glGenFramebuffers 1 ptr >> peek ptr)
+            fbo <- newIORef fbo'
+            void $ mkWeakIORef fbo (doAsync $ with fbo' $ glDeleteFramebuffers 1)
+            setFBO cd fbokey fbo
+            glBindFramebuffer GL_DRAW_FRAMEBUFFER fbo'
+            glEnable GL_FRAMEBUFFER_SRGB
+            getImageBinding i GL_DEPTH_STENCIL_ATTACHMENT
+            glDrawBuffers 0 nullPtr
+            getFBOerror
+    Render $ liftIO $ doAsync $ do
+        glDisable GL_SCISSOR_TEST
+        glDepthMask glTrue
+        glStencilMask maxBound
+        glClearBufferfi GL_DEPTH_STENCIL 0 (realToFrac d) (fromIntegral s)
+        glEnable GL_SCISSOR_TEST
 
 inWin :: Window os1 c ds -> IO () -> Render os2 ()
 inWin w m = Render $ do

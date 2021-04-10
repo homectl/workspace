@@ -19,7 +19,7 @@ import           Linear                          (M44, V4 (..))
 -------------------- Graph Visualisation --------------------
 
 instance GV.Labellable (SceneNode g) where
-  toLabelValue (SceneNode (_, _) sd) = GV.toLabelValue sd
+  toLabelValue (SceneNode _ _ sd) = GV.toLabelValue sd
 
 instance GV.Labellable SceneEdge where
   toLabelValue DefaultEdge = GV.toLabelValue ""

@@ -2,9 +2,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards     #-}
 {-# LANGUAGE PatternSynonyms   #-}
-{-# OPTIONS_GHC -Wno-name-shadowing #-}
-{-# OPTIONS_GHC -Wno-unused-matches #-}
 {-# LANGUAGE ViewPatterns      #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
+{-# LANGUAGE NamedFieldPuns    #-}
+{-# LANGUAGE RecordWildCards   #-}
 module Graphics.GPipe.Internal.Compiler where
 
 import           Control.Monad                    (forM_, void, when, (>=>))
@@ -79,15 +80,43 @@ mapRenderIOState :: (s -> s') -> RenderIOState s' -> RenderIOState s -> RenderIO
 mapRenderIOState f (RenderIOState a b c d) (RenderIOState i j k l) = let g x = x . f in RenderIOState (Map.union i $ Map.map g a) (Map.union j $ Map.map g b) (Map.union k $ Map.map g c) (Map.union l $ Map.map g d)
 
 
+data CompInput s = CompInput
+    { drawcall :: Drawcall s
+    , unis     :: [UniformId]
+    , samps    :: [SamplerId]
+    , ubinds   :: [UniformId]
+    , sbinds   :: [SamplerId]
+    }
+
+mkCompInput :: (Drawcall s, [UniformId], [SamplerId], [UniformId], [SamplerId]) -> CompInput s
+mkCompInput (drawcall, unis, samps, ubinds, sbinds) = CompInput{..}
+
+
+data GpuLimits = GpuLimits
+    { maxUnis      :: UniformId
+    , maxSamplers  :: SamplerId
+    , maxVUnis     :: UniformId
+    , maxVSamplers :: SamplerId
+    , maxFUnis     :: UniformId
+    , maxFSamplers :: SamplerId
+    }
+
+getLimits :: IO GpuLimits
+getLimits = GpuLimits
+    <$> getLimit GL_MAX_COMBINED_UNIFORM_BLOCKS
+    <*> getLimit GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS
+    <*> getLimit GL_MAX_VERTEX_UNIFORM_BLOCKS
+    <*> getLimit GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS
+    <*> getLimit GL_MAX_FRAGMENT_UNIFORM_BLOCKS
+    <*> getLimit GL_MAX_TEXTURE_IMAGE_UNITS
+  where
+    getLimit kind = fromIntegral <$> alloca (\ptr -> glGetIntegerv kind ptr >> peek ptr)
+
+
 -- | May throw a GPipeException
 compile :: (Monad m, MonadIO m, MonadException m, ContextHandler ctx) => [Drawcall s] -> RenderIOState s -> ContextT ctx os m (CompiledShader os s)
 compile drawcalls s = do
-    (maxUnis,
-     maxSamplers,
-     maxVUnis,
-     maxVSamplers,
-     maxFUnis,
-     maxFSamplers) <- liftNonWinContextIO getLimits
+    GpuLimits{..} <- liftNonWinContextIO getLimits
 
     let vUnisPerDc = map usedVUniforms drawcalls
         vSampsPerDc = map usedVSamplers drawcalls
@@ -110,7 +139,7 @@ compile drawcalls s = do
 
         allocatedUniforms = allocate maxUnis unisPerDc
         allocatedSamplers = allocate maxSamplers sampsPerDc
-    compRet <- mapM (comp s) (zip5 drawcalls unisPerDc sampsPerDc allocatedUniforms allocatedSamplers)
+    compRet <- mapM (compileDrawcall s . mkCompInput) (zip5 drawcalls unisPerDc sampsPerDc allocatedUniforms allocatedSamplers)
     let (errs, ret) = partitionEithers compRet
         (pnames, fs) = unzip ret
         fr x = mapM_ ($ x) fs
@@ -126,62 +155,14 @@ compile drawcalls s = do
             liftIO $ throwIO $ GPipeException $ Text.concat allErrs
 
 
-getLimits :: IO (UniformId, SamplerId, UniformId, SamplerId, UniformId, SamplerId)
-getLimits = do
-    maxUnis <- alloca (\ptr -> glGetIntegerv GL_MAX_COMBINED_UNIFORM_BLOCKS ptr >> peek ptr)
-    maxSamplers <- alloca (\ptr -> glGetIntegerv GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS ptr >> peek ptr)
-    maxVUnis <- alloca (\ptr -> glGetIntegerv GL_MAX_VERTEX_UNIFORM_BLOCKS ptr >> peek ptr)
-    maxVSamplers <- alloca (\ptr -> glGetIntegerv GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS ptr >> peek ptr)
-    maxFUnis <- alloca (\ptr -> glGetIntegerv GL_MAX_FRAGMENT_UNIFORM_BLOCKS ptr >> peek ptr)
-    maxFSamplers <- alloca (\ptr -> glGetIntegerv GL_MAX_TEXTURE_IMAGE_UNITS ptr >> peek ptr)
-    return
-        ( fromIntegral maxUnis
-        , fromIntegral maxSamplers
-        , fromIntegral maxVUnis
-        , fromIntegral maxVSamplers
-        , fromIntegral maxFUnis
-        , fromIntegral maxFSamplers)
-
-
-type CompInput s = (Drawcall s, [UniformId], [SamplerId], [UniformId], [SamplerId])
-
-comp :: (ContextHandler ctx, MonadIO m) => RenderIOState s -> CompInput s -> ContextT ctx os m (Either Text ((IORef GLuint, IO ()), CompiledShader os s))
-comp s dc@(Drawcall fboSetup primN rastN vsource fsource inps _ _ _ _ pstrUSize', unis, samps, ubinds, sbinds) = do
+compileDrawcall :: (ContextHandler ctx, MonadIO m) => RenderIOState s -> CompInput s -> ContextT ctx os m (Either Text ((IORef GLuint, IO ()), CompiledShader os s))
+compileDrawcall s dc@CompInput{drawcall=Drawcall fboSetup primN rastN vsource fsource inps _ _ _ _ pstrUSize', unis, samps, ubinds, sbinds} = do
     let pstrUSize = if 0 `elem` unis then pstrUSize' else 0
     let uNameToRenderIOmap = uniformNameToRenderIO s
     pstrUBuf <- createUBuffer pstrUSize -- Create uniform buffer for primiveStream uniforms
     let pStrUDeleter = when (pstrUSize > 0) $ with pstrUBuf (glDeleteBuffers 1)
     let uNameToRenderIOmap' = addPstrUniform pstrUBuf pstrUSize uNameToRenderIOmap
-    ePname <- liftNonWinContextIO $ do
-        vShader <- glCreateShader GL_VERTEX_SHADER
-        mErrV <- compileShader vShader vsource
-        fShader <- glCreateShader GL_FRAGMENT_SHADER
-        mErrF <- compileShader fShader fsource
-        if isNothing mErrV && isNothing mErrV
-            then do
-                pName <- glCreateProgram
-                glAttachShader pName vShader
-                glAttachShader pName fShader
-                mapM_ (\(name, ix) -> withCString ("in"++ show name) $ glBindAttribLocation pName ix) $ zip inps [0..]
-                mPErr <- linkProgram pName
-                glDetachShader pName vShader
-                glDetachShader pName fShader
-                glDeleteShader vShader
-                glDeleteShader fShader
-                case mPErr of
-                    Just errP -> do
-                        glDeleteProgram pName
-                        pStrUDeleter
-                        return $ Left $ "Linking a GPU progam failed:\n" <> errP <> "\nVertex source:\n" <> vsource <> "\nFragment source:\n" <> fsource
-                    Nothing -> return $ Right pName
-            else do
-                glDeleteShader vShader
-                glDeleteShader fShader
-                pStrUDeleter
-                let err = maybe "" (\e -> "A vertex shader compilation failed:\n" <> e <> "\nSource:\n" <> vsource) mErrV
-                       <> maybe "" (\e -> "A fragment shader compilation failed:\n" <> e <> "\nSource:\n" <> fsource) mErrF
-                return $ Left err
-    case ePname of
+    liftNonWinContextIO (compileShaders pStrUDeleter vsource fsource inps) >>= \case
         Left err -> return $ Left err
         Right pName -> liftNonWinContextIO $ do
             forM_ (zip unis ubinds) $ \(name, bind) -> do
@@ -196,8 +177,40 @@ comp s dc@(Drawcall fboSetup primN rastN vsource fsource inps _ _ _ _ pstrUSize'
             return $ Right ((pNameRef, pStrUDeleter), renderer s dc pNameRef uNameToRenderIOmap' pstrUBuf pstrUSize)
 
 
+compileShaders :: IO () -> Text -> Text -> [Int] -> IO (Either Text GLuint)
+compileShaders pStrUDeleter vsource fsource inps = do
+    vShader <- glCreateShader GL_VERTEX_SHADER
+    mErrV <- compileShader vShader vsource
+    fShader <- glCreateShader GL_FRAGMENT_SHADER
+    mErrF <- compileShader fShader fsource
+    if isNothing mErrV && isNothing mErrV
+        then do
+            pName <- glCreateProgram
+            glAttachShader pName vShader
+            glAttachShader pName fShader
+            mapM_ (\(name, ix) -> withCString ("in"++ show name) $ glBindAttribLocation pName ix) $ zip inps [0..]
+            mPErr <- linkProgram pName
+            glDetachShader pName vShader
+            glDetachShader pName fShader
+            glDeleteShader vShader
+            glDeleteShader fShader
+            case mPErr of
+                Just errP -> do
+                    glDeleteProgram pName
+                    pStrUDeleter
+                    return $ Left $ "Linking a GPU progam failed:\n" <> errP <> "\nVertex source:\n" <> vsource <> "\nFragment source:\n" <> fsource
+                Nothing -> return $ Right pName
+        else do
+            glDeleteShader vShader
+            glDeleteShader fShader
+            pStrUDeleter
+            let err = maybe "" (\e -> "A vertex shader compilation failed:\n" <> e <> "\nSource:\n" <> vsource) mErrV
+                    <> maybe "" (\e -> "A fragment shader compilation failed:\n" <> e <> "\nSource:\n" <> fsource) mErrF
+            return $ Left err
+
+
 renderer :: RenderIOState s -> CompInput s -> IORef GLuint -> Map.IntMap UniformId (s -> Binding -> IO ()) -> GLuint -> Int -> CompiledShader os s
-renderer s (Drawcall fboSetup primN rastN vsource fsource inps _ _ _ _ pstrUSize', unis, samps, ubinds, sbinds) pNameRef uNameToRenderIOmap' pstrUBuf pstrUSize x = Render $ do
+renderer s CompInput{drawcall=Drawcall fboSetup primN rastN _ _ inps _ _ _ _ _, unis, samps, ubinds, sbinds} pNameRef uNameToRenderIOmap' pstrUBuf pstrUSize x = Render $ do
     -- Drawing with program --
     rs <- lift $ lift get
     renv <- lift ask
@@ -206,7 +219,7 @@ renderer s (Drawcall fboSetup primN rastN vsource fsource inps _ _ _ _ pstrUSize
             case Map.lookup wid (perWindowRenderState rs) of
                 Nothing -> return () -- Window deleted
                 Just (ws, doAsync) -> do
-                    lift $ lift $ put (rs {renderLastUsedWin = wid })
+                    lift $ lift $ put rs{renderLastUsedWin = wid}
                     mErr <- liftIO $ asSync doAsync $ do
                         pName' <- readIORef pNameRef -- Cant use pName, need to touch pNameRef
                         glUseProgram pName'

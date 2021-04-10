@@ -3,12 +3,14 @@
 {-# LANGUAGE FlexibleInstances         #-}
 {-# LANGUAGE GADTs                     #-}
 {-# LANGUAGE MultiParamTypeClasses     #-}
+{-# LANGUAGE NamedFieldPuns            #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE OverloadedStrings         #-}
 {-# LANGUAGE RankNTypes                #-}
+{-# LANGUAGE RecordWildCards           #-}
 {-# LANGUAGE ScopedTypeVariables       #-}
 {-# LANGUAGE TypeFamilies              #-}
-
+{-# LANGUAGE ViewPatterns              #-}
 {-# OPTIONS_GHC -Wno-type-defaults #-}
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
 module Graphics.GPipe.Internal.Expr where
@@ -53,7 +55,16 @@ tshow = Text.pack . show
 type NextTempVar = Int
 type NextGlobal = Int
 
-data SType = STypeFloat | STypeInt | STypeBool | STypeUInt | STypeDyn Text | STypeMat Int Int | STypeVec Int | STypeIVec Int | STypeUVec Int
+data SType
+    = STypeFloat
+    | STypeInt
+    | STypeBool
+    | STypeUInt
+    | STypeDyn Text
+    | STypeMat Int Int
+    | STypeVec Int
+    | STypeIVec Int
+    | STypeUVec Int
 
 stypeName :: SType -> Text
 stypeName STypeFloat     = "float"
@@ -79,14 +90,24 @@ data ExprState = ExprState
     , shaderUsedInput         :: Map.IntMap Int (GlobDeclM (), (ExprM (), GlobDeclM ())) -- For vertex shaders, the shaderM is always undefined and the int is the parameter name, for later shader stages it uses some name local to the transition instead
     }
 
-runExprM :: GlobDeclM () -> ExprM () -> IO (Text, [UniformId], [SamplerId], [Int], GlobDeclM (), ExprM ())
+data ExprResult = ExprResult
+    { source    :: Text
+    , unis      :: [UniformId]
+    , samps     :: [SamplerId]
+    , inps      :: [Int]
+    , prevDecls :: GlobDeclM ()
+    , prevSs    :: ExprM ()
+    }
+    deriving (Show)
+
+runExprM :: GlobDeclM () -> ExprM () -> IO ExprResult
 runExprM d m = do
     (st, body) <- evalStateT (runWriterT (execStateT (runSNMapReaderT (m :: ExprM ())) (ExprState Map.empty Map.empty Map.empty))) 0
     let (unis, uniDecls) = unzip $ Map.toAscList (shaderUsedUniformBlocks st)
         (samps, sampDecls) = unzip $ Map.toAscList (shaderUsedSamplers st)
         (inps, inpDescs) = unzip $ Map.toAscList (shaderUsedInput st)
         (inpDecls, prevDesc) = unzip inpDescs
-        (prevSs, prevDecls) = unzip prevDesc
+        (sequence_ -> prevSs, sequence_ -> prevDecls) = unzip prevDesc
         decls = do
             d
             sequence_ uniDecls
@@ -99,7 +120,7 @@ runExprM d m = do
             , body
             , "}\n"
             ]
-    return (source, unis, samps, inps, sequence_ prevDecls, sequence_ prevSs)
+    return ExprResult{..}
 
 type GlobDeclM = Writer Text
 
@@ -229,8 +250,10 @@ tellAssignment' :: Text -> RValue -> ExprM ()
 tellAssignment' name string = T.lift $ T.lift $ tell $ mconcat [name, " = ", string, ";\n"]
 
 discard :: FBool -> ExprM ()
-discard (S m) = do b <- m
-                   when (b /= "true") $ T.lift $ T.lift $ tell $ mconcat ["if (!(", b, ")) discard;\n"]
+discard (S m) = do
+    b <- m
+    when (b /= "true") $
+        T.lift $ T.lift $ tell $ mconcat ["if (!(", b, ")) discard;\n"]
 
 --
 tellGlobalLn :: Text -> GlobDeclM ()
@@ -700,52 +723,52 @@ instance Real' (S x Float) where
   atan2' = fun2f "atan"
 
 instance (Real' a) => Real' (V0 a) where
-  rsqrt = liftA rsqrt
-  exp2 = liftA exp2
-  log2 = liftA log2
-  floor' = liftA floor'
-  ceiling' = liftA ceiling'
-  fract' = liftA fract'
+  rsqrt = fmap rsqrt
+  exp2 = fmap exp2
+  log2 = fmap log2
+  floor' = fmap floor'
+  ceiling' = fmap ceiling'
+  fract' = fmap fract'
   mod'' = liftA2 mod''
   mix = liftA3 mix
   atan2' = liftA2 atan2'
 instance (Real' a) => Real' (V1 a) where
-  rsqrt = liftA rsqrt
-  exp2 = liftA exp2
-  log2 = liftA log2
-  floor' = liftA floor'
-  ceiling' = liftA ceiling'
-  fract' = liftA fract'
+  rsqrt = fmap rsqrt
+  exp2 = fmap exp2
+  log2 = fmap log2
+  floor' = fmap floor'
+  ceiling' = fmap ceiling'
+  fract' = fmap fract'
   mod'' = liftA2 mod''
   mix = liftA3 mix
   atan2' = liftA2 atan2'
 instance (Real' a) => Real' (V2 a) where
-  rsqrt = liftA rsqrt
-  exp2 = liftA exp2
-  log2 = liftA log2
-  floor' = liftA floor'
-  ceiling' = liftA ceiling'
-  fract' = liftA fract'
+  rsqrt = fmap rsqrt
+  exp2 = fmap exp2
+  log2 = fmap log2
+  floor' = fmap floor'
+  ceiling' = fmap ceiling'
+  fract' = fmap fract'
   mod'' = liftA2 mod''
   mix = liftA3 mix
   atan2' = liftA2 atan2'
 instance (Real' a) => Real' (V3 a) where
-  rsqrt = liftA rsqrt
-  exp2 = liftA exp2
-  log2 = liftA log2
-  floor' = liftA floor'
-  ceiling' = liftA ceiling'
-  fract' = liftA fract'
+  rsqrt = fmap rsqrt
+  exp2 = fmap exp2
+  log2 = fmap log2
+  floor' = fmap floor'
+  ceiling' = fmap ceiling'
+  fract' = fmap fract'
   mod'' = liftA2 mod''
   mix = liftA3 mix
   atan2' = liftA2 atan2'
 instance (Real' a) => Real' (V4 a) where
-  rsqrt = liftA rsqrt
-  exp2 = liftA exp2
-  log2 = liftA log2
-  floor' = liftA floor'
-  ceiling' = liftA ceiling'
-  fract' = liftA fract'
+  rsqrt = fmap rsqrt
+  exp2 = fmap exp2
+  log2 = fmap log2
+  floor' = fmap floor'
+  ceiling' = fmap ceiling'
+  fract' = fmap fract'
   mod'' = liftA2 mod''
   mix = liftA3 mix
   atan2' = liftA2 atan2'
