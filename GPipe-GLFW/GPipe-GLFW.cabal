@@ -102,3 +102,18 @@ benchmark bench
     , GPipe-GLFW
     , JuicyPixels
     , criterion
+
+executable gshader_test
+  default-language: Haskell2010
+  hs-source-dirs:   tools
+  main-is:          gshader_test.hs
+  ghc-options:
+      -Wall
+      -threaded
+  build-depends:
+      base < 5
+    , GPipe-Core
+    , GPipe-GLFW
+    , directory
+    , filepath
+    , lens

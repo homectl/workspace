@@ -24,7 +24,8 @@ shadowMapSize :: Num a => V2 a
 shadowMapSize = V2 600 600
 
 lightTransform :: Floating a => a -> M44 a
-lightTransform time = rotMatrixZ (time/2)
+-- lightTransform time = rotMatrixZ (time/2)
+lightTransform time = rotMatrixZ (pi/10*8)
 
 lightMat :: Floating a => V4 a -> M44 a
 lightMat lightPos = projMat !*! viewMat

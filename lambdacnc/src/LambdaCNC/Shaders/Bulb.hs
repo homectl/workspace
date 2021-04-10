@@ -79,14 +79,13 @@ solidShader globalUni lightUni = compileShader $ do
         fmap (vert vertGlobal vertLight)
             <$> toPrimitiveStream envPrimitives
 
-    let expandedGeometries = primitiveStream
     -- expandedGeometries <-
     --     fmap (geom generativeTriangleStrip)
     --         <$> geometrize primitiveStream
 
     fragmentStream <-
         withRasterizedInfo (\a r -> (frag fragGlobal fragLight a, rasterizedFragCoord r ^. _z))
-            <$> rasterize (\env -> (Front, PolygonFill, ViewPort (V2 0 0) (envScreenSize env), DepthRange 0 1)) expandedGeometries
+            <$> rasterize (\env -> (Front, PolygonFill, ViewPort (V2 0 0) (envScreenSize env), DepthRange 0 1)) primitiveStream
             -- <$> generateAndRasterize (\env -> (Front, PolygonFill, ViewPort (V2 0 0) (envScreenSize env), DepthRange 0 1)) 3 expandedGeometries
 
     drawDepth (\s -> (NoBlending, envDepthFb s, DepthOption Less True)) fragmentStream $
