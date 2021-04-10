@@ -28,7 +28,7 @@ library
   build-depends:
       base
     , FontyFruity
-    , GPipe
+    , GPipe-Core
     , containers
     , vector
   ghc-options:

@@ -7,6 +7,8 @@
 module LambdaCNC.Shaders.Bulb where
 
 import           Control.Lens             ((^.))
+import           Data.Function            ((&))
+import           GHC.Stack                (HasCallStack)
 import           Graphics.GPipe           hiding (normalize)
 import           LambdaCNC.Config         (GlobalUniformBuffer,
                                            GlobalUniforms (..),
@@ -22,9 +24,9 @@ type Compiled os = CompiledShader os Env
 data Env = Env
     { envScreenSize :: V2 Int
     , envPrimitives :: PrimitiveArray Triangles Shader3DInput
-    , envColorFb      :: Image (Format RGBAFloat)
-    , envBrightFb      :: Image (Format RGBAFloat)
-    , envDepthFb      :: Image (Format Depth)
+    , envColorFb    :: Image (Format RGBAFloat)
+    , envBrightFb   :: Image (Format RGBAFloat)
+    , envDepthFb    :: Image (Format Depth)
     , envIndex      :: Int
     }
 
@@ -36,11 +38,20 @@ bulbOffset :: V4 VFloat
 bulbOffset = V4 0 0 4200 0
 
 
-vert :: GlobalUniforms VFloat -> LightUniforms VFloat -> (V3 VFloat, V3 VFloat) -> (V4 VFloat, V3 VFloat)
+vert :: GlobalUniforms VFloat -> LightUniforms VFloat -> (V3 VFloat, V3 VFloat) -> (VPos, V3 VFloat)
 vert GlobalUniforms{..} LightUniforms{..} (vertPos, n) = (pos, n)
   where
     objPos = rotMatrixX (-pi/2) !*! scaled 200 !* toV4 0 vertPos + bulbOffset + (lightTransform time !* toV4 1 lightPos)
     pos = cameraMat screenSize cameraPos !* objPos
+
+--------------------------------------------------
+
+geom :: GGenerativeGeometry Triangles (VPos, V3 VFloat) -> Geometry Triangles (VPos, V3 VFloat) -> GGenerativeGeometry Triangles (VPos, V3 VFloat)
+geom g (Triangle p1 p2 p3) = g
+    & emitVertex (fst p1, V3 4 5 6)
+    & emitVertex (fst p2, V3 1 2 3)
+    & emitVertex (fst p3, V3 7 8 9)
+    & endPrimitive
 
 --------------------------------------------------
 
@@ -54,7 +65,7 @@ frag GlobalUniforms{..} LightUniforms{..} _ = (toV4 1 fragColor, toV4 1 brightCo
 --------------------------------------------------
 
 solidShader
-    :: ContextHandler ctx
+    :: (HasCallStack, ContextHandler ctx)
     => GlobalUniformBuffer os
     -> LightUniformBuffer os
     -> ContextT ctx os IO (Compiled os)
@@ -64,10 +75,19 @@ solidShader globalUni lightUni = compileShader $ do
     fragGlobal <- getUniform (const (globalUni, 0))
     fragLight <- getUniform (\Env{..} -> (lightUni, envIndex))
 
-    primitiveStream <- fmap (vert vertGlobal vertLight) <$> toPrimitiveStream envPrimitives
+    primitiveStream <-
+        fmap (vert vertGlobal vertLight)
+            <$> toPrimitiveStream envPrimitives
 
-    fragmentStream <- withRasterizedInfo (\a r -> (frag fragGlobal fragLight a, rasterizedFragCoord r ^. _z)) <$>
-        rasterize (\env -> (Front, PolygonFill, ViewPort (V2 0 0) (envScreenSize env), DepthRange 0 1)) primitiveStream
+    let expandedGeometries = primitiveStream
+    -- expandedGeometries <-
+    --     fmap (geom generativeTriangleStrip)
+    --         <$> geometrize primitiveStream
+
+    fragmentStream <-
+        withRasterizedInfo (\a r -> (frag fragGlobal fragLight a, rasterizedFragCoord r ^. _z))
+            <$> rasterize (\env -> (Front, PolygonFill, ViewPort (V2 0 0) (envScreenSize env), DepthRange 0 1)) expandedGeometries
+            -- <$> generateAndRasterize (\env -> (Front, PolygonFill, ViewPort (V2 0 0) (envScreenSize env), DepthRange 0 1)) 3 expandedGeometries
 
     drawDepth (\s -> (NoBlending, envDepthFb s, DepthOption Less True)) fragmentStream $
         \(fragColor, brightColor) -> do

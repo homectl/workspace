@@ -34,7 +34,7 @@ library
   build-depends:
       base
     , GLFW-b
-    , GPipe
+    , GPipe-Core
     , async
     , containers
     , stm
@@ -78,7 +78,7 @@ test-suite testsuite
       hspec-discover:hspec-discover
   build-depends:
       base < 5
-    , GPipe
+    , GPipe-Core
     , GPipe-GLFW
     , exception-transformers
     , hspec
@@ -98,7 +98,7 @@ benchmark bench
       -threaded
   build-depends:
       base < 5
-    , GPipe
+    , GPipe-Core
     , GPipe-GLFW
     , JuicyPixels
     , criterion

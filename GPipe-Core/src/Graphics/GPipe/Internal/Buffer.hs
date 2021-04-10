@@ -409,11 +409,11 @@ getUniformAlignment = fromIntegral <$> alloca (\ ptr -> glGetIntegerv GL_UNIFORM
 
 makeBuffer :: forall os b. BufferFormat b => BufferName -> Int -> UniformAlignment -> Buffer os b
 makeBuffer name elementCount uniformAlignment  = do
-    let ToBuffer a b c m = toBuffer :: ToBuffer (HostFormat b) b
-        err = error "toBuffer is creating values that are dependant on the actual HostFormat values, this is not allowed since it doesn't allow static creation of shaders" :: HostFormat b
-        ((_,elementSize),pads) = runReader (runWriterT (runStateT (runKleisli a err) 0)) (uniformAlignment, m)
-        elementF bIn = fst $ runReader (runStateT (runKleisli b err) 0) (name, elementSize, bIn)
-        writer ptr xs = void $ runStateT (runKleisli c xs) (ptr,pads)
+    let ToBuffer skipIt readIt writeIt alignMode = toBuffer :: ToBuffer (HostFormat b) b
+        err = error "toBuffer is creating values that are dependent on the actual HostFormat values, this is not allowed since it doesn't allow static creation of shaders" :: HostFormat b
+        ((_,elementSize),pads) = runReader (runWriterT (runStateT (runKleisli skipIt err) 0)) (uniformAlignment, alignMode)
+        elementF bIn = fst $ runReader (runStateT (runKleisli readIt err) 0) (name, elementSize, bIn)
+        writer ptr x = void $ runStateT (runKleisli writeIt x) (ptr,pads)
     Buffer name elementSize elementCount elementF writer
 
 -- | This type family restricts what host and buffer types a texture format may be converted into.

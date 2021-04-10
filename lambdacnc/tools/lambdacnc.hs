@@ -48,14 +48,21 @@ interpret modName = GHC.runGhc (Just libdir) $ do
         , GHC.packageFlags =
             [ F.ExposePackage pkg (F.PackageArg pkg) (F.ModRenaming True [])
             | pkg <-
-                [ "GPipe"
+                [ "GPipe-Core"
                 , "GPipe-Engine"
                 , "GPipe-GLFW"
                 , "data-default"
                 , "directory"
                 , "filepath"
                 , "lens"
+                , "text"
                 , "time"
+                ]
+            ] ++
+            [ F.HidePackage pkg
+            | pkg <-
+                [ "GPipe"
+                , "GPipe-Base"
                 ]
             ]
         -- C:\\Users\\Pippijn\\AppData\\Roaming\\cabal\\store\\ghc-8.10.4\\package.db

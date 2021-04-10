@@ -27,7 +27,7 @@ library
       Graphics.GPipe.Engine
   build-depends:
       base
-    , GPipe
+    , GPipe-Core
     , GPipe-GLFW
     , STL
     , time

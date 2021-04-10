@@ -34,6 +34,7 @@ module Graphics.GPipe (
     module Graphics.GPipe.Format,
     module Graphics.GPipe.FragmentStream,
     module Graphics.GPipe.FrameBuffer,
+    module Graphics.GPipe.GeometryStream,
     module Graphics.GPipe.Linear,
     module Graphics.GPipe.PrimitiveArray,
     module Graphics.GPipe.PrimitiveStream,
@@ -52,6 +53,7 @@ import           Graphics.GPipe.Expr
 import           Graphics.GPipe.Format
 import           Graphics.GPipe.FragmentStream
 import           Graphics.GPipe.FrameBuffer
+import           Graphics.GPipe.GeometryStream
 import           Graphics.GPipe.Linear
 import           Graphics.GPipe.Orphans         ()
 import           Graphics.GPipe.PrimitiveArray

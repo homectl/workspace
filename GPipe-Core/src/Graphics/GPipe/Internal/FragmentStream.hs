@@ -42,7 +42,14 @@ type VPos = V4 VFloat
 
 type ExprPos = ExprM ()
 type RasterizationName = Int
-data FragmentStreamData = FragmentStreamData RasterizationName ExprPos PrimitiveStreamData FBool
+data FragmentStreamData = FragmentStreamData
+    { fsName       :: RasterizationName
+    , fsGeopos     :: Maybe ExprPos
+    , fsPos        :: ExprPos
+    , fsPrims      :: PrimitiveStreamData
+    , fsShouldEmit :: FBool
+    }
+    deriving (Show)
 
 -- | A @'FragmentStream' a @ is a stream of fragments of type @a@. You may append 'FragmentStream's using the 'Monoid' instance, and you
 --   can operate a stream's values using the 'Functor' instance (this will result in a shader running on the GPU).
@@ -79,7 +86,7 @@ rasterize sf (PrimitiveStream xs) = Shader $ do
     return (FragmentStream $ map (f n) xs)
   where
     ToFragment (Kleisli m) = toFragment :: ToFragment a (FragmentFormat a)
-    f n ((p, x),(ps, s)) = (evalState (m x) 0, FragmentStreamData n (makePos p >> makePointSize ps) s true)
+    f n ((p, x),(ps, s)) = (evalState (m x) 0, FragmentStreamData n Nothing (makePos p >> makePointSize ps) s true)
 
     io s =
         let (side, polygonMode, ViewPort (V2 x y) (V2 w h), DepthRange dmin dmax) = sf s in
@@ -130,7 +137,7 @@ data DepthRange = DepthRange { minDepth :: Float, maxDepth :: Float }
 -- | Filter out fragments from the stream where the predicate in the first argument evaluates to 'true', and discard all other fragments.
 filterFragments :: (a -> FBool) -> FragmentStream a -> FragmentStream a
 filterFragments f (FragmentStream xs) = FragmentStream $ map g xs
-    where g (a,FragmentStreamData x y z w) = (a,FragmentStreamData x y z (w &&* f a))
+    where g (a,FragmentStreamData x1 x2 x3 x4 x5) = (a,FragmentStreamData x1 x2 x3 x4 (x5 &&* f a))
 
 data RasterizedInfo = RasterizedInfo
     { rasterizedFragCoord   :: V4 FFloat

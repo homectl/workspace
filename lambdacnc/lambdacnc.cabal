@@ -35,7 +35,7 @@ library
       -Wall
   build-depends:
       base              >= 4 && < 5
-    , GPipe
+    , GPipe-Core
     , GPipe-Engine
     , GPipe-Fonts
     , GPipe-GLFW
@@ -43,6 +43,7 @@ library
     , directory
     , filepath
     , lens
+    , text
     , time
 
 executable lambdacnc

@@ -49,7 +49,7 @@ import           Graphics.GPipe.Internal.Compiler (CompiledShader,
                                                    Drawcall (Drawcall),
                                                    RenderIOState, compile,
                                                    mapRenderIOState,
-                                                   newRenderIOState)
+                                                   newRenderIOState, drawcallFBO)
 import           Graphics.GPipe.Internal.Context  (ContextHandler, ContextT,
                                                    Render (..),
                                                    liftNonWinContextIO)
@@ -75,8 +75,9 @@ tellDrawcall :: IO (Drawcall s) -> ShaderM s ()
 tellDrawcall dc = ShaderM $ lift $ tell ([dc], mempty)
 
 mapDrawcall :: (s -> s') -> Drawcall s' -> Drawcall s
-mapDrawcall f (Drawcall a b c d e g h i j k m) = Drawcall (a . f) b c d e g h i j k m
+mapDrawcall f dc = dc{ drawcallFBO = drawcallFBO dc . f }
 
+-- TODO Why an array of IO (Drawcall s)?
 newtype ShaderM s a = ShaderM (ReaderT UniformAlignment (WriterT ([IO (Drawcall s)], s -> All) (ListT (State (ShaderState s)))) a)
     deriving (MonadPlus, Monad, Alternative, Applicative, Functor)
 

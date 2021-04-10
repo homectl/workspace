@@ -1,5 +1,6 @@
 /wip
 *.frag
+*.geom
 *.vert
 
 test.dot

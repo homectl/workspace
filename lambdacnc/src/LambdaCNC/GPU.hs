@@ -10,9 +10,11 @@ module LambdaCNC.GPU
   ) where
 
 import qualified Control.Concurrent.MVar           as MVar
+import           Control.Exception                 (catch)
 import           Control.Lens                      ((^.))
 import           Control.Monad.IO.Class            (liftIO)
 import           Data.Functor                      (void)
+import qualified Data.Text                         as T
 import           Graphics.GPipe
 import qualified Graphics.GPipe.Context.GLFW       as GLFW
 import qualified Graphics.GPipe.Context.GLFW.Input as Input
@@ -20,6 +22,7 @@ import qualified Graphics.GPipe.Engine             as Engine
 import qualified LambdaCNC.Pipeline                as Pipeline
 import qualified System.Directory                  as Dir
 import qualified System.Environment                as Env
+import           System.Exit                       (exitFailure)
 import           System.FilePath                   ((</>))
 
 
@@ -37,8 +40,8 @@ cleanupShaders = do
     mapM_ Dir.removeFile files
 
 
-main :: IO ()
-main = do
+runProgram :: IO ()
+runProgram = do
     Env.setEnv "GPIPE_DEBUG" "1"
     cleanupShaders
 
@@ -61,3 +64,12 @@ main = do
             MVar.modifyMVar_ pipelineState (\state -> return $ Pipeline.windowSizeCallback state w h)
 
         Engine.mainloop win False Pipeline.updateState Pipeline.renderings pipelineData pipelineState
+
+
+main :: IO ()
+main = catch runProgram handler
+  where
+    handler :: GPipeException -> IO ()
+    handler (GPipeException err) = do
+        putStrLn $ "Caught GPipe Exception:\n" ++ T.unpack err
+        exitFailure

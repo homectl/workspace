@@ -1,4 +1,5 @@
 {-# LANGUAGE EmptyDataDecls       #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
@@ -16,6 +17,7 @@ import           Data.Word                      (Word16, Word32, Word8)
 
 import           Graphics.GL.Core33
 import           Graphics.GL.Types              (GLuint)
+import Data.Text (Text)
 
 -- | A vertex array is the basic building block for a primitive array. It is created from the contents of a 'Buffer', but unlike a 'Buffer',
 --   it may be truncated, zipped with other vertex arrays, and even morphed into arrays of a different type with the provided 'Functor' instance.
@@ -98,49 +100,60 @@ dropIndices n i = i { indexArrayLength = l - n', offset = offset i + n' }
         l = indexArrayLength i
         n' = min (max n 0) l
 
-data Triangles
-data Lines
-data Points
+data Points = PointList
+data Lines = LineLoop | LineStrip
+data LinesWithAdjacency = LineListAdjacency | LineStripAdjacency
+data Triangles = TriangleList | TriangleStrip
+data TrianglesWithAdjacency = TriangleListAdjacency | TriangleStripAdjacency
 
-data PrimitiveTopology p where
-    TriangleList :: PrimitiveTopology Triangles
-    TriangleStrip :: PrimitiveTopology Triangles
-    TriangleFan :: PrimitiveTopology Triangles
-    LineList :: PrimitiveTopology Lines
-    LineStrip :: PrimitiveTopology Lines
-    LineLoop :: PrimitiveTopology Lines
-    PointList :: PrimitiveTopology Points
+class PrimitiveTopology p where
+    toGLtopology :: p -> GLuint
+    toLayoutIn :: p -> Text
+    toLayoutOut :: p -> Text
+    data Geometry p a
 
-toGLtopology :: PrimitiveTopology p -> GLuint
-toGLtopology TriangleList  = GL_TRIANGLES
-toGLtopology TriangleStrip = GL_TRIANGLE_STRIP
-toGLtopology TriangleFan   = GL_TRIANGLE_FAN
-toGLtopology LineList      = GL_LINES
-toGLtopology LineStrip     = GL_LINE_STRIP
-toGLtopology LineLoop      = GL_LINE_LOOP
-toGLtopology PointList     = GL_POINTS
+instance PrimitiveTopology Points where
+    toGLtopology PointList = GL_POINTS
+    toLayoutIn _ = "points"
+    toLayoutOut _ = "points"
+    data Geometry Points a = Point a
 
-
-{-
-Some day:
-
-instance PrimitiveTopology TrianglesWithAdjacency where
-    toGLtopology TriangleStripWithAdjacency = 0
-    data Geometry TrianglesWithAdjacency a = TriangleWithAdjacency a a a a a a
+instance PrimitiveTopology Lines where
+    toGLtopology LineLoop  = GL_LINE_LOOP
+    toGLtopology LineStrip = GL_LINE_STRIP
+    toLayoutIn _ = "lines"
+    toLayoutOut _ = "line_strip"
+    data Geometry Lines a = Line a a
 
 instance PrimitiveTopology LinesWithAdjacency where
-    toGLtopology LinesWithAdjacencyList = 0
-    toGLtopology LinesWithAdjacencyStrip = 1
+    toGLtopology LineListAdjacency = GL_LINES_ADJACENCY
+    toGLtopology LineStripAdjacency = GL_LINE_STRIP_ADJACENCY
+    toLayoutIn _ = "lines_adjacency"
+    toLayoutOut _ = "line_strip"
     data Geometry LinesWithAdjacency a = LineWithAdjacency a a a a
--}
+
+instance PrimitiveTopology Triangles where
+    toGLtopology TriangleList  = GL_TRIANGLES
+    toGLtopology TriangleStrip = GL_TRIANGLE_STRIP
+    toLayoutIn _ = "triangles"
+    toLayoutOut _ = "triangle_strip"
+    data Geometry Triangles a = Triangle a a a
+
+instance PrimitiveTopology TrianglesWithAdjacency where
+    toGLtopology TriangleListAdjacency  = GL_TRIANGLES_ADJACENCY
+    toGLtopology TriangleStripAdjacency = GL_TRIANGLE_STRIP_ADJACENCY
+    toLayoutIn _ = "triangles_adjacency"
+    toLayoutOut _ = "triangle_strip"
+    data Geometry TrianglesWithAdjacency a = TriangleWithAdjacency a a a a a a
 
 type InstanceCount = Int
 type BaseVertex = Int
 
-data PrimitiveArrayInt p a = PrimitiveArraySimple (PrimitiveTopology p) Int BaseVertex a
-                           | PrimitiveArrayIndexed (PrimitiveTopology p) IndexArray BaseVertex a
-                           | PrimitiveArrayInstanced (PrimitiveTopology p) InstanceCount Int BaseVertex a
-                           | PrimitiveArrayIndexedInstanced (PrimitiveTopology p) IndexArray InstanceCount BaseVertex a
+-- PrimitiveTopology p =>
+data PrimitiveArrayInt p a = PrimitiveArraySimple p Int BaseVertex a
+                           | PrimitiveArrayIndexed p IndexArray BaseVertex a
+                           | PrimitiveArrayInstanced p InstanceCount Int BaseVertex a
+                           | PrimitiveArrayIndexedInstanced p IndexArray InstanceCount BaseVertex a
 
 -- | An array of primitives
 newtype PrimitiveArray p a = PrimitiveArray {getPrimitiveArray :: [PrimitiveArrayInt p a]}
@@ -152,17 +165,17 @@ instance Monoid (PrimitiveArray p a) where
     mempty = PrimitiveArray []
 
 instance Functor (PrimitiveArray p) where
-    fmap f (PrimitiveArray xs) = PrimitiveArray  $ fmap g xs
+    fmap f (PrimitiveArray xs) = PrimitiveArray $ fmap g xs
         where g (PrimitiveArraySimple p l s a) = PrimitiveArraySimple p l s (f a)
               g (PrimitiveArrayIndexed p i s a) = PrimitiveArrayIndexed p i s (f a)
               g (PrimitiveArrayInstanced p il l s a) = PrimitiveArrayInstanced p il l s (f a)
               g (PrimitiveArrayIndexedInstanced p i il s a) = PrimitiveArrayIndexedInstanced p i il s (f a)
 
-toPrimitiveArray :: PrimitiveTopology p -> VertexArray () a -> PrimitiveArray p a
+toPrimitiveArray :: PrimitiveTopology p => p -> VertexArray () a -> PrimitiveArray p a
 toPrimitiveArray p va = PrimitiveArray [PrimitiveArraySimple p (vertexArrayLength va) (vertexArraySkip va) (bArrBFunc va (BInput 0 0))]
-toPrimitiveArrayIndexed :: PrimitiveTopology p -> IndexArray -> VertexArray () a -> PrimitiveArray p a
+toPrimitiveArrayIndexed :: PrimitiveTopology p => p -> IndexArray -> VertexArray () a -> PrimitiveArray p a
 toPrimitiveArrayIndexed p ia va = PrimitiveArray [PrimitiveArrayIndexed p ia (vertexArraySkip va) (bArrBFunc va (BInput 0 0))]
-toPrimitiveArrayInstanced :: PrimitiveTopology p -> (a -> b -> c) -> VertexArray () a -> VertexArray t b -> PrimitiveArray p c
+toPrimitiveArrayInstanced :: PrimitiveTopology p => p -> (a -> b -> c) -> VertexArray () a -> VertexArray t b -> PrimitiveArray p c
 toPrimitiveArrayInstanced p f va ina = PrimitiveArray [PrimitiveArrayInstanced p (vertexArrayLength ina) (vertexArrayLength va) (vertexArraySkip va) (f (bArrBFunc va $ BInput 0 0) (bArrBFunc ina $ BInput (vertexArraySkip ina) 1))] -- Base instance not supported in GL < 4, so need to burn in
-toPrimitiveArrayIndexedInstanced :: PrimitiveTopology p -> IndexArray -> (a -> b -> c) -> VertexArray () a -> VertexArray t b -> PrimitiveArray p c
+toPrimitiveArrayIndexedInstanced :: PrimitiveTopology p => p -> IndexArray -> (a -> b -> c) -> VertexArray () a -> VertexArray t b -> PrimitiveArray p c
 toPrimitiveArrayIndexedInstanced p ia f va ina = PrimitiveArray [PrimitiveArrayIndexedInstanced p ia (vertexArrayLength ina) (vertexArraySkip va) (f (bArrBFunc va $ BInput 0 0) (bArrBFunc ina $ BInput (vertexArraySkip ina) 1))] -- Base instance not supported in GL < 4, so need to burn in

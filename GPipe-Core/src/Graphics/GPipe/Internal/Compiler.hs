@@ -18,7 +18,7 @@ import           Control.Monad.Trans.State.Strict (get, put)
 import           Data.IntMap.Polymorphic          ((!))
 import qualified Data.IntMap.Polymorphic          as Map
 import qualified Data.IntSet                      as Set
-import           Data.Maybe                       (isJust, isNothing)
+import           Data.Maybe                       (fromJust, isJust, isNothing)
 import           Graphics.GPipe.Internal.Context
 
 import           Control.Exception                (throwIO)
@@ -46,17 +46,20 @@ import           Graphics.GPipe.Internal.IDs
 type CompiledShader os s = s -> Render os ()
 
 data Drawcall s = Drawcall
-    { drawcallFBO        :: s -> (Either WinId (IO FBOKeys, IO ()), IO ())
-    , drawcallName       :: Int
-    , rasterizationName  :: Int
-    , vertexsSource      :: Text
-    , fragmentSource     :: Text
-    , usedInputs         :: [Int]
-    , usedVUniforms      :: [UniformId]
-    , usedVSamplers      :: [SamplerId]
-    , usedFUniforms      :: [UniformId]
-    , usedFSamplers      :: [SamplerId]
-    , primStrUBufferSize :: Int -- The size of the ubuffer for uniforms in primitive stream
+    { drawcallFBO            :: s -> (Either WinId (IO FBOKeys, IO ()), IO ())
+    , drawcallName           :: Int
+    , rasterizationName      :: Int
+    , vertexsSource          :: Text
+    , optionalGeometrySource :: Maybe Text
+    , fragmentSource         :: Text
+    , usedInputs             :: [Int]
+    , usedVUniforms          :: [UniformId]
+    , usedVSamplers          :: [SamplerId]
+    , usedGUniforms          :: [UniformId]
+    , usedGSamplers          :: [SamplerId]
+    , usedFUniforms          :: [UniformId]
+    , usedFSamplers          :: [SamplerId]
+    , primStrUBufferSize     :: Int -- The size of the ubuffer for uniforms in primitive stream
     }
 
 -- index/binding refers to what is used in the final shader. Index space is limited, usually 16
@@ -67,17 +70,20 @@ type Binding = Int
 --       then create a function that checks that none of the input buffers are used as output, and throws if it is
 
 data RenderIOState s = RenderIOState
-    { uniformNameToRenderIO       :: Map.IntMap UniformId (s -> Binding -> IO ()) -- TODO: Return buffer name here when we start writing to buffers during rendering (transform feedback, buffer textures)
-    , samplerNameToRenderIO       :: Map.IntMap SamplerId (s -> Binding -> IO Int) -- IO returns texturename for validating that it isnt used as render target
-    , rasterizationNameToRenderIO :: Map.IntMap Int (s -> IO ())
-    , inputArrayToRenderIOs       :: Map.IntMap Int (s -> [([Binding], GLuint, Int) -> ((IO [VAOKey], IO ()), IO ())])
+    { uniformNameToRenderIO        :: Map.IntMap UniformId (s -> Binding -> IO ()) -- TODO: Return buffer name here when we start writing to buffers during rendering (transform feedback, buffer textures)
+    , samplerNameToRenderIO        :: Map.IntMap SamplerId (s -> Binding -> IO Int) -- IO returns texturename for validating that it isnt used as render target
+    , rasterizationNameToRenderIO  :: Map.IntMap Int (s -> IO ())
+    , geometrizationNameToRenderIO :: Map.IntMap Int (s -> IO ())
+    , inputArrayToRenderIOs        :: Map.IntMap Int (s -> [([Binding], GLuint, Int) -> ((IO [VAOKey], IO ()), IO ())])
     }
 
 newRenderIOState :: RenderIOState s
-newRenderIOState = RenderIOState Map.empty Map.empty Map.empty Map.empty
+newRenderIOState = RenderIOState Map.empty Map.empty Map.empty Map.empty Map.empty
 
 mapRenderIOState :: (s -> s') -> RenderIOState s' -> RenderIOState s -> RenderIOState s
-mapRenderIOState f (RenderIOState a b c d) (RenderIOState i j k l) = let g x = x . f in RenderIOState (Map.union i $ Map.map g a) (Map.union j $ Map.map g b) (Map.union k $ Map.map g c) (Map.union l $ Map.map g d)
+mapRenderIOState f (RenderIOState a b c d e) (RenderIOState i j k l m) =
+    let g x = x . f
+    in  RenderIOState (Map.union i $ Map.map g a) (Map.union j $ Map.map g b) (Map.union k $ Map.map g c) (Map.union l $ Map.map g d) (Map.union m $ Map.map g e)
 
 
 data CompInput s = CompInput
@@ -97,6 +103,8 @@ data GpuLimits = GpuLimits
     , maxSamplers  :: SamplerId
     , maxVUnis     :: UniformId
     , maxVSamplers :: SamplerId
+    , maxGUnis     :: UniformId
+    , maxGSamplers :: SamplerId
     , maxFUnis     :: UniformId
     , maxFSamplers :: SamplerId
     }
@@ -107,6 +115,8 @@ getLimits = GpuLimits
     <*> getLimit GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS
     <*> getLimit GL_MAX_VERTEX_UNIFORM_BLOCKS
     <*> getLimit GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS
+    <*> getLimit GL_MAX_GEOMETRY_UNIFORM_BLOCKS
+    <*> getLimit GL_MAX_GEOMETRY_TEXTURE_IMAGE_UNITS
     <*> getLimit GL_MAX_FRAGMENT_UNIFORM_BLOCKS
     <*> getLimit GL_MAX_TEXTURE_IMAGE_UNITS
   where
@@ -120,10 +130,12 @@ compile drawcalls s = do
 
     let vUnisPerDc = map usedVUniforms drawcalls
         vSampsPerDc = map usedVSamplers drawcalls
+        gUnisPerDc = map usedGUniforms drawcalls
+        gSampsPerDc = map usedGSamplers drawcalls
         fUnisPerDc = map usedFUniforms drawcalls
         fSampsPerDc = map usedFSamplers drawcalls
-        unisPerDc = zipWith orderedUnion vUnisPerDc fUnisPerDc
-        sampsPerDc = zipWith orderedUnion vSampsPerDc fSampsPerDc
+        unisPerDc = zipWith orderedUnion (zipWith orderedUnion gUnisPerDc vUnisPerDc) fUnisPerDc
+        sampsPerDc = zipWith orderedUnion (zipWith orderedUnion gSampsPerDc vSampsPerDc) fSampsPerDc
 
         limitError kind target (fromIntegral -> maxCnt) elts =
             let err = "Too many " <> kind <> " used in a single " <> target in
@@ -133,6 +145,8 @@ compile drawcalls s = do
             , limitError "textures" "shader program" maxSamplers sampsPerDc
             , limitError "uniform blocks" "vertex shader" maxVUnis vUnisPerDc
             , limitError "textures" "vertex shader" maxVSamplers vSampsPerDc
+            , limitError "uniform blocks" "geometry shader" maxGUnis gUnisPerDc
+            , limitError "textures" "geometry shader" maxGSamplers gSampsPerDc
             , limitError "uniform blocks" "fragment shader" maxFUnis fUnisPerDc
             , limitError "textures" "fragment shader" maxFSamplers fSampsPerDc
             ]
@@ -152,18 +166,19 @@ compile drawcalls s = do
             return fr
         else do
             liftNonWinContextAsyncIO $ mapM_ (\(pNameRef, pStrUDeleter) -> readIORef pNameRef >>= glDeleteProgram >> pStrUDeleter) pnames
-            liftIO $ throwIO $ GPipeException $ Text.concat allErrs
+            liftIO $ throwIO $ GPipeException
+                $ (Text.pack . show . length $ allErrs) <> " compilation error(s): " <> Text.concat allErrs
 
 
 compileDrawcall :: (ContextHandler ctx, MonadIO m) => RenderIOState s -> CompInput s -> ContextT ctx os m (Either Text ((IORef GLuint, IO ()), CompiledShader os s))
-compileDrawcall s dc@CompInput{drawcall=Drawcall fboSetup primN rastN vsource fsource inps _ _ _ _ pstrUSize', unis, samps, ubinds, sbinds} = do
+compileDrawcall s dc@CompInput{drawcall=Drawcall fboSetup primN rastN vsource ogsource fsource inps _ _ _ _ _ _ pstrUSize', unis, samps, ubinds, sbinds} = do
     let pstrUSize = if 0 `elem` unis then pstrUSize' else 0
     let uNameToRenderIOmap = uniformNameToRenderIO s
     pstrUBuf <- createUBuffer pstrUSize -- Create uniform buffer for primiveStream uniforms
     let pStrUDeleter = when (pstrUSize > 0) $ with pstrUBuf (glDeleteBuffers 1)
     let uNameToRenderIOmap' = addPstrUniform pstrUBuf pstrUSize uNameToRenderIOmap
-    liftNonWinContextIO (compileShaders pStrUDeleter vsource fsource inps) >>= \case
-        Left err -> return $ Left err
+    liftNonWinContextIO (compileShaders pStrUDeleter vsource ogsource fsource inps) >>= \case
+        Left err -> return $ Left $ "compileDrawcall: " <> err
         Right pName -> liftNonWinContextIO $ do
             forM_ (zip unis ubinds) $ \(name, bind) -> do
                 uix <- withCString ("uBlock" ++ show name) $ glGetUniformBlockIndex pName
@@ -177,22 +192,31 @@ compileDrawcall s dc@CompInput{drawcall=Drawcall fboSetup primN rastN vsource fs
             return $ Right ((pNameRef, pStrUDeleter), renderer s dc pNameRef uNameToRenderIOmap' pstrUBuf pstrUSize)
 
 
-compileShaders :: IO () -> Text -> Text -> [Int] -> IO (Either Text GLuint)
-compileShaders pStrUDeleter vsource fsource inps = do
+compileShaders :: IO () -> Text -> Maybe Text -> Text -> [Int] -> IO (Either Text GLuint)
+compileShaders pStrUDeleter vsource ogsource fsource inps = do
     vShader <- glCreateShader GL_VERTEX_SHADER
     mErrV <- compileShader vShader vsource
+    (ogShader, mErrG) <- case ogsource of
+        Nothing -> return (Nothing, Nothing)
+        Just gsource -> do
+            gShader <- glCreateShader GL_GEOMETRY_SHADER
+            mErrG <- compileShader gShader gsource
+            return (Just gShader, mErrG)
     fShader <- glCreateShader GL_FRAGMENT_SHADER
     mErrF <- compileShader fShader fsource
-    if isNothing mErrV && isNothing mErrV
+    if isNothing mErrV && isNothing mErrG && isNothing mErrV
         then do
             pName <- glCreateProgram
             glAttachShader pName vShader
+            whenJust' ogShader $ glAttachShader pName
             glAttachShader pName fShader
             mapM_ (\(name, ix) -> withCString ("in"++ show name) $ glBindAttribLocation pName ix) $ zip inps [0..]
             mPErr <- linkProgram pName
             glDetachShader pName vShader
+            whenJust' ogShader $ glDetachShader pName
             glDetachShader pName fShader
             glDeleteShader vShader
+            whenJust' ogShader glDeleteShader
             glDeleteShader fShader
             case mPErr of
                 Just errP -> do
@@ -202,15 +226,17 @@ compileShaders pStrUDeleter vsource fsource inps = do
                 Nothing -> return $ Right pName
         else do
             glDeleteShader vShader
+            whenJust' ogShader glDeleteShader
             glDeleteShader fShader
             pStrUDeleter
             let err = maybe "" (\e -> "A vertex shader compilation failed:\n" <> e <> "\nSource:\n" <> vsource) mErrV
+                    <> maybe "" (\e -> "A geometry shader compilation failed:\n" <> e <> "\nSource:\n" <> fromJust ogsource) mErrG
                     <> maybe "" (\e -> "A fragment shader compilation failed:\n" <> e <> "\nSource:\n" <> fsource) mErrF
             return $ Left err
 
 
 renderer :: RenderIOState s -> CompInput s -> IORef GLuint -> Map.IntMap UniformId (s -> Binding -> IO ()) -> GLuint -> Int -> CompiledShader os s
-renderer s CompInput{drawcall=Drawcall fboSetup primN rastN _ _ inps _ _ _ _ _, unis, samps, ubinds, sbinds} pNameRef uNameToRenderIOmap' pstrUBuf pstrUSize x = Render $ do
+renderer s CompInput{drawcall=Drawcall fboSetup primN rastN _ _ _ inps _ _ _ _ _ _ _, unis, samps, ubinds, sbinds} pNameRef uNameToRenderIOmap' pstrUBuf pstrUSize x = Render $ do
     -- Drawing with program --
     rs <- lift $ lift get
     renv <- lift ask
@@ -381,3 +407,8 @@ getGPUInfo = do
     return (vendor, renderer)
   where
     getString = glGetString >=> fmap Text.pack . peekCString . castPtr
+
+
+-- | A 'whenJust' that accepts a monoidal return value.
+whenJust' :: (Monad m, Monoid b) => Maybe a -> (a -> m b) -> m b
+whenJust' = flip $ maybe (return mempty)

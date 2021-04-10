@@ -20,6 +20,7 @@ module Graphics.GPipe.Expr (
     V, F,
     VFloat, VInt, VWord, VBool,
     FFloat, FInt, FWord, FBool,
+    GGenerativeGeometry,
 
     -- * Type classes where the Prelude ones are lacking
     Convert(..),

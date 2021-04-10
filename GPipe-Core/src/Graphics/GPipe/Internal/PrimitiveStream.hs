@@ -45,7 +45,7 @@ import           Graphics.GPipe.Internal.PrimitiveArray (IndexArray (..),
                                                          Points,
                                                          PrimitiveArray (getPrimitiveArray),
                                                          PrimitiveArrayInt (..),
-                                                         toGLtopology)
+                                                         toGLtopology, PrimitiveTopology)
 import           Graphics.GPipe.Internal.Shader         (Shader (..), ShaderM,
                                                          askUniformAlignment,
                                                          getName,
@@ -71,7 +71,9 @@ import           Linear.V4                              (V4 (..))
 type DrawCallName = Int
 type USize = Int
 data PrimitiveStreamData = PrimitiveStreamData DrawCallName USize
+    deriving (Show)
 
+-- TODO Should be renamed as VertexStream. I don’t need why 't' is carried alongside but it is now required for adding Geometry shaders.
 -- | A @'PrimitiveStream' t a @ is a stream of primitives of type @t@ where the vertices are values of type @a@. You
 --   can operate a stream's vertex values using the 'Functor' instance (this will result in a shader running on the GPU).
 --   You may also append 'PrimitiveStream's using the 'Monoid' instance, but if possible append the origin 'PrimitiveArray's instead, as this will create more optimized
@@ -96,9 +98,9 @@ type UniOffset = Int
 
 -- | The arrow type for 'toVertex'.
 data ToVertex a b = ToVertex
-    !(Kleisli (StateT (Ptr ()) IO) a b)
-    !(Kleisli (StateT (Int, UniOffset, OffsetToSType) (Reader (Int -> ExprM Text))) a b)
-    !(Kleisli (State [Binding -> (IO VAOKey, IO ())]) a b)
+    !(Kleisli (StateT (Ptr ()) IO) a b) -- ^ For transform feedback?
+    !(Kleisli (StateT (Int, UniOffset, OffsetToSType) (Reader (Int -> ExprM Text))) a b) -- ^ To declare the input variable in the shader. (Int -> ExprM String) could be rewritten as (UniOffset -> ExprM String).
+    !(Kleisli (State [Binding -> (IO VAOKey, IO ())]) a b) -- ^ To bind the VAO when executing (or simply compiling, I can’t remember) the shader.
 
 instance Category ToVertex where
     {-# INLINE id #-}
@@ -114,29 +116,49 @@ instance Arrow ToVertex where
 
 
 -- | Create a primitive stream from a primitive array provided from the shader environment.
-toPrimitiveStream :: forall os f s a p. VertexInput a => (s -> PrimitiveArray p a) -> Shader os s (PrimitiveStream p (VertexFormat a))
-toPrimitiveStream sf = Shader $ do n <- getName
-                                   uniAl <- askUniformAlignment
-                                   let err = error "toPrimitiveStream is creating values that are dependant on the actual HostFormat values, this is not allowed since it doesn't allow static creation of shaders"
-                                       (x,(_,uSize, offToStype)) = runReader (runStateT (mf err) (0,0,mempty)) (useUniform (buildUDecl offToStype) 0) -- 0 is special blockname for the one used by primitive stream
-                                   doForInputArray n (map drawcall . getPrimitiveArray . sf)
+toPrimitiveStream :: forall os f s a p. (PrimitiveTopology p, VertexInput a) => (s -> PrimitiveArray p a) -> Shader os s (PrimitiveStream p (VertexFormat a))
+toPrimitiveStream sf = Shader $ do
 
-                                   return $ PrimitiveStream [(x, (Nothing, PrimitiveStreamData n uSize))]
+    -- Get a unique (OpenGL) name for this shader by updating the 'ShaderState' (a pair of the next name and a 'RenderIOState s') from the ReaderT/WriterT/ListM/State.
+    n <- getName
+
+    -- Get the RO uniform alignment from the ReaderT
+    uniAl <- askUniformAlignment
+
+    -- The explosive input value is only here to ensure that the mf arrow is lazy.
+    let err = error "toPrimitiveStream is creating values that are dependant on the actual HostFormat values, this is not allowed since it doesn't allow static creation of shaders"
+        -- Use 'mf' to
+        (x, (_, uSize, offToStype)) = runReader
+            (runStateT (mf err) (0, 0, mempty))
+            (useUniform (buildUDecl offToStype) 0) -- 0 is special blockname for the one used by primitive stream / Why a uniform here?
+
+    -- Register the actual OpenGL bind and draw commands for this shader name.
+    doForInputArray n (map drawcall . getPrimitiveArray . sf)
+
+    return $ PrimitiveStream [(x, (Nothing, PrimitiveStreamData n uSize))]
     where
-        ToVertex (Kleisli uWriter) (Kleisli mf) (Kleisli bindingm) = toVertex :: ToVertex a (VertexFormat a)
+        ToVertex
+            (Kleisli uWriter) -- Not clear...
+            (Kleisli mf) -- To declare the input variable in the shader.
+            (Kleisli bindingm) -- To bind the VAO when executing (or simply compiling, I can’t remember) the shader.
+            = toVertex :: ToVertex a (VertexFormat a) -- Select the ToVertex to translate 'a' into a 'VertexFormat a'.
         drawcall (PrimitiveArraySimple p l s a) binds = (attribs a binds, glDrawArrays (toGLtopology p) (fromIntegral s) (fromIntegral l))
         drawcall (PrimitiveArrayIndexed p i s a) binds = (attribs a binds, do
-                                                    bindIndexBuffer i
-                                                    glDrawElementsBaseVertex (toGLtopology p) (fromIntegral $ indexArrayLength i) (indexType i) (intPtrToPtr $ fromIntegral $ offset i * glSizeOf (indexType i)) (fromIntegral s))
+            bindIndexBuffer i
+            glDrawElementsBaseVertex (toGLtopology p) (fromIntegral $ indexArrayLength i) (indexType i) (intPtrToPtr $ fromIntegral $ offset i * glSizeOf (indexType i)) (fromIntegral s))
         drawcall (PrimitiveArrayInstanced p il l s a) binds = (attribs a binds, glDrawArraysInstanced (toGLtopology p) (fromIntegral s) (fromIntegral l) (fromIntegral il))
         drawcall (PrimitiveArrayIndexedInstanced p i il s a) binds = (attribs a binds, do
-                                                      bindIndexBuffer i
-                                                      glDrawElementsInstancedBaseVertex (toGLtopology p) (fromIntegral $ indexArrayLength i) (indexType i) (intPtrToPtr $ fromIntegral $ offset i * glSizeOf (indexType i)) (fromIntegral il) (fromIntegral s))
-        bindIndexBuffer i = do case restart i of Just x -> do glEnable GL_PRIMITIVE_RESTART
-                                                              glPrimitiveRestartIndex (fromIntegral x)
-                                                 Nothing -> glDisable GL_PRIMITIVE_RESTART
-                               bname <- readIORef (iArrName i)
-                               glBindBuffer GL_ELEMENT_ARRAY_BUFFER bname
+            bindIndexBuffer i
+            glDrawElementsInstancedBaseVertex (toGLtopology p) (fromIntegral $ indexArrayLength i) (indexType i) (intPtrToPtr $ fromIntegral $ offset i * glSizeOf (indexType i)) (fromIntegral il) (fromIntegral s))
+        bindIndexBuffer i = do
+            case restart i of
+                Just x -> do
+                    glEnable GL_PRIMITIVE_RESTART
+                    glPrimitiveRestartIndex (fromIntegral x)
+                Nothing ->
+                    glDisable GL_PRIMITIVE_RESTART
+            bname <- readIORef (iArrName i)
+            glBindBuffer GL_ELEMENT_ARRAY_BUFFER bname
         glSizeOf GL_UNSIGNED_INT = 4
         glSizeOf GL_UNSIGNED_SHORT = 2
         glSizeOf GL_UNSIGNED_BYTE = 1
@@ -153,8 +175,9 @@ toPrimitiveStream sf = Shader $ do n <- getName
                               (ioVaokeys, ios) = unzip $ assignIxs 0 0 binds $ reverse bindsAssoc
                           in (writeUBuffer uBname uSize a >> sequence ioVaokeys, sequence_ ios)
 
+        -- Modify the (OpenGL) shader state which is the set of OpenGL commands to run to draw this this shader.
         doForInputArray :: Int -> (s -> [([Binding], GLuint, Int) -> ((IO [VAOKey], IO ()), IO ())]) -> ShaderM s ()
-        doForInputArray n io = modifyRenderIO (\s -> s { inputArrayToRenderIOs = insert n io (inputArrayToRenderIOs s) } )
+        doForInputArray n io = modifyRenderIO (\s -> s { inputArrayToRenderIOs = insert n io (inputArrayToRenderIOs s) } ) -- modifyRenderIO changes the ShaderState
 
         writeUBuffer _ 0 _ = return () -- If the uniform buffer is size 0 there is no buffer
         writeUBuffer bname size a = do
@@ -179,6 +202,7 @@ type PointSize = VFloat
 withPointSize :: (a -> PointSize -> (b, PointSize)) -> PrimitiveStream Points a -> PrimitiveStream Points b
 withPointSize f (PrimitiveStream xs) = PrimitiveStream $ map (\(a, (ps, d)) -> let (b, ps') = f a (fromMaybe (scalarS' "1") ps) in (b, (Just ps', d))) xs
 
+-- Why x which is not needed?
 makeVertexF x f styp _ = do
                      (n,uoffset,m) <- get
                      put (n + 1, uoffset,m)

@@ -31,11 +31,13 @@ import           Data.Foldable               (toList)
 import           Data.Int                    (Int16, Int32, Int8)
 import qualified Data.IntMap.Polymorphic     as Map
 import           Data.List                   (intercalate)
+import           Data.Maybe                  (fromJust, isJust)
 import           Data.SNMap                  (SNMapReaderT, memoizeM,
                                               runSNMapReaderT, scopedM)
 import           Data.Text                   (Text)
 import qualified Data.Text                   as Text
 import           Data.Word                   (Word16, Word32, Word8)
+import qualified Debug.Trace                 as DBG
 import           Graphics.GPipe.Internal.IDs (SamplerId, UniformId)
 import           Linear.Affine               (distanceA)
 import           Linear.Conjugate            (Conjugate, TrivialConjugate)
@@ -65,17 +67,19 @@ data SType
     | STypeVec Int
     | STypeIVec Int
     | STypeUVec Int
+    | STypeGenerativeGeometry
 
 stypeName :: SType -> Text
-stypeName STypeFloat     = "float"
-stypeName STypeInt       = "int"
-stypeName STypeBool      = "bool"
-stypeName STypeUInt      = "uint"
-stypeName (STypeDyn s)   = s
-stypeName (STypeMat r c) = "mat" <> tshow c <> "x" <> tshow r
-stypeName (STypeVec n)   = "vec" <> tshow n
-stypeName (STypeIVec n)  = "ivec" <> tshow n
-stypeName (STypeUVec n)  = "uvec" <> tshow n
+stypeName STypeFloat              = "float"
+stypeName STypeInt                = "int"
+stypeName STypeBool               = "bool"
+stypeName STypeUInt               = "uint"
+stypeName (STypeDyn s)            = s
+stypeName (STypeMat r c)          = "mat" <> tshow c <> "x" <> tshow r
+stypeName (STypeVec n)            = "vec" <> tshow n
+stypeName (STypeIVec n)           = "ivec" <> tshow n
+stypeName (STypeUVec n)           = "uvec" <> tshow n
+stypeName STypeGenerativeGeometry = "bool" -- A generative geometry is inherently a write-only value. The 'bool' type is simply here as a crude workaround (hardly a solution).
 
 stypeSize :: SType -> Int
 stypeSize (STypeVec n)  = n * 4
@@ -87,29 +91,53 @@ type ExprM = SNMapReaderT [Text] (StateT ExprState (WriterT Text (StateT NextTem
 data ExprState = ExprState
     { shaderUsedUniformBlocks :: Map.IntMap UniformId (GlobDeclM ())
     , shaderUsedSamplers      :: Map.IntMap SamplerId (GlobDeclM ())
-    , shaderUsedInput         :: Map.IntMap Int (GlobDeclM (), (ExprM (), GlobDeclM ())) -- For vertex shaders, the shaderM is always undefined and the int is the parameter name, for later shader stages it uses some name local to the transition instead
+    , shaderUsedInput         :: Map.IntMap Int
+        ( GlobDeclM () -- Input declaration in the current shader.
+        ,   ( ExprM () -- Output assignement required in the previous shader (obviously undefined for the first shader - see comment below.)
+            , GlobDeclM () -- Output declaration required in the previous shader.
+            ) -- Requirements for the previous shader.
+        ) -- For vertex shaders, the shaderM is always undefined and the int is the parameter name, for later shader stages it uses some name local to the transition instead
+    , shaderGeometry          :: (Maybe (GlobDeclM ()), Maybe (GlobDeclM ()))
     }
 
 data ExprResult = ExprResult
-    { source    :: Text
-    , unis      :: [UniformId]
-    , samps     :: [SamplerId]
-    , inps      :: [Int]
-    , prevDecls :: GlobDeclM ()
-    , prevSs    :: ExprM ()
+    { source    :: Text -- shader source produced
+    , unis      :: [UniformId] -- uniforms used in this shader
+    , samps     :: [SamplerId] -- samplers used in this shader
+    , inps      :: [Int] -- (varying) inputs used in this shader
+    , prevDecls :: GlobDeclM () -- output declarations required in the previous shader
+    , prevSs    :: ExprM () -- expression to construct in the previous shader
     }
     deriving (Show)
 
-runExprM :: GlobDeclM () -> ExprM () -> IO ExprResult
+   
+
+{- Rough idea:
+    makeDrawcall (sh, shd, _) =
+        do  (fsource, funis, fsamps, _, prevDecls1, prevS1) <- runExprM shd sh
+            (gsource, gunis, gsamps, _, prevDecls2, prevS2) <- runExprM prevDecls1 prevS1
+            (vsource, vunis, vsamps, vinps, _, _) <- runExprM prevDecls2 prevS2
+            return $ Drawcall _ _ _ vsource gsource fsource vinps vunis vsamps gunis gsamps funis fsamps _
+    The sN+1 expression obtained when evaluating a sN expression basically
+    contains the values transformed by the matching arrow (ToVertex, ToFragment...).
+    In this regard, the evaluation is the inverse arrow with the side effect of
+    outputting the shader source.
+-}
+runExprM
+    :: GlobDeclM () -- output declarations to include in this shader
+    -> ExprM () -- expression to construct in this shader (including assignements to the output variables)
+    -> IO ExprResult
 runExprM d m = do
-    (st, body) <- evalStateT (runWriterT (execStateT (runSNMapReaderT (m :: ExprM ())) (ExprState Map.empty Map.empty Map.empty))) 0
+    (st, body) <- evalStateT (runWriterT (execStateT (runSNMapReaderT m) (ExprState Map.empty Map.empty Map.empty (Nothing, Nothing)))) 0
     let (unis, uniDecls) = unzip $ Map.toAscList (shaderUsedUniformBlocks st)
         (samps, sampDecls) = unzip $ Map.toAscList (shaderUsedSamplers st)
         (inps, inpDescs) = unzip $ Map.toAscList (shaderUsedInput st)
+        geoDescs = fst (shaderGeometry st)
         (inpDecls, prevDesc) = unzip inpDescs
         (sequence_ -> prevSs, sequence_ -> prevDecls) = unzip prevDesc
         decls = do
             d
+            when (isJust geoDescs) (fromJust geoDescs)
             sequence_ uniDecls
             sequence_ sampDecls
             sequence_ inpDecls
@@ -125,6 +153,9 @@ runExprM d m = do
 type GlobDeclM = Writer Text
 
 newtype S x a = S { unS :: ExprM Text }
+
+instance Show x => Show (S x a) where
+    show _ = "(S " ++ show (undefined :: x) ++ " a)"
 
 scalarS :: SType -> ExprM RValue -> S c a
 scalarS typ = S . tellAssignment typ
@@ -166,6 +197,12 @@ data V
 -- | Phantom type used as first argument in @'S' 'F' a@ that denotes that the shader value is a fragment value
 data F
 
+type G = V
+newtype GenerativeGeometry p a = GenerativeGeometry a
+
+instance Show V where show _ = "V"
+instance Show F where show _ = "F"
+
 type VFloat = S V Float
 type VInt = S V Int
 type VWord = S V Word
@@ -176,10 +213,12 @@ type FInt = S F Int
 type FWord = S F Word
 type FBool = S F Bool
 
+type GGenerativeGeometry p a = S G (GenerativeGeometry p a)
+
 useVInput :: SType -> Int -> ExprM Text
 useVInput stype i =
              do s <- T.lift get
-                T.lift $ put $ s { shaderUsedInput = Map.insert i (gDeclInput, undefined) $ shaderUsedInput s }
+                T.lift $ put s{ shaderUsedInput = Map.insert i (gDeclInput, undefined) $ shaderUsedInput s }
                 return $ "in" <> tshow i
     where
         gDeclInput = do tellGlobal "in "
@@ -187,10 +226,52 @@ useVInput stype i =
                         tellGlobal " in"
                         tellGlobalLn $ tshow i
 
+
+useGInput :: Text -> SType -> Int -> Int -> ExprM Text -> ExprM Text
+useGInput qual stype i n v =
+             do s <- T.lift get
+                T.lift $ put s{ shaderUsedInput = Map.insert n (gDeclIn, (assignOutput, gDeclOut)) $ shaderUsedInput s }
+                return $ prefix <> tshow n <> "[" <> tshow i <> "]"
+    where
+        prefix = "vg"
+
+        -- Output assignement in the previous shader
+        assignOutput = do val <- v
+                          let name = prefix <> tshow n
+                          tellAssignment' name val
+
+        -- Output declaration in the previous shader.
+        gDeclOut = do   tellGlobal $ qual <> " out "
+                        tellGlobal $ stypeName stype
+                        tellGlobal $ " "<>prefix
+                        tellGlobalLn $ tshow n
+
+        -- Input declaration in the current shader.
+        gDeclIn = do    tellGlobal $ qual <> " in "
+                        tellGlobal $ stypeName stype
+                        tellGlobal $ " "<>prefix
+                        tellGlobal $ tshow n
+                        tellGlobalLn "[]"
+
+useFInputFromG :: Text -> SType -> Int -> ExprM Text -> ExprM Text
+useFInputFromG qual stype i v =
+             do s <- T.lift get
+                val :: Int <- read . Text.unpack <$> v
+                T.lift $ DBG.trace "!!!!!!! use input" $ put s{ shaderUsedInput = Map.insert i (gDecl val (qual <> " in "), (return (), gDecl val (qual <> " out "))) $ shaderUsedInput s }
+                return $ prefix <> tshow val
+    where
+        prefix = "vgf"
+
+        gDecl val s = do
+            tellGlobal s
+            tellGlobal $ stypeName stype
+            tellGlobal $ " "<>prefix
+            tellGlobalLn $ tshow val
+
 useFInput :: Text -> Text -> SType -> Int -> ExprM Text -> ExprM Text
 useFInput qual prefix stype i v =
              do s <- T.lift get
-                T.lift $ put $ s { shaderUsedInput = Map.insert i (gDecl (qual <> " in "), (assignOutput, gDecl (qual <> " out "))) $ shaderUsedInput s }
+                T.lift $ put s{ shaderUsedInput = Map.insert i (gDecl (qual <> " in "), (assignOutput, gDecl (qual <> " out "))) $ shaderUsedInput s }
                 return $ prefix <> tshow i
     where
         assignOutput = do val <- v
@@ -203,9 +284,17 @@ useFInput qual prefix stype i v =
                         tellGlobalLn $ tshow i
 
 
+declareGeometryLayout :: Text -> Text -> Int -> ExprM ()
+declareGeometryLayout inputPrimitive outputPrimitive maxVertices = T.lift $ modify $ \ s -> s { shaderGeometry = (Just gDeclBlock, Nothing) }
+    where
+        gDeclBlock = do
+            tellGlobalLn $ "layout(" <> inputPrimitive <> ") in"
+            tellGlobalLn $ "layout(" <> outputPrimitive <> ", max_vertices = " <> tshow maxVertices <> ") out"
+
+
 useUniform :: GlobDeclM () -> UniformId -> Int -> ExprM Text
 useUniform decls blockI offset =
-             do T.lift $ modify $ \ s -> s { shaderUsedUniformBlocks = Map.insert blockI gDeclUniformBlock $ shaderUsedUniformBlocks s }
+             do T.lift $ modify $ \s -> s{ shaderUsedUniformBlocks = Map.insert blockI gDeclUniformBlock $ shaderUsedUniformBlocks s }
                 return $ "u"<>tshow blockI <> ".u"<> tshow offset -- "u8.u4"
     where
         gDeclUniformBlock =
@@ -271,7 +360,8 @@ data ShaderBase a x where
     ShaderBaseWord :: S x Word -> ShaderBase (S x Word) x
     ShaderBaseBool :: S x Bool -> ShaderBase (S x Bool) x
     ShaderBaseUnit :: ShaderBase () x
-    ShaderBaseProd :: ShaderBase a x -> ShaderBase b x -> ShaderBase (a,b) x
+    ShaderBaseProd :: ShaderBase a x -> ShaderBase b x -> ShaderBase (a, b) x
+    ShaderBaseGenerativeGeometry :: S x (GenerativeGeometry p a) -> ShaderBase (S x (GenerativeGeometry p a)) x
 
 shaderbaseDeclare :: ShaderBase a x -> WriterT [Text] ExprM (ShaderBase a x)
 shaderbaseAssign :: ShaderBase a x -> StateT [Text] ExprM ()
@@ -285,6 +375,7 @@ shaderbaseDeclare ShaderBaseUnit = return ShaderBaseUnit
 shaderbaseDeclare (ShaderBaseProd a b) = do a' <- shaderbaseDeclare a
                                             b' <- shaderbaseDeclare b
                                             return $ ShaderBaseProd a' b'
+shaderbaseDeclare (ShaderBaseGenerativeGeometry _) = ShaderBaseGenerativeGeometry <$> shaderbaseDeclareDef STypeGenerativeGeometry
 
 shaderbaseAssign (ShaderBaseFloat a) = shaderbaseAssignDef a
 shaderbaseAssign (ShaderBaseInt a) = shaderbaseAssignDef a
@@ -293,6 +384,7 @@ shaderbaseAssign (ShaderBaseBool a) = shaderbaseAssignDef a
 shaderbaseAssign ShaderBaseUnit = return ()
 shaderbaseAssign (ShaderBaseProd a b) = do shaderbaseAssign a
                                            shaderbaseAssign b
+shaderbaseAssign (ShaderBaseGenerativeGeometry a) = shaderbaseAssignDef a
 
 shaderbaseReturn (ShaderBaseFloat _) = ShaderBaseFloat <$> shaderbaseReturnDef
 shaderbaseReturn (ShaderBaseInt _) = ShaderBaseInt <$> shaderbaseReturnDef
@@ -302,22 +394,28 @@ shaderbaseReturn ShaderBaseUnit = return ShaderBaseUnit
 shaderbaseReturn (ShaderBaseProd a b) = do a' <- shaderbaseReturn a
                                            b' <- shaderbaseReturn b
                                            return $ ShaderBaseProd a' b'
+shaderbaseReturn (ShaderBaseGenerativeGeometry _) = ShaderBaseGenerativeGeometry <$> shaderbaseReturnDef
 
 shaderbaseDeclareDef :: SType -> WriterT [Text] ExprM (S x a)
-shaderbaseDeclareDef styp = do var <- T.lift $ T.lift $ T.lift $ T.lift getNext
-                               let root = "t" <> tshow var
-                               T.lift $ T.lift $ T.lift $ tell $ mconcat [stypeName styp, " "<>root, ";\n"]
-                               tell [root]
-                               return $ S $ return root
+shaderbaseDeclareDef styp = do
+    var <- T.lift $ T.lift $ T.lift $ T.lift getNext
+    let root = "t" <> tshow var
+    T.lift $ T.lift $ T.lift $ tell $ mconcat [stypeName styp, " "<>root, ";\n"]
+    tell [root]
+    return $ S $ return root
 
-shaderbaseAssignDef  (S shaderM) = do ul <- T.lift shaderM
-                                      xs <- get
-                                      put $ tail xs
-                                      T.lift $ tellAssignment' (head xs) ul
-                                      return ()
+shaderbaseAssignDef :: S x a -> StateT [Text] ExprM ()
+shaderbaseAssignDef (S shaderM) = do
+    ul <- T.lift shaderM
+    xs <- get
+    put $ tail xs
+    T.lift $ tellAssignment' (head xs) ul
+    return ()
+
 shaderbaseReturnDef :: ReaderT (ExprM [Text]) (State Int) (S x a)
-shaderbaseReturnDef = do i <- T.lift getNext
-                         S . fmap (!!i) <$> ask
+shaderbaseReturnDef = do
+    i <- T.lift getNext
+    S . fmap (!!i) <$> ask
 
 -- | Constraint for types that may pass in and out of shader control structures. Define your own instances in terms of others and make sure to
 --   make toBase as lazy as possible.
@@ -348,6 +446,11 @@ instance ShaderType (S x Bool) x where
     type ShaderBaseType (S x Bool) = (S x Bool)
     toBase _ = ShaderBaseBool
     fromBase _ (ShaderBaseBool a) = a
+
+instance ShaderType (S x (GenerativeGeometry p a)) x where
+    type ShaderBaseType (S x (GenerativeGeometry p a)) = (S x (GenerativeGeometry p a))
+    toBase _ = ShaderBaseGenerativeGeometry
+    fromBase _ (ShaderBaseGenerativeGeometry a) = a
 
 instance ShaderType () x where
     type ShaderBaseType () = ()
@@ -417,7 +520,8 @@ ifThenElse c t e i = fromBase x $ ifThenElse_ c (toBase x . t . fromBase x) (toB
         x = undefined :: x
         ifThenElse_ :: S x Bool -> (ShaderBase (ShaderBaseType a) x -> ShaderBase (ShaderBaseType b) x) -> (ShaderBase (ShaderBaseType a) x -> ShaderBase (ShaderBaseType b) x) -> ShaderBase (ShaderBaseType a) x -> ShaderBase (ShaderBaseType b) x
         ifThenElse_ bool thn els a =
-            let ifM = memoizeM $ do
+            let ifM :: ExprM [Text]
+                ifM = memoizeM $ do
                            boolStr <- unS bool
                            (lifted, aDecls) <- runWriterT $ shaderbaseDeclare (toBase x (errShaderType :: a))
                            void $ evalStateT (shaderbaseAssign a) aDecls
@@ -669,6 +773,7 @@ instance IfB (S a Float) where ifB = ifThenElse'
 instance IfB (S a Int) where ifB = ifThenElse'
 instance IfB (S a Word) where ifB = ifThenElse'
 instance IfB (S a Bool) where ifB = ifThenElse'
+instance IfB (S a (GenerativeGeometry p b)) where ifB = ifThenElse'
 
 instance Conjugate (S a Float)
 instance Conjugate (S a Int)

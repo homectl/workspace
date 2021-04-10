@@ -87,18 +87,19 @@ runDrawColors (DrawColors m) =
 -- | Draw color values into a color renderable texture image.
 drawColor :: forall c s os. ColorRenderable c => (s -> (Image (Format c), ColorMask c, UseBlending)) -> FragColor c -> DrawColors os s ()
 drawColor sf c = DrawColors $ do
-    n <- get
-    put $ n+1
-    lift $ tell [\ix -> make3 (setColor cf ix c) $ \s ->
-        let (i, mask, o) = sf s
-            n' = fromIntegral n
-            useblend = if o then glEnablei GL_BLEND n' else glDisablei GL_BLEND n'
-        in (getImageFBOKey i,
-            getImageBinding i (GL_COLOR_ATTACHMENT0 + n'),
-            do
-              useblend
-              setGlColorMask cf n' mask)
-        ]
+  n <- get
+  put $ n+1
+  lift $ tell [\ix -> make3 (setColor cf ix c) $ \s ->
+    let (i, mask, o) = sf s
+        n' = fromIntegral n
+        useblend = if o then glEnablei GL_BLEND n' else glDisablei GL_BLEND n'
+    in  ( getImageFBOKey i
+        , getImageBinding i (GL_COLOR_ATTACHMENT0 + n')
+        , do
+            useblend
+            setGlColorMask cf n' mask
+        )
+    ]
   where cf = undefined :: c
 
 -- | Draw all fragments in a 'FragmentStream' using the provided function that passes each fragment value into a 'DrawColors' monad. The first argument is a function
@@ -192,14 +193,29 @@ tellDrawcalls (FragmentStream xs) f = do
     mapM_ g xs
 
 
-makeDrawcall :: DrawcallInfo s -> FragmentStreamData -> IO (Drawcall s)
-makeDrawcall (sh, shd, wOrIo) (FragmentStreamData rastN shaderpos (PrimitiveStreamData primN ubuff) keep) = do
+makeDrawcall ::
+    ( ExprM () -- sh - shader
+    , GlobDeclM () -- shd - shader declarations
+    , s -> (Either WinId (IO FBOKeys, IO ()), IO ()) -- wOrIo - where to draw, as a window ID or another mean with some IO?
+    )
+    -> FragmentStreamData -> IO (Drawcall s)
+makeDrawcall (sh, shd, wOrIo) (FragmentStreamData rastN Nothing shaderpos (PrimitiveStreamData primN ubuff) keep) = do
     ExprResult fsource funis fsamps _ prevDecls prevS <- runExprM shd (discard keep >> sh)
     ExprResult vsource vunis vsamps vinps _ _ <- runExprM prevDecls (prevS >> shaderpos)
     let prefix = "generated-shaders/shader" <> show primN
     dumpGeneratedFile (prefix <> ".frag") fsource
     dumpGeneratedFile (prefix <> ".vert") vsource
-    return $ Drawcall wOrIo primN rastN vsource fsource vinps vunis vsamps funis fsamps ubuff
+    return $ Drawcall wOrIo primN rastN vsource Nothing fsource vinps vunis vsamps [] [] funis fsamps ubuff
+
+makeDrawcall (sh, shd, wOrIo) (FragmentStreamData rastN (Just geopos) shaderpos (PrimitiveStreamData primN ubuff) keep) = do
+    ExprResult fsource funis fsamps _ prevDecls prevS <- runExprM shd (discard keep >> sh)
+    ExprResult gsource gunis gsamps _ prevDecls2 prevS2 <- runExprM prevDecls (prevS >> shaderpos)
+    ExprResult vsource vunis vsamps vinps _ _ <- runExprM prevDecls2 (prevS2 >> geopos)
+    let prefix = "generated-shaders/shader" <> show primN
+    dumpGeneratedFile (prefix <> ".frag") fsource
+    dumpGeneratedFile (prefix <> ".geom") gsource
+    dumpGeneratedFile (prefix <> ".vert") vsource
+    return $ Drawcall wOrIo primN rastN vsource (Just gsource) fsource vinps vunis vsamps gunis gsamps funis fsamps ubuff
 
 
 dumpGeneratedFile :: FilePath -> Text.Text -> IO ()
