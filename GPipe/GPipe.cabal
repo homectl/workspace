@@ -91,4 +91,5 @@ test-suite testsuite
       base < 5
     , GPipe
     , hspec
+    , lens
     , text
