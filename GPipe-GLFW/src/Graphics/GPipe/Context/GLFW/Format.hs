@@ -32,8 +32,8 @@ allowedHint _                                  = True
 
 unconditionalHints :: [GLFW.WindowHint]
 unconditionalHints =
-    [ GLFW.WindowHint'ContextVersionMajor 3
-    , GLFW.WindowHint'ContextVersionMinor 3
+    [ GLFW.WindowHint'ContextVersionMajor 4
+    , GLFW.WindowHint'ContextVersionMinor 5
     , GLFW.WindowHint'OpenGLForwardCompat True
     , GLFW.WindowHint'OpenGLProfile GLFW.OpenGLProfile'Core
     ]

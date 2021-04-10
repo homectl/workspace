@@ -1,54 +1,45 @@
-{-# LANGUAGE Arrows                     #-}
-{-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE GADTs                      #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses      #-}
-{-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE FlexibleInstances, ScopedTypeVariables, Arrows, GeneralizedNewtypeDeriving, GADTs, MultiParamTypeClasses #-}
+
 module Graphics.GPipe.Internal.GeometryStream where
 
-import           Control.Arrow                           (Arrow (arr, first),
-                                                          Kleisli (Kleisli),
-                                                          returnA)
-import           Control.Category                        (Category (..))
-import qualified Control.Monad.Trans.Class               as T (lift)
-import           Control.Monad.Trans.State.Lazy          (State, evalState, get,
-                                                          put)
-import           Control.Monad.Trans.Writer              (tell)
-import           Data.Text                               (Text)
-import qualified Data.Text                               as Text
-import qualified Debug.Trace                             as DBG
-import           Prelude                                 hiding (id, length,
-                                                          (.))
+import Control.Arrow
+import Control.Category
+import Control.Monad.Trans.State.Lazy
+import qualified Control.Monad.Trans.Class as T (lift)
+import Control.Monad.Trans.Writer (tell)
+#if __GLASGOW_HASKELL__ < 804
+import Data.Semigroup (Semigroup(..))
+#endif
+import Prelude hiding (length, id, (.))
 
-import           Graphics.GPipe.Internal.Compiler        (RenderIOState (..))
-import           Graphics.GPipe.Internal.Expr
-import           Graphics.GPipe.Internal.FragmentStream
-import           Graphics.GPipe.Internal.PrimitiveArray
-import           Graphics.GPipe.Internal.PrimitiveStream (PointSize,
-                                                          PrimitiveStream (..),
-                                                          PrimitiveStreamData)
-import           Graphics.GPipe.Internal.Shader          (Shader (..), getName,
-                                                          modifyRenderIO)
+import Graphics.GPipe.Internal.Expr
+import Graphics.GPipe.Internal.Shader
+import Graphics.GPipe.Internal.Compiler
+import Graphics.GPipe.Internal.PrimitiveArray
+import Graphics.GPipe.Internal.PrimitiveStream
+import Graphics.GPipe.Internal.FragmentStream
 
-import           Graphics.GL.Core33
+import Graphics.GL.Core45
 
-import           Data.Boolean                            (Boolean (true),
-                                                          EqB ((==*)),
-                                                          IfB (ifB))
-import           Data.IntMap.Polymorphic.Lazy            (insert)
-import           Linear                                  (Quaternion (..),
-                                                          V0 (..), V1 (..),
-                                                          V2 (..), V3 (..),
-                                                          V4 (..))
-import           Linear.Affine                           (Point (..))
-import           Linear.Plucker                          (Plucker (..))
+import Data.Boolean
+import Data.IntMap.Lazy (insert)
+import Linear.V4
+import Linear.V3
+import Linear.V2
+import Linear.V1
+import Linear.V0
+import Linear.Plucker (Plucker(..))
+import Linear.Quaternion (Quaternion(..))
+import Linear.Affine (Point(..))
 
 ------------------------------------------------------------------------------------------------------------------------------------
 
-type LayoutName = Text
-data GeometryStreamData = GeometryStreamData LayoutName PrimitiveStreamData
+type GeometrizationName = Int
+
+type LayoutName = String
+
+data GeometryStreamData = GeometryStreamData GeometrizationName LayoutName PrimitiveStreamData
 
 newtype GeometryStream a = GeometryStream [(a, GeometryStreamData)] deriving (Semigroup, Monoid)
 
@@ -75,7 +66,7 @@ instance Category ToAnotherVertex where
 
 instance Arrow ToAnotherVertex where
     {-# INLINE arr #-}
-    arr f = ToAnotherVertex (arr (f . snd))
+    arr f = ToAnotherVertex (arr (f . (\(_, c) -> c)))
     {-# INLINE first #-}
     first (ToAnotherVertex f) = ToAnotherVertex $ proc ~(i, (x, z)) -> do
         y <- f -< (i, x)
@@ -127,8 +118,8 @@ instance AnotherVertexInput a => GeometryInput TrianglesWithAdjacency a where
 
 ------------------------------------------------------------------------------------------------------------------------------------
 
--- makeAnotherVertex :: Text -> SType -> ((S c a) -> ExprM Text) -> ToAnotherVertex (S c a) (S c a)
-makeAnotherVertex :: Text -> SType -> (b -> ExprM Text) -> (S c a -> b) -> ToAnotherVertex b b
+-- makeAnotherVertex :: String -> SType -> ((S c a) -> ExprM String) -> ToAnotherVertex (S c a) (S c a)
+makeAnotherVertex :: String -> SType -> (b -> ExprM String) -> (S c a -> b) -> ToAnotherVertex b b
 makeAnotherVertex qual styp f f' = ToAnotherVertex $ Kleisli $ \ (i, x) -> do
     (j, n) <- get
     let n' = if i == j then n else 0 -- reset when index change
@@ -258,22 +249,21 @@ instance AnotherVertexInput a => AnotherVertexInput (Plucker a) where
 
 geometrize :: forall p a s os f. GeometryInput p a => PrimitiveStream p a -> Shader os s (GeometryStream (Geometry p a))
 geometrize (PrimitiveStream xs) = Shader $ do
-        n <- getName
-        modifyRenderIO (\s -> s { geometrizationNameToRenderIO = insert n io (geometrizationNameToRenderIO s) } )
-        return (GeometryStream $ map f xs)
+        n <- getNewName
+        modifyRenderIO (\s -> s { transformFeedbackToRenderIO = insert n io (transformFeedbackToRenderIO s) } )
+        return (GeometryStream $ map (f n) xs)
     where
         ToGeometry (Kleisli m) = toGeometry :: ToGeometry a (Geometry p a)
-        f :: (a, (Maybe PointSize, PrimitiveStreamData)) -> (Geometry p a, GeometryStreamData)
-        f (x, (_, s)) = (evalState (m x) (0, 0), GeometryStreamData (toLayoutIn (undefined :: p)) s)
-        io = return $ return ()
+        f :: GeometrizationName -> (a, (Maybe PointSize, PrimitiveStreamData)) -> (Geometry p a, GeometryStreamData)
+        f n (x, (_, s)) = (evalState (m x) (0, 0), GeometryStreamData n (toLayoutIn (undefined :: p)) s)
+        io _ _ = return ()
 
 ------------------------------------------------------------------------------------------------------------------------------------
 
-notMeantToBeRead :: Text
 notMeantToBeRead = "false" -- error "a generative geometry is inherently a write-only value"
 
-generativePoint :: FragmentInput a => GGenerativeGeometry Points a
-generativePoint = S $ return notMeantToBeRead
+generativePoints :: FragmentInput a => GGenerativeGeometry Points a
+generativePoints = S $ return notMeantToBeRead
 
 generativeLineStrip :: FragmentInput a => GGenerativeGeometry Lines a
 generativeLineStrip = S $ return notMeantToBeRead
@@ -281,15 +271,44 @@ generativeLineStrip = S $ return notMeantToBeRead
 generativeTriangleStrip :: FragmentInput a => GGenerativeGeometry Triangles a
 generativeTriangleStrip = S $ return notMeantToBeRead
 
-emitVertex :: GeometryExplosive a => (VPos, a) -> GGenerativeGeometry p (VPos, a) -> GGenerativeGeometry p (VPos, a)
-emitVertex (V4 x y z w, a) g = S $ do
+emitVertex :: GeometryExplosive a => a -> GGenerativeGeometry p a -> GGenerativeGeometry p a
+emitVertex a g = S $ do
+    g' <- unS g
+    exploseGeometry a 0
+    T.lift $ T.lift $ tell "EmitVertex();\n"
+    return notMeantToBeRead
+
+emitVertexPosition :: GeometryExplosive a => (VPos, a) -> GGenerativeGeometry p (VPos, a) -> GGenerativeGeometry p (VPos, a)
+emitVertexPosition (V4 x y z w, a) g = S $ do
     g' <- unS g
     x' <- unS x
     y' <- unS y
     z' <- unS z
     w' <- unS w
-    tellAssignment' "gl_Position" $ "vec4("<>x'<>","<>y'<>","<>z'<>","<>w'<>")"
+    tellAssignment' "gl_Position" $ "vec4("++x'++',':y'++',':z'++',':w'++")"
     exploseGeometry a 0
+    T.lift $ T.lift $ tell "EmitVertex();\n"
+    return notMeantToBeRead
+
+emitVertexLayer :: GeometryExplosive a => (VInt, a) -> GGenerativeGeometry p (VInt, a) -> GGenerativeGeometry p (VInt, a)
+emitVertexLayer (i, a) g = S $ do
+    g' <- unS g
+    i' <- unS i
+    tellAssignment' "gl_Layer" $ i'
+    T.lift $ T.lift $ tell "EmitVertex();\n"
+    return notMeantToBeRead
+
+emitVertexPositionAndLayer :: GeometryExplosive a => ((VPos, VInt), a) -> GGenerativeGeometry p ((VPos, VInt), a) -> GGenerativeGeometry p ((VPos, VInt), a)
+emitVertexPositionAndLayer ((V4 x y z w, i), a) g = S $ do
+    g' <- unS g
+    x' <- unS x
+    y' <- unS y
+    z' <- unS z
+    w' <- unS w
+    tellAssignment' "gl_Position" $ "vec4("++x'++',':y'++',':z'++',':w'++")"
+    exploseGeometry a 0
+    i' <- unS i
+    tellAssignment' "gl_Layer" $ i'
     T.lift $ T.lift $ tell "EmitVertex();\n"
     return notMeantToBeRead
 
@@ -303,151 +322,214 @@ endPrimitive g = S $ do
 
 class FragmentInput a => GeometryExplosive a where
     exploseGeometry :: a -> Int -> ExprM Int
+    declareGeometry :: a -> State Int (GlobDeclM ())
+    enumerateVaryings :: a -> State Int [String]
+
+defaultExploseGeometry f x n = do
+    let name = "vgf" ++ show n
+    x' <- unS (f x)
+    tellAssignment' name x'
+    return (n + 1)
+
+defaultDeclareGeometry t x = do
+    n <- get
+    put (n + 1)
+    let name = "vgf" ++ show n
+    return $ do
+        tellGlobal $ "out "
+        tellGlobal $ stypeName t
+        tellGlobalLn $ ' ':name
+
+defaultEnumerateVaryings x = do
+    n <- get
+    put (n + 1)
+    return ["vgf" ++ show n]
+
+instance GeometryExplosive () where
+    exploseGeometry _ n = return n
+    declareGeometry _ = return (return ())
+    enumerateVaryings _ = return []
 
 instance GeometryExplosive VFloat where
-    exploseGeometry x n = do
-        let name = "vgf" <> tshow n
-        x' <- unS x
-        tellAssignment' name x'
-        return (n + 1)
+    exploseGeometry = defaultExploseGeometry id
+    declareGeometry = defaultDeclareGeometry STypeFloat
+    enumerateVaryings = defaultEnumerateVaryings
 
 instance GeometryExplosive FlatVFloat where
-    exploseGeometry x n = do
-        let name = "vgf" <> tshow n
-        x' <- unS (unFlat x)
-        tellAssignment' name x'
-        return (n + 1)
+    exploseGeometry = defaultExploseGeometry unFlat
+    declareGeometry = defaultDeclareGeometry STypeFloat
+    enumerateVaryings = defaultEnumerateVaryings
 
 instance GeometryExplosive NoPerspectiveVFloat where
-    exploseGeometry x n = do
-        let name = "vgf" <> tshow n
-        x' <- unS (unNPersp x)
-        tellAssignment' name x'
-        return (n + 1)
+    exploseGeometry = defaultExploseGeometry unNPersp
+    declareGeometry = defaultDeclareGeometry STypeFloat
+    enumerateVaryings = defaultEnumerateVaryings
 
 instance GeometryExplosive VInt where
-    exploseGeometry x n = do
-        let name = "vgf" <> tshow n
-        x' <- unS x
-        tellAssignment' name x'
-        return (n + 1)
+    exploseGeometry = defaultExploseGeometry id
+    declareGeometry = defaultDeclareGeometry STypeInt
+    enumerateVaryings = defaultEnumerateVaryings
 
 instance GeometryExplosive VWord where
-    exploseGeometry x n = do
-        let name = "vgf" <> tshow n
-        x' <- unS x
-        tellAssignment' name x'
-        return (n + 1)
+    exploseGeometry = defaultExploseGeometry id
+    declareGeometry = defaultDeclareGeometry STypeUInt
+    enumerateVaryings = defaultEnumerateVaryings
 
 instance GeometryExplosive VBool where
-    exploseGeometry x n = do
-        let name = "vgf" <> tshow n
-        x' <- unS x
-        tellAssignment' name x'
-        return (n + 1)
+    exploseGeometry = defaultExploseGeometry id
+    declareGeometry = defaultDeclareGeometry STypeBool
+    enumerateVaryings = defaultEnumerateVaryings
 
 instance (GeometryExplosive a) => GeometryExplosive (V0 a) where
     exploseGeometry V0 = return
+    declareGeometry V0 = return (return ())
+    enumerateVaryings V0 = return []
 
 instance (GeometryExplosive a) => GeometryExplosive (V1 a) where
     exploseGeometry (V1 x) n = do
         exploseGeometry x n
+    declareGeometry ~(V1 x) = do
+        declareGeometry x
+    enumerateVaryings ~(V1 x) =
+        enumerateVaryings x
 
 instance (GeometryExplosive a) => GeometryExplosive (V2 a) where
     exploseGeometry (V2 x y) n = do
         exploseGeometry x n >>= exploseGeometry y
+    declareGeometry ~(V2 x y) = do
+        ws <- sequence [declareGeometry x, declareGeometry y]
+        return $ sequence_ ws
+    enumerateVaryings ~(V2 x y) =
+        concat <$> sequence [enumerateVaryings x, enumerateVaryings y]
 
 instance (GeometryExplosive a) => GeometryExplosive (V3 a) where
     exploseGeometry (V3 x y z) n = do
         exploseGeometry x n >>= exploseGeometry y >>= exploseGeometry z
+    declareGeometry ~(V3 x y z) = do
+        ws <- sequence [declareGeometry x, declareGeometry y, declareGeometry z]
+        return $ sequence_ ws
+    enumerateVaryings ~(V3 x y z) =
+        concat <$> sequence [enumerateVaryings x, enumerateVaryings y, enumerateVaryings z]
 
 instance (GeometryExplosive a) => GeometryExplosive (V4 a) where
-    exploseGeometry (V4 x y z w) n = do
+    exploseGeometry (V4 x y z w) n =
         exploseGeometry x n >>= exploseGeometry y >>= exploseGeometry z >>= exploseGeometry w
+    declareGeometry ~(V4 x y z w) = do
+        ws <- sequence [declareGeometry x, declareGeometry y, declareGeometry z, declareGeometry w]
+        return $ sequence_ ws
+    enumerateVaryings ~(V4 x y z w) =
+        concat <$> sequence [enumerateVaryings x, enumerateVaryings y, enumerateVaryings z, enumerateVaryings w]
 
 instance (GeometryExplosive a, GeometryExplosive b) => GeometryExplosive (a,b) where
-    exploseGeometry (x, y) n = do
+    exploseGeometry (x, y) n =
         exploseGeometry x n >>= exploseGeometry y
+    declareGeometry ~(x, y) = do
+        ws <- sequence [declareGeometry x, declareGeometry y]
+        return $ sequence_ ws
+    enumerateVaryings ~(x, y) =
+        concat <$> sequence [enumerateVaryings x, enumerateVaryings y]
 
 instance (GeometryExplosive a, GeometryExplosive b, GeometryExplosive c) => GeometryExplosive (a,b,c) where
-    exploseGeometry (x, y, z) n = do
+    exploseGeometry (x, y, z) n =
         exploseGeometry x n >>= exploseGeometry y >>= exploseGeometry z
+    declareGeometry ~(x, y, z) = do
+        ws <- sequence [declareGeometry x, declareGeometry y, declareGeometry z]
+        return $ sequence_ ws
+    enumerateVaryings ~(x, y, z) =
+        concat <$> sequence [enumerateVaryings x, enumerateVaryings y, enumerateVaryings z]
 
 instance (GeometryExplosive a, GeometryExplosive b, GeometryExplosive c, GeometryExplosive d) => GeometryExplosive (a,b,c,d) where
-    exploseGeometry (x, y, z, w) n = do
+    exploseGeometry (x, y, z, w) n =
         exploseGeometry x n >>= exploseGeometry y >>= exploseGeometry z >>= exploseGeometry w
+    declareGeometry ~(x, y, z, w) = do
+        ws <- sequence [declareGeometry x, declareGeometry y, declareGeometry z, declareGeometry w]
+        return $ sequence_ ws
+    enumerateVaryings ~(x, y, z, w) =
+        concat <$> sequence [enumerateVaryings x, enumerateVaryings y, enumerateVaryings z, enumerateVaryings w]
 
 instance (GeometryExplosive a, GeometryExplosive b, GeometryExplosive c, GeometryExplosive d, GeometryExplosive e) => GeometryExplosive (a,b,c,d,e) where
-    exploseGeometry (x, y, z, w, r) n = do
+    exploseGeometry (x, y, z, w, r) n =
         exploseGeometry x n >>= exploseGeometry y >>= exploseGeometry z >>= exploseGeometry w >>= exploseGeometry r
+    declareGeometry ~(x, y, z, w, r) = do
+        ws <- sequence [declareGeometry x, declareGeometry y, declareGeometry z, declareGeometry w, declareGeometry r]
+        return $ sequence_ ws
+    enumerateVaryings ~(x, y, z, w, r) =
+        concat <$> sequence [enumerateVaryings x, enumerateVaryings y, enumerateVaryings z, enumerateVaryings w, enumerateVaryings r]
 
 instance (GeometryExplosive a, GeometryExplosive b, GeometryExplosive c, GeometryExplosive d, GeometryExplosive e, GeometryExplosive f) => GeometryExplosive (a,b,c,d,e,f) where
-    exploseGeometry (x, y, z, w, r, s) n = do
+    exploseGeometry (x, y, z, w, r, s) n =
         exploseGeometry x n >>= exploseGeometry y >>= exploseGeometry z >>= exploseGeometry w >>= exploseGeometry r >>= exploseGeometry s
+    declareGeometry ~(x, y, z, w, r, s) = do
+        ws <- sequence [declareGeometry x, declareGeometry y, declareGeometry z, declareGeometry w, declareGeometry r, declareGeometry s]
+        return $ sequence_ ws
+    enumerateVaryings ~(x, y, z, w, r, s) =
+        concat <$> sequence [enumerateVaryings x, enumerateVaryings y, enumerateVaryings z, enumerateVaryings w, enumerateVaryings r, enumerateVaryings s]
 
 instance (GeometryExplosive a, GeometryExplosive b, GeometryExplosive c, GeometryExplosive d, GeometryExplosive e, GeometryExplosive f, GeometryExplosive g) => GeometryExplosive (a,b,c,d,e,f,g) where
-    exploseGeometry (x, y, z, w, r, s, t) n = do
+    exploseGeometry (x, y, z, w, r, s, t) n =
         exploseGeometry x n >>= exploseGeometry y >>= exploseGeometry z >>= exploseGeometry w >>= exploseGeometry r >>= exploseGeometry s >>= exploseGeometry t
+    declareGeometry ~(x, y, z, w, r, s, t) = do
+        ws <- sequence [declareGeometry x, declareGeometry y, declareGeometry z, declareGeometry w, declareGeometry r, declareGeometry s, declareGeometry t]
+        return $ sequence_ ws
+    enumerateVaryings ~(x, y, z, w, r, s, t) =
+        concat <$> sequence [enumerateVaryings x, enumerateVaryings y, enumerateVaryings z, enumerateVaryings w, enumerateVaryings r, enumerateVaryings s, enumerateVaryings t]
 
 ------------------------------------------------------------------------------------------------------------------------------------
 
 newtype ToFragmentFromGeometry a b = ToFragmentFromGeometry (Kleisli (State Int) a b) deriving (Category, Arrow)
 
 class FragmentInputFromGeometry p a where
-    toFragmentFromGeometry :: ToFragmentFromGeometry (GGenerativeGeometry p (VPos, a)) (FragmentFormat a)
+    toFragmentFromGeometry :: ToFragmentFromGeometry (GGenerativeGeometry p (b, a)) (FragmentFormat a)
 
 instance FragmentCreator a => FragmentInputFromGeometry Triangles a where
     toFragmentFromGeometry = ToFragmentFromGeometry $ Kleisli $ \x -> do
         let ToAnotherFragment (Kleisli m) = toFragment2 :: ToAnotherFragment a (FragmentFormat a)
-        DBG.trace "toFragmentFromGeometry" m (evalState (createFragment :: State Int a) 0)
+        m (evalState (createFragment :: State Int a) 0)
 
--- TODO: reuse bits of FragmentStream.rasterize
-generateAndRasterize
-    :: forall p a s os f. (FragmentInputFromGeometry p a, PrimitiveTopology p, Show (FragmentFormat a))
-    => (s -> (Side, PolygonMode, ViewPort, DepthRange))
-    -> Int
-    -> GeometryStream (GGenerativeGeometry p (VPos, a))
-    -> Shader os s (FragmentStream (FragmentFormat a))
+-- Note: from other constraint, b happens to be VPos or (VPos, VInt).
+generateAndRasterize :: forall p b a s os f. (FragmentInputFromGeometry p a, PrimitiveTopology p)
+        => (s -> (Side, PolygonMode, ViewPort, DepthRange))
+        -> Int
+        -> GeometryStream (GGenerativeGeometry p (b, a))
+        -> Shader os s (FragmentStream (FragmentFormat a))
 generateAndRasterize sf maxVertices (GeometryStream xs) = Shader $ do
-    n <- getName
-    modifyRenderIO (\s -> s { rasterizationNameToRenderIO = insert n io (rasterizationNameToRenderIO s) } )
-    return (FragmentStream $ map (\x -> DBG.traceShowId $ f n x) xs)
-  where
-    ToFragmentFromGeometry (Kleisli m) = toFragmentFromGeometry :: ToFragmentFromGeometry (GGenerativeGeometry p (VPos, a)) (FragmentFormat a)
-    f :: Int -> (GGenerativeGeometry p (VPos, a), GeometryStreamData) -> (FragmentFormat a, FragmentStreamData)
-    f n (x, GeometryStreamData a b) = (evalState (DBG.trace "OOOOOOOOOOOOOOOOOOO" m x) 0, FragmentStreamData n (Just (return ())) (makePrims a x) b true)
+        n <- getNewName
+        modifyRenderIO (\s -> s { rasterizationNameToRenderIO = insert n io (rasterizationNameToRenderIO s) } )
+        return (FragmentStream $ map (f n) xs)
+    where
+        ToFragmentFromGeometry (Kleisli m) = toFragmentFromGeometry :: ToFragmentFromGeometry (GGenerativeGeometry p (b, a)) (FragmentFormat a)
+        f :: Int -> (GGenerativeGeometry p (b, a), GeometryStreamData) -> (FragmentFormat a, FragmentStreamData)
+        f n (x, GeometryStreamData name layout psd) = (evalState (m x) 0, FragmentStreamData n True (makePrims layout x) psd true)
 
-    makePrims a x = do
-        declareGeometryLayout a (toLayoutOut (undefined :: p)) maxVertices
-        x' <- unS x
-        return ()
+        makePrims a x = do
+            declareGeometryLayout a (toLayoutOut (undefined :: p)) maxVertices
+            x' <- unS x
+            return ()
 
-    io s =
-        let (side, polygonMode, ViewPort (V2 x y) (V2 w h), DepthRange dmin dmax) = sf s in
-        if w < 0 || h < 0
-            then error "ViewPort, negative size"
-            else do
-                setGlCullFace side
-                setGlPolygonMode polygonMode
-                glScissor (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h)
-                glViewport (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h)
-                glDepthRange (realToFrac dmin) (realToFrac dmax)
-                setGLPointSize
+        io s =
+            let (side, polygonMode, ViewPort (V2 x y) (V2 w h), DepthRange dmin dmax) = sf s
+            in  if w < 0 || h < 0
+                    then error "ViewPort, negative size"
+                    else do setGlCullFace side
+                            setGlPolygonMode polygonMode
+                            glScissor (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h)
+                            glViewport (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h)
+                            glDepthRange (realToFrac dmin) (realToFrac dmax)
+                            setGLPointSize
 
-    setGlCullFace Front        = glEnable GL_CULL_FACE >> glCullFace GL_BACK -- Back is culled when front is rasterized
-    setGlCullFace Back         = glEnable GL_CULL_FACE >> glCullFace GL_FRONT
-    setGlCullFace FrontAndBack = glDisable GL_CULL_FACE
+        setGlCullFace Front = glEnable GL_CULL_FACE >> glCullFace GL_BACK -- Back is culled when front is rasterized
+        setGlCullFace Back = glEnable GL_CULL_FACE >> glCullFace GL_FRONT
+        setGlCullFace _ = glDisable GL_CULL_FACE
 
-    setGlPolygonMode PolygonFill      = glPolygonMode GL_FRONT_AND_BACK GL_FILL
-    setGlPolygonMode PolygonPoint     = do
-        glEnable GL_PROGRAM_POINT_SIZE
-        glPolygonMode GL_FRONT_AND_BACK GL_POINT
-    setGlPolygonMode (PolygonLine lw) = do
-        glLineWidth (realToFrac lw)
-        glPolygonMode GL_FRONT_AND_BACK GL_LINE
+        setGlPolygonMode PolygonFill      = glPolygonMode GL_FRONT_AND_BACK GL_FILL
+        setGlPolygonMode PolygonPoint     = do
+            glEnable GL_PROGRAM_POINT_SIZE
+            glPolygonMode GL_FRONT_AND_BACK GL_POINT
+        setGlPolygonMode (PolygonLine lw) = do
+            glLineWidth (realToFrac lw)
+            glPolygonMode GL_FRONT_AND_BACK GL_LINE
 
-    -- TODO: why is it always disabled in the geometry stream?
-    setGLPointSize = glDisable GL_PROGRAM_POINT_SIZE
+        setGLPointSize = glDisable GL_PROGRAM_POINT_SIZE
 
 ------------------------------------------------------------------------------------------------------------------------------------
 
@@ -456,11 +538,11 @@ newtype ToAnotherFragment a b = ToAnotherFragment (Kleisli (State Int) a b) deri
 class FragmentInput a => AnotherFragmentInput a where
     toFragment2 :: ToAnotherFragment a (FragmentFormat a)
 
-makeAnotherFragment :: Text -> SType -> (a -> ExprM Text) -> ToAnotherFragment a (S c a1)
-makeAnotherFragment qual styp f = ToAnotherFragment $ Kleisli $ \x -> do
-    n <- get
-    put (n + 1)
-    return $ DBG.trace "!!!!!!! MAKE FRAGMENT" $ S $ useFInputFromG qual styp n $ f x
+makeAnotherFragment :: String -> SType -> (a -> ExprM String) -> ToAnotherFragment a (S c a1)
+makeAnotherFragment qual styp f = ToAnotherFragment $ Kleisli $ \ x -> do
+        n <- get
+        put (n + 1)
+        return $ S $ useFInputFromG qual styp n $ f x
 
 instance AnotherFragmentInput () where
     toFragment2 = arr (const ())
@@ -598,62 +680,64 @@ instance FragmentCreator VFloat where
     createFragment = do
         n <- get
         put (n + 1)
-        return $ S (return $ tshow n)
+        return $ S (return $ show n)
 
 instance FragmentCreator FlatVFloat where
     createFragment = do
         n <- get
         put (n + 1)
-        return $ Flat $ S (return $ tshow n)
+        return $ Flat $ S (return $ show n)
 
 instance FragmentCreator NoPerspectiveVFloat where
     createFragment = do
         n <- get
         put (n + 1)
-        return $ NoPerspective $ S (return $ tshow n)
+        return $ NoPerspective $ S (return $ show n)
 
 instance FragmentCreator VInt where
     createFragment = do
         n <- get
         put (n + 1)
-        return $ S (return $ tshow n)
+        return $ S (return $ show n)
 
 instance FragmentCreator VWord where
     createFragment = do
         n <- get
         put (n + 1)
-        return $ S (return $ tshow n)
+        return $ S (return $ show n)
 
 instance FragmentCreator VBool where
     createFragment = do
         n <- get
         put (n + 1)
-        return $ S (return $ tshow n)
+        return $ S (return $ show n)
 
 instance (FragmentCreator a) => FragmentCreator (V0 a) where
     createFragment = return V0
 
 instance (FragmentCreator a) => FragmentCreator (V1 a) where
-    createFragment = V1
-        <$> createFragment
+    createFragment = createFragment >>= return . V1
 
 instance (FragmentCreator a) => FragmentCreator (V2 a) where
-    createFragment = V2
-        <$> createFragment
-        <*> createFragment
+    createFragment = do
+        x <- createFragment
+        y <- createFragment
+        return (V2 x y)
 
 instance (FragmentCreator a) => FragmentCreator (V3 a) where
-    createFragment = V3
-        <$> createFragment
-        <*> createFragment
-        <*> createFragment
+    createFragment = do
+        x <- createFragment
+        y <- createFragment
+        z <- createFragment
+        return (V3 x y z)
 
 instance (FragmentCreator a) => FragmentCreator (V4 a) where
-    createFragment = V4
-        <$> createFragment
-        <*> createFragment
-        <*> createFragment
-        <*> createFragment
+    createFragment = do
+        x <- createFragment
+        y <- createFragment
+        z <- createFragment
+        w <- createFragment
+        return (V4 x y z w)
 
 instance (FragmentCreator a, FragmentCreator b) => FragmentCreator (a,b) where
     createFragment = do
@@ -707,19 +791,22 @@ instance (FragmentCreator a, FragmentCreator b, FragmentCreator c, FragmentCreat
         return (x, y, z, w, r, s, t)
 
 instance FragmentCreator a => FragmentCreator (Quaternion a) where
-    createFragment = Quaternion
-        <$> createFragment
-        <*> createFragment
+    createFragment = do
+        a <- createFragment
+        v <- createFragment
+        return (Quaternion a v)
 
 instance (FragmentCreator (f a), FragmentCreator a, FragmentFormat (f a) ~ f (FragmentFormat a)) => FragmentCreator (Point f a) where
-    createFragment = P
-        <$> createFragment
+    createFragment = do
+        a <- createFragment
+        return (P a)
 
 instance FragmentCreator a => FragmentCreator (Plucker a) where
-    createFragment = Plucker
-        <$> createFragment
-        <*> createFragment
-        <*> createFragment
-        <*> createFragment
-        <*> createFragment
-        <*> createFragment
+    createFragment = do
+        a <- createFragment
+        b <- createFragment
+        c <- createFragment
+        d <- createFragment
+        e <- createFragment
+        f <- createFragment
+        return (Plucker a b c d e f)

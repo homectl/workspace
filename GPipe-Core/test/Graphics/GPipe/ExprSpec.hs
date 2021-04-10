@@ -13,8 +13,8 @@ wrap :: FFloat -> IO ExprResult
 wrap expr = runExprM (tellGlobal "") $ unS expr >>= tellAssignment' "result"
 
 
-golden :: T.Text -> IO ()
-golden = mapM_ (\l -> putStrLn $ "                , " ++ show l) . T.lines
+golden :: String -> IO ()
+golden = mapM_ (\l -> putStrLn $ "                , " ++ show l) . lines
 
 
 spec :: Spec
@@ -25,8 +25,8 @@ spec = do
                 b = 2
                 c = a + b
             res <- wrap c
-            source res `shouldBe` T.unlines
-                [ "#version 330"
+            finalSource res `shouldBe` unlines
+                [ "#version 450"
                 , "void main() {"
                 , "float t0 = (1+2);"
                 , "result = t0;"
@@ -37,8 +37,8 @@ spec = do
             let (a, b, c, d) = (1, 2, 3, 4)
                 result = a + b + c + d
             res <- wrap result
-            source res `shouldBe` T.unlines
-                [ "#version 330"
+            finalSource res `shouldBe` unlines
+                [ "#version 450"
                 , "void main() {"
                 , "float t0 = (1+2);"
                 , "float t1 = (t0+3);"
@@ -52,8 +52,8 @@ spec = do
                 e = a + b + c + d
                 result = e + e
             res <- wrap result
-            source res `shouldBe` T.unlines
-                [ "#version 330"
+            finalSource res `shouldBe` unlines
+                [ "#version 450"
                 , "void main() {"
                 , "float t0 = (1+2);"
                 , "float t1 = (t0+3);"
@@ -71,8 +71,8 @@ spec = do
                 c = a ==* b
                 result = norm (ifB c a b)
             res <- wrap result
-            source res `shouldBe` T.unlines
-                [ "#version 330"
+            finalSource res `shouldBe` unlines
+                [ "#version 450"
                 , "void main() {"
                 , "bool t0 = (1==5);"
                 , "bool t1 = (2==6);"
@@ -118,8 +118,8 @@ spec = do
                 c = a ==* b
                 result = norm $ ifThenElse' c a b
             res <- wrap result
-            source res `shouldBe` T.unlines
-                [ "#version 330"
+            finalSource res `shouldBe` unlines
+                [ "#version 450"
                 , "void main() {"
                 , "bool t0 = (1==5);"
                 , "bool t1 = (2==6);"
@@ -155,9 +155,9 @@ spec = do
                 v = V4 5 6 7 8
                 result = norm $ m !* v
             res <- wrap result
-            golden $ source res
-            source res `shouldBe` T.unlines
-                [ "#version 330"
+            golden $ finalSource res
+            finalSource res `shouldBe` unlines
+                [ "#version 450"
                 , "void main() {"
                 , "vec4 t0 = (vec4(5,6,7,8)*mat4x4(vec4(1,0,0,0),vec4(0,1,0,0),vec4(0,0,1,0),vec4(0,0,0,1)));"
                 , "float t1 = length(vec4(t0[0],t0[1],t0[2],t0[3]));"

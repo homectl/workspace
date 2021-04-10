@@ -1,11 +1,7 @@
-{-# LANGUAGE Arrows               #-}
-{-# LANGUAGE FlexibleContexts     #-}
-{-# LANGUAGE FlexibleInstances    #-}
-{-# LANGUAGE PatternSynonyms      #-}
-{-# LANGUAGE ScopedTypeVariables  #-}
-{-# LANGUAGE TypeFamilies         #-}
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# OPTIONS_GHC -Wno-name-shadowing #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE Arrows, TypeFamilies, ScopedTypeVariables,
+  FlexibleContexts, FlexibleInstances , TypeSynonymInstances #-}
+
 module Graphics.GPipe.Internal.Buffer
 (
     BufferFormat(..),
@@ -20,41 +16,38 @@ module Graphics.GPipe.Internal.Buffer
     writeBuffer,
     copyBuffer,
     BufferStartPos,
-    bufSize, bufName, bufElementSize, bufferLength, bufBElement, bufferWriteInternal, makeBuffer, getUniformAlignment, UniformAlignment
+    bufSize, bufName, bufElementSize, bufferLength, bufBElement, bufTransformFeedback, bufferWriteInternal, makeBuffer, getUniformAlignment, UniformAlignment
 ) where
 
-import           Graphics.GPipe.Internal.Context
+import Graphics.GPipe.Internal.Context
 
-import           Foreign.Marshal.Alloc             (alloca)
-import           Foreign.Marshal.Utils             (with)
-import           Graphics.GL.Core33
-import           Graphics.GL.Types                 (GLenum, GLuint)
+import Graphics.GL.Core45
+import Graphics.GL.Types
+import Foreign.Marshal.Utils
+import Foreign.Marshal.Alloc
 
-import           Control.Arrow                     (Arrow (arr, first),
-                                                    Kleisli (..), returnA)
-import           Control.Category                  (Category (..))
-import           Control.Monad                     (void)
-import           Control.Monad.IO.Class            (MonadIO (..))
-import           Control.Monad.Trans.Class         (lift)
-import           Control.Monad.Trans.Reader        (Reader, ask, runReader)
-import           Control.Monad.Trans.State.Strict  (StateT (runStateT), get,
-                                                    put)
-import           Control.Monad.Trans.Writer.Strict (WriterT (runWriterT), tell)
-import           Data.IORef                        (IORef, newIORef, readIORef)
-import           Data.Int                          (Int16, Int32, Int8)
-import           Data.Word                         (Word16, Word32, Word8)
-import           Foreign.Ptr                       (Ptr, castPtr, minusPtr,
-                                                    nullPtr, plusPtr)
-import           Foreign.Storable                  (Storable (peek, peekElemOff, poke, sizeOf))
-import           Linear.Affine                     (Point (..))
-import           Linear.Plucker                    (Plucker (..))
-import           Linear.Quaternion                 (Quaternion (..))
-import           Linear.V0                         (V0 (..))
-import           Linear.V1                         (V1 (..))
-import           Linear.V2                         (V2 (..))
-import           Linear.V3                         (V3 (..))
-import           Linear.V4                         (V4 (..))
-import           Prelude                           hiding (id, (.))
+import Prelude hiding ((.), id)
+import Control.Category
+import Control.Arrow
+import Control.Monad (void)
+import Foreign.Storable
+import Foreign.Ptr
+import Control.Monad.IO.Class
+import Data.Word
+import Data.Int
+import Control.Monad.Trans.State.Strict
+import Control.Monad.Trans.Writer.Strict
+import Control.Monad.Trans.Reader
+import Control.Monad.Trans.Class (lift)
+import Data.IORef
+import Linear.V4
+import Linear.V3
+import Linear.V2
+import Linear.V1
+import Linear.V0
+import Linear.Plucker (Plucker(..))
+import Linear.Quaternion (Quaternion(..))
+import Linear.Affine (Point(..))
 
 -- | The class that constraints which types can live in a buffer.
 class BufferFormat f where
@@ -75,12 +68,13 @@ class BufferFormat f where
 
 -- | A @Buffer os b@ lives in the object space @os@ and contains elements of type @b@.
 data Buffer os b = Buffer
-    { bufName        :: BufferName
-    , bufElementSize :: Int
-    -- | Retrieve the number of elements in a buffer.
-    , bufferLength   :: Int
-    , bufBElement    :: BInput -> b
-    , bufWriter      :: Ptr () -> HostFormat b -> IO ()
+    {   bufName :: BufferName
+    ,   bufElementSize :: Int
+        -- | Retrieve the number of elements in a buffer.
+    ,   bufferLength :: Int
+    ,   bufBElement :: BInput -> b
+    ,   bufWriter :: Ptr () -> HostFormat b -> IO ()
+    ,   bufTransformFeedback :: IORef (Maybe (GLuint, GLuint))
     }
 
 instance Eq (Buffer os b) where
@@ -94,7 +88,10 @@ type Offset = Int
 type Stride = Int
 type BufferStartPos = Int
 
-data BInput = BInput {bInSkipElems :: Int, bInInstanceDiv :: Int}
+data BInput = BInput
+    {   bInSkipElems :: Int
+    ,   bInInstanceDiv :: Int
+    }
 
 type UniformAlignment = Int
 
@@ -102,9 +99,9 @@ data AlignmentMode = Align4 | AlignUniform | AlignPackedIndices | AlignUnknown d
 
 -- | The arrow type for 'toBuffer'.
 data ToBuffer a b = ToBuffer
-    (Kleisli (StateT Offset (WriterT [Int] (Reader (UniformAlignment, AlignmentMode)))) a b) -- Normal = aligned to 4 bytes
-    (Kleisli (StateT Offset (Reader (BufferName, Stride, BInput))) a b)
-    (Kleisli (StateT (Ptr (), [Int]) IO) a b) -- Normal = aligned to 4 bytes
+    !(Kleisli (StateT Offset (WriterT [Int] (Reader (UniformAlignment, AlignmentMode)))) a b) -- Normal = aligned to 4 bytes
+    !(Kleisli (StateT Offset (Reader (BufferName, Stride, BInput))) a b)
+    !(Kleisli (StateT (Ptr (), [Int]) IO) a b) -- Normal = aligned to 4 bytes
     !AlignmentMode
 
 instance Category ToBuffer where
@@ -114,12 +111,12 @@ instance Category ToBuffer where
     ToBuffer a b c m1 . ToBuffer x y z m2 = ToBuffer (a.x) (b.y) (c.z) (comb m1 m2)
         where
             -- If only one uniform or one PackedIndices, use that, otherwise use Align4
-            comb AlignUniform AlignUnknown       = AlignUniform
-            comb AlignUnknown AlignUniform       = AlignUniform
+            comb AlignUniform AlignUnknown = AlignUniform
+            comb AlignUnknown AlignUniform = AlignUniform
             comb AlignUnknown AlignPackedIndices = AlignPackedIndices
             comb AlignPackedIndices AlignUnknown = AlignPackedIndices
-            comb AlignUnknown AlignUnknown       = AlignUnknown
-            comb _ _                             = Align4
+            comb AlignUnknown AlignUnknown = AlignUnknown
+            comb _ _ = Align4
 
 instance Arrow ToBuffer where
     {-# INLINE arr #-}
@@ -128,7 +125,13 @@ instance Arrow ToBuffer where
     first (ToBuffer a b c m) = ToBuffer (first a) (first b) (first c) m
 
 -- | The atomic buffer value that represents a host value of type 'a'.
-data B a = B { bName :: IORef GLuint, bOffset :: Int, bStride :: Int, bSkipElems :: Int, bInstanceDiv :: Int}
+data B a = B
+    {   bName :: IORef GLuint
+    ,   bOffset :: Int
+    ,   bStride :: Int
+    ,   bSkipElems :: Int
+    ,   bInstanceDiv :: Int
+    }
 
 -- | An atomic buffer value that represents a vector of 2 'a's on the host.
 newtype B2 a = B2 { unB2 :: B a } -- Internal
@@ -170,76 +173,81 @@ newtype BPacked a = BPacked (B a)
 
 toBufferBUnaligned :: forall a. Storable a => ToBuffer a (B a)
 toBufferBUnaligned = ToBuffer
-                (Kleisli $ const static)
-                (Kleisli $ const valueProd)
-                (Kleisli writer)
-                Align4
-            where
-                size = sizeOf (undefined :: a)
-                static = do offset <- get
-                            put $ offset + size
-                            return undefined
-                valueProd = do (name, stride, bIn) <- lift ask
-                               offset <- get
-                               put $ offset + size
-                               return $ B name offset stride (bInSkipElems bIn) (bInInstanceDiv bIn)
-                writer a = do (ptr,pads) <- get
-                              put (ptr `plusPtr` size, pads)
-                              liftIO $ poke (castPtr ptr) a
-                              return undefined
+        (Kleisli $ const static)
+        (Kleisli $ const valueProd)
+        (Kleisli writer)
+        Align4
+    where
+        size = sizeOf (undefined :: a)
+        static = do
+            offset <- get
+            put $ offset + size
+            return undefined
+        valueProd = do
+            (name, stride, bIn) <- lift ask
+            offset <- get
+            put $ offset + size
+            return $ B name offset stride (bInSkipElems bIn) (bInInstanceDiv bIn)
+        writer a = do
+            (ptr,pads) <- get
+            put (ptr `plusPtr` size, pads)
+            liftIO $ poke (castPtr ptr) a
+            return undefined
 
 toBufferB :: forall a. Storable a => ToBuffer a (B a)
 toBufferB = toBufferBUnaligned -- Will always be 4 aligned, only 4 size types defined for B1
 
 toBufferB2 :: forall a. Storable a => ToBuffer (V2 a) (B2 a)
 toBufferB2 = proc ~(V2 a b) -> do
-        (if sizeOf (undefined :: a) >= 4 then alignWhen [(AlignUniform, 2 * sizeOf (undefined :: a))] else id) -< () -- Small optimization if someone puts non-usable types in a uniform
-        a' <- toBufferBUnaligned  -< a
-        toBufferBUnaligned -< b
-        returnA -< B2 a' -- Will always be 4 aligned, only 4 size types defined for B2
+    (if sizeOf (undefined :: a) >= 4 then alignWhen [(AlignUniform, 2 * sizeOf (undefined :: a))] else id) -< () -- Small optimization if someone puts non-usable types in a uniform
+    a' <- toBufferBUnaligned  -< a
+    toBufferBUnaligned -< b
+    returnA -< B2 a' -- Will always be 4 aligned, only 4 size types defined for B2
 toBufferB3 :: forall a. Storable a => ToBuffer (V3 a) (B3 a)
 toBufferB3 = proc ~(V3 a b c) -> do
-        (if sizeOf (undefined :: a) >= 4 then alignWhen [(AlignUniform, 4 * sizeOf (undefined :: a))] else id) -< () -- Small optimization if someone puts non-usable types in a uniform
-        a' <- toBufferBUnaligned -< a
-        toBufferBUnaligned -< b
-        toBufferBUnaligned -< c
-        (if sizeOf (undefined :: a) < 4 then alignWhen [(Align4, 4), (AlignUniform, 4)] else id) -< () -- For types smaller than 4 we need to pad
-        returnA -< B3 a'
+    (if sizeOf (undefined :: a) >= 4 then alignWhen [(AlignUniform, 4 * sizeOf (undefined :: a))] else id) -< () -- Small optimization if someone puts non-usable types in a uniform
+    a' <- toBufferBUnaligned -< a
+    toBufferBUnaligned -< b
+    toBufferBUnaligned -< c
+    (if sizeOf (undefined :: a) < 4 then alignWhen [(Align4, 4), (AlignUniform, 4)] else id) -< () -- For types smaller than 4 we need to pad
+    returnA -< B3 a'
 toBufferB4 :: forall a. Storable a => ToBuffer (V4 a) (B4 a)
 toBufferB4 = proc ~(V4 a b c d) -> do
-        (if sizeOf (undefined :: a) >= 4 then alignWhen [(AlignUniform, 4 * sizeOf (undefined :: a))] else id) -< () -- Small optimization if someone puts non-usable types in a uniform
-        a' <- toBufferBUnaligned -< a
-        toBufferBUnaligned -< b
-        toBufferBUnaligned -< c
-        toBufferBUnaligned -< d
-        returnA -< B4 a' -- Will always be 4 aligned
+    (if sizeOf (undefined :: a) >= 4 then alignWhen [(AlignUniform, 4 * sizeOf (undefined :: a))] else id) -< () -- Small optimization if someone puts non-usable types in a uniform
+    a' <- toBufferBUnaligned -< a
+    toBufferBUnaligned -< b
+    toBufferBUnaligned -< c
+    toBufferBUnaligned -< d
+    returnA -< B4 a' -- Will always be 4 aligned
 
 instance BufferFormat a => BufferFormat (Uniform a) where
     type HostFormat (Uniform a) = HostFormat a
     toBuffer = arr Uniform . ToBuffer
-                    (Kleisli preStep)
-                    (Kleisli elementBuilderA)
-                    (Kleisli writerA)
-                    AlignUniform
+        (Kleisli preStep)
+        (Kleisli elementBuilderA)
+        (Kleisli writerA)
+        AlignUniform
         where
             ToBuffer (Kleisli preStep') (Kleisli elementBuilderA) (Kleisli writerA') _ = toBuffer :: ToBuffer (HostFormat a) a
-            preStep a = do (x,_) <- lift $ lift ask
-                           a' <- preStep' a
-                           setElemAlignM [(AlignUniform, x)] ()
-                           return a'
-            writerA a = do a' <- writerA' a
-                           setWriterAlignM ()
-                           return a'
+            preStep a = do
+                (x,_) <- lift $ lift ask
+                a' <- preStep' a
+                setElemAlignM [(AlignUniform, x)] ()
+                return a'
+            writerA a = do
+                a' <- writerA' a
+                setWriterAlignM ()
+                return a'
 instance BufferFormat a => BufferFormat (Normalized a) where
     type HostFormat (Normalized a) = HostFormat a
     toBuffer = arr Normalized . toBuffer
     getGlType (Normalized a) = getGlType a
     getGlPaddedFormat (Normalized a) = case getGlPaddedFormat a of
-                                            GL_RGBA_INTEGER -> GL_RGBA
-                                            GL_RGB_INTEGER  -> GL_RGB
-                                            GL_RG_INTEGER   -> GL_RG
-                                            GL_RED_INTEGER  -> GL_RED
-                                            x               -> x
+        GL_RGBA_INTEGER -> GL_RGBA
+        GL_RGB_INTEGER -> GL_RGB
+        GL_RG_INTEGER -> GL_RG
+        GL_RED_INTEGER -> GL_RED
+        x -> x
 
 instance BufferFormat a => BufferFormat (V0 a) where
     type HostFormat (V0 a) = V0 (HostFormat a)
@@ -247,23 +255,23 @@ instance BufferFormat a => BufferFormat (V0 a) where
 instance BufferFormat a => BufferFormat (V1 a) where
     type HostFormat (V1 a) = V1 (HostFormat a)
     toBuffer = proc ~(V1 a) -> do
-                a' <- toBuffer -< a
-                returnA -< V1 a'
+        a' <- toBuffer -< a
+        returnA -< V1 a'
 instance BufferFormat a => BufferFormat (V2 a) where
     type HostFormat (V2 a) = V2 (HostFormat a)
     toBuffer = proc ~(V2 a b) -> do
-                (a', b') <- toBuffer -< (a,b)
-                returnA -< V2 a' b'
+        (a', b') <- toBuffer -< (a,b)
+        returnA -< V2 a' b'
 instance BufferFormat a => BufferFormat (V3 a) where
     type HostFormat (V3 a) = V3 (HostFormat a)
     toBuffer = proc ~(V3 a b c) -> do
-                (a', b', c') <- toBuffer -< (a, b, c)
-                returnA -< V3 a' b' c'
+        (a', b', c') <- toBuffer -< (a, b, c)
+        returnA -< V3 a' b' c'
 instance BufferFormat a => BufferFormat (V4 a) where
     type HostFormat (V4 a) = V4 (HostFormat a)
     toBuffer = proc ~(V4 a b c d) -> do
-                (a', b', c', d') <- toBuffer -< (a, b, c, d)
-                returnA -< V4 a' b' c' d'
+        (a', b', c', d') <- toBuffer -< (a, b, c, d)
+        returnA -< V4 a' b' c' d'
 
 instance BufferFormat () where
     type HostFormat () = ()
@@ -271,72 +279,76 @@ instance BufferFormat () where
 instance (BufferFormat a, BufferFormat b) => BufferFormat (a, b) where
     type HostFormat (a,b) = (HostFormat a, HostFormat b)
     toBuffer = proc ~(a, b) -> do
-                a' <- toBuffer -< a
-                b' <- toBuffer -< b
-                returnA -< (a', b')
+        a' <- toBuffer -< a
+        b' <- toBuffer -< b
+        returnA -< (a', b')
 instance (BufferFormat a, BufferFormat b, BufferFormat c) => BufferFormat (a, b, c) where
     type HostFormat (a,b,c) = (HostFormat a, HostFormat b, HostFormat c)
     toBuffer = proc ~(a, b, c) -> do
-                ((a', b'), c') <- toBuffer -< ((a, b), c)
-                returnA -< (a', b', c')
+        ((a', b'), c') <- toBuffer -< ((a, b), c)
+        returnA -< (a', b', c')
 instance (BufferFormat a, BufferFormat b, BufferFormat c, BufferFormat d) => BufferFormat (a, b, c, d) where
     type HostFormat (a,b,c,d) = (HostFormat a, HostFormat b, HostFormat c, HostFormat d)
     toBuffer = proc ~(a, b, c, d) -> do
-                ((a', b', c'), d') <- toBuffer -< ((a, b, c), d)
-                returnA -< (a', b', c', d')
+        ((a', b', c'), d') <- toBuffer -< ((a, b, c), d)
+        returnA -< (a', b', c', d')
 instance (BufferFormat a, BufferFormat b, BufferFormat c, BufferFormat d, BufferFormat e) => BufferFormat (a, b, c, d, e) where
     type HostFormat (a,b,c,d,e) = (HostFormat a, HostFormat b, HostFormat c, HostFormat d, HostFormat e)
     toBuffer = proc ~(a, b, c, d, e) -> do
-                ((a', b', c', d'), e') <- toBuffer -< ((a, b, c, d), e)
-                returnA -< (a', b', c', d', e')
+        ((a', b', c', d'), e') <- toBuffer -< ((a, b, c, d), e)
+        returnA -< (a', b', c', d', e')
 instance (BufferFormat a, BufferFormat b, BufferFormat c, BufferFormat d, BufferFormat e, BufferFormat f) => BufferFormat (a, b, c, d, e, f) where
     type HostFormat (a,b,c,d,e,f) = (HostFormat a, HostFormat b, HostFormat c, HostFormat d, HostFormat e, HostFormat f)
     toBuffer = proc ~(a, b, c, d, e, f) -> do
-                ((a', b', c', d', e'), f') <- toBuffer -< ((a, b, c, d, e), f)
-                returnA -< (a', b', c', d', e', f')
+        ((a', b', c', d', e'), f') <- toBuffer -< ((a, b, c, d, e), f)
+        returnA -< (a', b', c', d', e', f')
 instance (BufferFormat a, BufferFormat b, BufferFormat c, BufferFormat d, BufferFormat e, BufferFormat f, BufferFormat g) => BufferFormat (a, b, c, d, e, f, g) where
     type HostFormat (a,b,c,d,e,f,g) = (HostFormat a, HostFormat b, HostFormat c, HostFormat d, HostFormat e, HostFormat f, HostFormat g)
     toBuffer = proc ~(a, b, c, d, e, f, g) -> do
-                ((a', b', c', d', e', f'), g') <- toBuffer -< ((a, b, c, d, e, f), g)
-                returnA -< (a', b', c', d', e', f', g')
+        ((a', b', c', d', e', f'), g') <- toBuffer -< ((a, b, c, d, e, f), g)
+        returnA -< (a', b', c', d', e', f', g')
 
 instance BufferFormat a => BufferFormat (Quaternion a) where
     type HostFormat (Quaternion a) = Quaternion (HostFormat a)
     toBuffer = proc ~(Quaternion a v) -> do
-                a' <- toBuffer -< a
-                v' <- toBuffer -< v
-                returnA -< Quaternion a' v'
+        a' <- toBuffer -< a
+        v' <- toBuffer -< v
+        returnA -< Quaternion a' v'
 
 instance (BufferFormat (f a), BufferFormat a, HostFormat (f a) ~ f (HostFormat a)) => BufferFormat (Point f a) where
     type HostFormat (Point f a) = Point f (HostFormat a)
     toBuffer = proc ~(P a) -> do
-                a' <- toBuffer -< a
-                returnA -< P a'
+        a' <- toBuffer -< a
+        returnA -< P a'
 
 instance BufferFormat a => BufferFormat (Plucker a) where
     type HostFormat (Plucker a) = Plucker (HostFormat a)
     toBuffer = proc ~(Plucker a b c d e f) -> do
-                a' <- toBuffer -< a
-                b' <- toBuffer -< b
-                c' <- toBuffer -< c
-                d' <- toBuffer -< d
-                e' <- toBuffer -< e
-                f' <- toBuffer -< f
-                returnA -< Plucker a' b' c' d' e' f'
+        a' <- toBuffer -< a
+        b' <- toBuffer -< b
+        c' <- toBuffer -< c
+        d' <- toBuffer -< d
+        e' <- toBuffer -< e
+        f' <- toBuffer -< f
+        returnA -< Plucker a' b' c' d' e' f'
 
 -- | Create a buffer with a specified number of elements.
 newBuffer :: (MonadIO m, BufferFormat b, ContextHandler ctx) => Int -> ContextT ctx os m (Buffer os b)
-newBuffer elementCount | elementCount < 0 = error "newBuffer, length negative"
-                       | otherwise = do
+newBuffer elementCount
+    | elementCount < 0 = error "newBuffer, length negative"
+    | otherwise = do
     (buffer, nameRef, name) <- liftNonWinContextIO $ do
-                       name <- alloca (\ptr -> glGenBuffers 1 ptr >> peek ptr)
-                       nameRef <- newIORef name
-                       uniAl <- getUniformAlignment
-                       let buffer = makeBuffer nameRef elementCount uniAl
-                       bname <- readIORef $ bufName buffer
-                       glBindBuffer GL_COPY_WRITE_BUFFER bname
-                       glBufferData GL_COPY_WRITE_BUFFER (fromIntegral $ bufSize buffer) nullPtr GL_STREAM_DRAW
-                       return (buffer, nameRef, name)
+        name <- alloca $ \ptr -> do
+            glGenBuffers 1 ptr
+            peek ptr
+        nameRef <- newIORef name
+        tfRef <- newIORef Nothing
+        uniAl <- getUniformAlignment
+        let buffer = makeBuffer' nameRef elementCount uniAl tfRef
+        bname <- readIORef $ bufName buffer
+        glBindBuffer GL_COPY_WRITE_BUFFER bname
+        glBufferData GL_COPY_WRITE_BUFFER (fromIntegral $ bufSize buffer) nullPtr GL_STREAM_DRAW
+        return (buffer, nameRef, name)
     addContextFinalizer nameRef $ with name (glDeleteBuffers 1)
     addVAOBufferFinalizer nameRef
     return buffer
@@ -349,36 +361,43 @@ bufferWriteInternal _ ptr [] = return ptr
 
 -- | Write a buffer from the host (i.e. the normal Haskell world).
 writeBuffer :: (ContextHandler ctx, MonadIO m) => Buffer os b -> BufferStartPos -> [HostFormat b] -> ContextT ctx os m ()
-writeBuffer buffer offset elems | offset < 0 || offset >= bufferLength buffer = error "writeBuffer, offset out of bounds"
-                                | otherwise =
-    let maxElems = max 0 $ bufferLength buffer - offset
-        elemSize = bufElementSize buffer
-        off = fromIntegral $ offset * elemSize
+writeBuffer buffer offset elems
+    | offset < 0 || offset >= bufferLength buffer = error "writeBuffer, offset out of bounds"
+    | otherwise =
+        let maxElems = max 0 $ bufferLength buffer - offset
+            elemSize = bufElementSize buffer
+            off = fromIntegral $ offset * elemSize
 
-    in liftNonWinContextAsyncIO $ do
-        bname <- readIORef $ bufName buffer
-        glBindBuffer GL_COPY_WRITE_BUFFER bname
-        ptr <- glMapBufferRange GL_COPY_WRITE_BUFFER off (fromIntegral $maxElems * elemSize) (GL_MAP_WRITE_BIT + GL_MAP_FLUSH_EXPLICIT_BIT)
-        end <- bufferWriteInternal buffer ptr (take maxElems elems)
-        glFlushMappedBufferRange GL_COPY_WRITE_BUFFER off (fromIntegral $ end `minusPtr` ptr)
-        void $ glUnmapBuffer GL_COPY_WRITE_BUFFER
+        in liftNonWinContextAsyncIO $ do
+            bname <- readIORef $ bufName buffer
+            glBindBuffer GL_COPY_WRITE_BUFFER bname
+            ptr <- glMapBufferRange GL_COPY_WRITE_BUFFER off (fromIntegral $maxElems * elemSize) (GL_MAP_WRITE_BIT + GL_MAP_FLUSH_EXPLICIT_BIT)
+            end <- bufferWriteInternal buffer ptr (take maxElems elems)
+            glFlushMappedBufferRange GL_COPY_WRITE_BUFFER off (fromIntegral $ end `minusPtr` ptr)
+            void $ glUnmapBuffer GL_COPY_WRITE_BUFFER
 
 -- | Copies values from one buffer to another (of the same type).
 --
 --   @copyBuffer fromBuffer fromStart toBuffer toStart length@ will copy @length@ elements from position @fromStart@ in @fromBuffer@ to position @toStart@ in @toBuffer@.
 copyBuffer :: (ContextHandler ctx, MonadIO m) => Buffer os b -> BufferStartPos -> Buffer os b -> BufferStartPos -> Int -> ContextT ctx os m ()
-copyBuffer bFrom from bTo to len | from < 0 || from >= bufferLength bFrom = error "writeBuffer, source offset out of bounds"
-                                 | to < 0 || to >= bufferLength bTo = error "writeBuffer, destination offset out of bounds"
-                                 | len < 0 = error "writeBuffer, length negative"
-                                 | len + from > bufferLength bFrom = error "writeBuffer, source buffer too small"
-                                 | len + to > bufferLength bTo = error "writeBuffer, destination buffer too small"
-                                 | otherwise = liftNonWinContextAsyncIO $ do
-                                                  bnamef <- readIORef $ bufName bFrom
-                                                  bnamet <- readIORef $ bufName bTo
-                                                  glBindBuffer GL_COPY_READ_BUFFER bnamef
-                                                  glBindBuffer GL_COPY_WRITE_BUFFER bnamet
-                                                  let elemSize = bufElementSize bFrom -- same as for bTo
-                                                  glCopyBufferSubData GL_COPY_READ_BUFFER GL_COPY_WRITE_BUFFER (fromIntegral $ from * elemSize) (fromIntegral $ to * elemSize) (fromIntegral $ len * elemSize)
+copyBuffer bFrom from bTo to len
+    | from < 0 || from >= bufferLength bFrom = error "writeBuffer, source offset out of bounds"
+    | to < 0 || to >= bufferLength bTo = error "writeBuffer, destination offset out of bounds"
+    | len < 0 = error "writeBuffer, length negative"
+    | len + from > bufferLength bFrom = error "writeBuffer, source buffer too small"
+    | len + to > bufferLength bTo = error "writeBuffer, destination buffer too small"
+    | otherwise = liftNonWinContextAsyncIO $ do
+        bnamef <- readIORef $ bufName bFrom
+        bnamet <- readIORef $ bufName bTo
+        glBindBuffer GL_COPY_READ_BUFFER bnamef
+        glBindBuffer GL_COPY_WRITE_BUFFER bnamet
+        let elemSize = bufElementSize bFrom -- same as for bTo
+        glCopyBufferSubData
+            GL_COPY_READ_BUFFER
+            GL_COPY_WRITE_BUFFER
+            (fromIntegral $ from * elemSize)
+            (fromIntegral $ to * elemSize)
+            (fromIntegral $ len * elemSize)
 
 ----------------------------------------------
 
@@ -387,34 +406,36 @@ alignWhen x = ToBuffer (Kleisli $ setElemAlignM x) (Kleisli return) (Kleisli set
 
 setElemAlignM :: [(AlignmentMode, Int)] -> b -> StateT Offset (WriterT [Int] (Reader (UniformAlignment, AlignmentMode))) b
 setElemAlignM x a = do
-                     (_,m) <- lift $ lift ask
-                     pad <- case lookup m x of
-                                Nothing -> return 0
-                                Just al -> do
-                                    offset <- get
-                                    let pad = al - 1 - ((offset - 1) `mod` al)
-                                    put $ offset + pad
-                                    return pad
-                     lift $ tell [pad]
-                     return a
+    (_,m) <- lift $ lift ask
+    pad <- case lookup m x of
+        Nothing -> return 0
+        Just al -> do
+            offset <- get
+            let pad = al - 1 - ((offset - 1) `mod` al)
+            put $ offset + pad
+            return pad
+    lift $ tell [pad]
+    return a
 setWriterAlignM :: b -> StateT (Ptr a, [Int]) IO b
-setWriterAlignM a = do (ptr, pad:pads) <- get
-                       put (ptr `plusPtr` pad, pads)
-                       return a
-
-
+setWriterAlignM a = do
+    (ptr, pad:pads) <- get
+    put (ptr `plusPtr` pad, pads)
+    return a
 
 getUniformAlignment :: IO Int
 getUniformAlignment = fromIntegral <$> alloca (\ ptr -> glGetIntegerv GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT ptr >> peek ptr)
 
 makeBuffer :: forall os b. BufferFormat b => BufferName -> Int -> UniformAlignment -> Buffer os b
-makeBuffer name elementCount uniformAlignment  = do
+makeBuffer name elementCount uniformAlignment = makeBuffer' name elementCount uniformAlignment (error "Not meant to be used for transform feedback")
+
+makeBuffer' :: forall os b. BufferFormat b => BufferName -> Int -> UniformAlignment -> IORef (Maybe (GLuint, GLuint)) -> Buffer os b
+makeBuffer' name elementCount uniformAlignment tfRef = do
     let ToBuffer skipIt readIt writeIt alignMode = toBuffer :: ToBuffer (HostFormat b) b
-        err = error "toBuffer is creating values that are dependent on the actual HostFormat values, this is not allowed since it doesn't allow static creation of shaders" :: HostFormat b
+        err = error "toBuffer is creating values that are dependant on the actual HostFormat values, this is not allowed since it doesn't allow static creation of shaders" :: HostFormat b
         ((_,elementSize),pads) = runReader (runWriterT (runStateT (runKleisli skipIt err) 0)) (uniformAlignment, alignMode)
         elementF bIn = fst $ runReader (runStateT (runKleisli readIt err) 0) (name, elementSize, bIn)
         writer ptr x = void $ runStateT (runKleisli writeIt x) (ptr,pads)
-    Buffer name elementSize elementCount elementF writer
+    Buffer name elementSize elementCount elementF writer tfRef
 
 -- | This type family restricts what host and buffer types a texture format may be converted into.
 -- 'BufferColor t h' for a texture representation 't' and a host representation 'h' will evaluate to a buffer type used in the transfer.
@@ -476,19 +497,21 @@ type family BufferColor c h where
 peekPixel1 :: Storable a => Ptr x -> IO a
 peekPixel1 = peek . castPtr
 peekPixel2 :: (Storable a) => Ptr x -> IO (V2 a)
-peekPixel2 ptr = do x <- peek (castPtr ptr)
-                    y <- peekElemOff (castPtr ptr ) 1
-                    return (V2 x y)
+peekPixel2 ptr = do
+    x <- peek (castPtr ptr)
+    y <- peekElemOff (castPtr ptr ) 1
+    return (V2 x y)
 peekPixel3 :: (Storable a) => Ptr x -> IO (V3 a)
-peekPixel3 ptr = do x <- peek (castPtr ptr)
-                    y <- peekElemOff (castPtr ptr ) 1
-                    z <- peekElemOff (castPtr ptr ) 2
-                    return (V3 x y z)
+peekPixel3 ptr = do
+    x <- peek (castPtr ptr)
+    y <- peekElemOff (castPtr ptr ) 1
+    z <- peekElemOff (castPtr ptr ) 2
+    return (V3 x y z)
 peekPixel4 :: (Storable a) => Ptr x -> IO (V4 a)
-peekPixel4 ptr = do V3 x y z <- peekPixel3 ptr
-                    w <- peekElemOff (castPtr ptr ) 3
-                    return (V4 x y z w)
-
+peekPixel4 ptr = do
+    V3 x y z <- peekPixel3 ptr
+    w <- peekElemOff (castPtr ptr ) 3
+    return (V4 x y z w)
 
 instance BufferFormat (B Int32) where
     type HostFormat (B Int32) = Int32

@@ -28,20 +28,22 @@
 -----------------------------------------------------------------------------
 
 module Graphics.GPipe (
-    module Graphics.GPipe.Buffer,
     module Graphics.GPipe.Context,
-    module Graphics.GPipe.Expr,
     module Graphics.GPipe.Format,
+    module Graphics.GPipe.Buffer,
+    module Graphics.GPipe.PrimitiveArray,
+    module Graphics.GPipe.PrimitiveStream,
     module Graphics.GPipe.FragmentStream,
     module Graphics.GPipe.FrameBuffer,
     module Graphics.GPipe.GeometryStream,
     module Graphics.GPipe.Linear,
-    module Graphics.GPipe.PrimitiveArray,
-    module Graphics.GPipe.PrimitiveStream,
-    module Graphics.GPipe.Sampler,
+    module Graphics.GPipe.TransformFeedback,
     module Graphics.GPipe.Shader,
-    module Graphics.GPipe.Texture,
+    module Graphics.GPipe.Expr,
     module Graphics.GPipe.Uniform,
+    module Graphics.GPipe.Texture,
+    module Graphics.GPipe.Sampler,
+    module Graphics.GPipe.Orphans,
     module Data.Boolean
 )
 where
@@ -55,10 +57,11 @@ import           Graphics.GPipe.FragmentStream
 import           Graphics.GPipe.FrameBuffer
 import           Graphics.GPipe.GeometryStream
 import           Graphics.GPipe.Linear
-import           Graphics.GPipe.Orphans         ()
+import           Graphics.GPipe.Orphans
 import           Graphics.GPipe.PrimitiveArray
 import           Graphics.GPipe.PrimitiveStream
 import           Graphics.GPipe.Sampler
 import           Graphics.GPipe.Shader
 import           Graphics.GPipe.Texture
+import           Graphics.GPipe.TransformFeedback
 import           Graphics.GPipe.Uniform

@@ -37,6 +37,7 @@ library
       Graphics.GPipe.Sampler
       Graphics.GPipe.Shader
       Graphics.GPipe.Texture
+      Graphics.GPipe.TransformFeedback
       Graphics.GPipe.Uniform
       Graphics.GPipe.Orphans
       -- Internal modules, exported for tests and power users, but don't have
@@ -44,25 +45,22 @@ library
       Graphics.GPipe.Internal.Buffer
       Graphics.GPipe.Internal.Compiler
       Graphics.GPipe.Internal.Context
+      Graphics.GPipe.Internal.Debug
       Graphics.GPipe.Internal.Expr
       Graphics.GPipe.Internal.Format
       Graphics.GPipe.Internal.FragmentStream
       Graphics.GPipe.Internal.FrameBuffer
       Graphics.GPipe.Internal.GeometryStream
-      Graphics.GPipe.Internal.IDs
       Graphics.GPipe.Internal.Linear
       Graphics.GPipe.Internal.PrimitiveArray
       Graphics.GPipe.Internal.PrimitiveStream
       Graphics.GPipe.Internal.Shader
       Graphics.GPipe.Internal.Texture
+      Graphics.GPipe.Internal.TransformFeedback
       Graphics.GPipe.Internal.Uniform
       Graphics.GPipe.Internal.Orphans
   other-modules:
       -- Data structures, not useful for users of the library.
-      Data.IntMap.Polymorphic
-      Data.IntMap.Polymorphic.Lazy
-      Data.IntMap.Polymorphic.Strict
-      Data.IntMap.Polymorphic.Type
       Data.SNMap
   build-depends:
       base < 5

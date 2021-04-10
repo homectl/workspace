@@ -12,11 +12,14 @@ module Graphics.GPipe.GeometryStream (
     geometrize,
     generateAndRasterize,
 
-    -- * Various GeometryStream operations   
-    generativePoint,
+    -- * Various GeometryStream operations
+    generativePoints,
     generativeLineStrip,
     generativeTriangleStrip,
     emitVertex,
+    emitVertexPosition,
+    emitVertexLayer,
+    emitVertexPositionAndLayer,
     endPrimitive,
 )
 where

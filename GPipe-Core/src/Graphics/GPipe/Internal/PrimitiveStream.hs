@@ -1,80 +1,72 @@
-{-# LANGUAGE Arrows                     #-}
-{-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE PatternSynonyms            #-}
-{-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE TypeFamilies               #-}
-{-# LANGUAGE TypeSynonymInstances       #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE TypeFamilies, TypeSynonymInstances, FlexibleContexts, FlexibleInstances, ScopedTypeVariables, Arrows, GeneralizedNewtypeDeriving, PatternSynonyms #-}
 
-{-# OPTIONS_GHC -Wno-missing-signatures #-}
-{-# OPTIONS_GHC -Wno-type-defaults #-}
-{-# OPTIONS_GHC -Wno-unused-matches #-}
-{-# OPTIONS_GHC -Wno-unused-foralls #-}
 module Graphics.GPipe.Internal.PrimitiveStream where
 
-import           Control.Arrow                          (Arrow (arr, first),
-                                                         Kleisli (Kleisli),
-                                                         returnA)
-import           Control.Category                       (Category (..))
-import           Control.Monad                          (void)
-import           Control.Monad.Trans.Class              (MonadTrans (lift))
-import           Control.Monad.Trans.Reader             (Reader, ask, runReader)
-import           Control.Monad.Trans.State.Strict       (State,
-                                                         StateT (runStateT),
-                                                         get, modify, put,
-                                                         runState)
-import           Data.Int                               (Int16, Int32, Int8)
-import qualified Data.IntMap.Polymorphic                as Map
-import           Data.IntMap.Polymorphic.Lazy           (insert)
-import           Data.Text                              (Text)
-import           Data.Word                              (Word16, Word32, Word8)
-import           Foreign.Ptr                            (Ptr, castPtr,
-                                                         intPtrToPtr, plusPtr)
-import           Foreign.Storable                       (Storable (poke, sizeOf))
-import           Graphics.GPipe.Internal.Buffer         (B (..), B2 (..),
-                                                         B3 (..), B4 (..),
-                                                         BufferFormat (HostFormat),
-                                                         Normalized (..))
-import           Graphics.GPipe.Internal.Compiler       (Binding,
-                                                         RenderIOState (inputArrayToRenderIOs))
-import           Graphics.GPipe.Internal.Context        (VAOKey (VAOKey))
-import           Graphics.GPipe.Internal.Expr
-import           Graphics.GPipe.Internal.PrimitiveArray (IndexArray (..),
-                                                         Points,
-                                                         PrimitiveArray (getPrimitiveArray),
-                                                         PrimitiveArrayInt (..),
-                                                         toGLtopology, PrimitiveTopology)
-import           Graphics.GPipe.Internal.Shader         (Shader (..), ShaderM,
-                                                         askUniformAlignment,
-                                                         getName,
-                                                         modifyRenderIO)
-import           Graphics.GPipe.Internal.Uniform        (OffsetToSType,
-                                                         buildUDecl)
-import           Prelude                                hiding (id, length, (.))
+import Control.Arrow
+import Control.Monad.Trans.Class
+import Control.Monad.Trans.State.Strict
+import Control.Monad.Trans.Reader
+import Prelude hiding (length, id, (.))
+import Graphics.GPipe.Internal.Buffer
+import Graphics.GPipe.Internal.Expr
+import Graphics.GPipe.Internal.Shader
+import Graphics.GPipe.Internal.Compiler
+import Graphics.GPipe.Internal.PrimitiveArray
+import Graphics.GPipe.Internal.Context
+-- This import is only needed for the unused uniform alternate implementation.
+import Graphics.GPipe.Internal.Uniform
+import Control.Category
+import Control.Arrow
+import Control.Monad (void, when)
+#if __GLASGOW_HASKELL__ < 804
+import Data.Semigroup (Semigroup(..))
+#endif
+import Data.IntMap.Lazy (insert)
+import Data.Word
+import Data.Int
+import Foreign.Marshal (alloca)
+import Foreign.Storable
+import Foreign.Ptr
+import qualified Data.IntMap as Map
 
-import           Data.IORef                             (readIORef)
-import           Data.Maybe                             (fromMaybe)
-import           Foreign.Marshal.Utils                  (fromBool)
-import           Graphics.GL.Core33
-import           Graphics.GL.Types                      (GLuint)
-import           Linear.Affine                          (Point (..))
-import           Linear.Plucker                         (Plucker (..))
-import           Linear.Quaternion                      (Quaternion (..))
-import           Linear.V0                              (V0 (..))
-import           Linear.V1                              (V1 (..))
-import           Linear.V2                              (V2 (..))
-import           Linear.V3                              (V3 (..))
-import           Linear.V4                              (V4 (..))
+import Graphics.GL.Core45
+import Graphics.GL.Types
+import Foreign.Marshal.Utils
+import Data.IORef
+import Linear.V4
+import Linear.V3
+import Linear.V2
+import Linear.V1
+import Linear.V0
+import Linear.Plucker (Plucker(..))
+import Linear.Quaternion (Quaternion(..))
+import Linear.Affine (Point(..))
+import Data.Maybe (fromMaybe)
+import System.IO
+import Control.Monad.IO.Class
 
-type DrawCallName = Int
+import Graphics.GPipe.Internal.Debug
+
+-- Originally named DrawCallName and later in the code as PrimN. I've sticked
+-- with the latter, because it's more logical.
+type PrimitiveName = Int
+
+-- The size of the special uniform buffer object used for uniform inputs No such
+-- buffer is allocated if not used and it is only used when literal values are
+-- used in a primitive stream transmitted using a dedicated uniform buffer
+-- object.
 type USize = Int
-data PrimitiveStreamData = PrimitiveStreamData DrawCallName USize
-    deriving (Show)
 
--- TODO Should be renamed as VertexStream. I don’t need why 't' is carried alongside but it is now required for adding Geometry shaders.
--- | A @'PrimitiveStream' t a @ is a stream of primitives of type @t@ where the vertices are values of type @a@. You
+data PrimitiveStreamData = PrimitiveStreamData PrimitiveName USize
+
+-- Should be renamed as VertexStream. There a reason why the underlying VAO
+-- behind is called a VAO. Beside, it forces me to name GeometryStream the real
+-- PrimitiveStream. I don’t need why 't' was carried alongside but it is now
+-- required for adding Geometry shaders.
+--
+-- | A @'PrimitiveStream' t a @ is a stream of primitives of
+-- type @t@ where the vertices are values of type @a@. You
 --   can operate a stream's vertex values using the 'Functor' instance (this will result in a shader running on the GPU).
 --   You may also append 'PrimitiveStream's using the 'Monoid' instance, but if possible append the origin 'PrimitiveArray's instead, as this will create more optimized
 --   draw calls.
@@ -98,9 +90,35 @@ type UniOffset = Int
 
 -- | The arrow type for 'toVertex'.
 data ToVertex a b = ToVertex
-    !(Kleisli (StateT (Ptr ()) IO) a b) -- ^ For transform feedback?
-    !(Kleisli (StateT (Int, UniOffset, OffsetToSType) (Reader (Int -> ExprM Text))) a b) -- ^ To declare the input variable in the shader. (Int -> ExprM String) could be rewritten as (UniOffset -> ExprM String).
-    !(Kleisli (State [Binding -> (IO VAOKey, IO ())]) a b) -- ^ To bind the VAO when executing (or simply compiling, I can’t remember) the shader.
+
+    -- To set the uniform buffer content.
+    -- It is only used by the "uniform vertex" which is deprecated/experimental (see toUniformVertex).
+    -- As it, it is not currently in use.
+    -- Note: output value 'b' is not relevant.
+    !(  Kleisli
+        (   StateT (Ptr ()) IO
+        ) a b)
+
+    -- To declare the input variable in the shader.
+    !(  Kleisli
+        (   StateT
+            (   Int -- The number of components in the stored type (eg. would 2 for a B2/V2).
+            ,   UniOffset -- Offset to the uniform?
+            ,   OffsetToSType -- Offset -> SType?
+            )
+            (   Reader
+                (   Int {- offset -} -> ExprM String -- Ends up calling useVInput and returning the input variable name (eg. 'in123').
+                )
+            )
+        ) a b)
+
+    -- To bind the underlying VAO for the vertex buffer (see PrimitiveArray).
+    -- Note: output value 'b' is not relevant.
+    !(  Kleisli
+        (   State
+            [   Binding -> (IO VAOKey, IO ())
+            ]
+        ) a b)
 
 instance Category ToVertex where
     {-# INLINE id #-}
@@ -114,42 +132,81 @@ instance Arrow ToVertex where
     {-# INLINE first #-}
     first (ToVertex a b c) = ToVertex (first a) (first b) (first c)
 
-
 -- | Create a primitive stream from a primitive array provided from the shader environment.
+-- TODO No way to constraint 'b' a bit more?
 toPrimitiveStream :: forall os f s a p. (PrimitiveTopology p, VertexInput a) => (s -> PrimitiveArray p a) -> Shader os s (PrimitiveStream p (VertexFormat a))
-toPrimitiveStream sf = Shader $ do
+toPrimitiveStream = toPrimitiveStream' Nothing
+
+toPrimitiveStream' :: forall os f s a b p. (PrimitiveTopology p, VertexInput a) => Maybe (s -> Buffer os b) -> (s -> PrimitiveArray p a) -> Shader os s (PrimitiveStream p (VertexFormat a))
+toPrimitiveStream' getFeedbackBuffer sf = Shader $ do
 
     -- Get a unique (OpenGL) name for this shader by updating the 'ShaderState' (a pair of the next name and a 'RenderIOState s') from the ReaderT/WriterT/ListM/State.
-    n <- getName
+    n <- getNewName
 
     -- Get the RO uniform alignment from the ReaderT
-    uniAl <- askUniformAlignment
+    uniAl <- askUniformAlignment -- uniAl is not used around…
 
-    -- The explosive input value is only here to ensure that the mf arrow is lazy.
-    let err = error "toPrimitiveStream is creating values that are dependant on the actual HostFormat values, this is not allowed since it doesn't allow static creation of shaders"
-        -- Use 'mf' to
+    let
+        -- The explosive input value is only here to ensure that the mf arrow is lazy.
+        err = error "toPrimitiveStream is creating values that are dependant on the actual HostFormat values, this is not allowed since it doesn't allow static creation of shaders"
+        -- Is 'offToStype' really built this way or it is not used at all?
         (x, (_, uSize, offToStype)) = runReader
-            (runStateT (mf err) (0, 0, mempty))
-            (useUniform (buildUDecl offToStype) 0) -- 0 is special blockname for the one used by primitive stream / Why a uniform here?
+            (runStateT (makeV err) (0, 0, mempty))
+            (useUniform (buildUDecl offToStype) 0) -- 0 is special blockname for the one used by primitive stream
 
     -- Register the actual OpenGL bind and draw commands for this shader name.
-    doForInputArray n (map drawcall . getPrimitiveArray . sf)
+    doForInputArray n $ \s ->
+        let
+            fb = getFeedbackBuffer >>= \g -> return (g s)
+            ps = getPrimitiveArray (sf s)
+        in
+            map drawcall (map (\p -> (fb, p)) ps)
 
     return $ PrimitiveStream [(x, (Nothing, PrimitiveStreamData n uSize))]
+
     where
         ToVertex
-            (Kleisli uWriter) -- Not clear...
-            (Kleisli mf) -- To declare the input variable in the shader.
-            (Kleisli bindingm) -- To bind the VAO when executing (or simply compiling, I can’t remember) the shader.
+            (Kleisli uWriter) -- To set the uniform content (for the literal values, not the one buffered).
+            (Kleisli makeV) -- To create (and declare) the input variable in the shader.
+            (Kleisli makeBind) -- To construct the VAO.
             = toVertex :: ToVertex a (VertexFormat a) -- Select the ToVertex to translate 'a' into a 'VertexFormat a'.
-        drawcall (PrimitiveArraySimple p l s a) binds = (attribs a binds, glDrawArrays (toGLtopology p) (fromIntegral s) (fromIntegral l))
-        drawcall (PrimitiveArrayIndexed p i s a) binds = (attribs a binds, do
+
+        drawcall (Just feedbackBuffer, PrimitiveArraySimple p l s a) binds = (attribs a binds, do
+            -- liftIO $ hPutStrLn stderr $ "drawcall 1"
+            Just (tfName, tfqName) <- readIORef (bufTransformFeedback feedbackBuffer)
+            if False
+                -- The bigger the amount of vertice, the faster a "*ERROR* Waiting for fences timed out!" will happen…
+                -- For small amounts, works fine.
+                then glDrawTransformFeedback (toGLtopology p) tfName
+                else do
+                    -- Is it costly too do it repeatedly?
+                    l' <- (fromIntegral (toPrimitiveSize p) *) <$> (alloca $ \ptr -> do
+                        glGetQueryObjectiv tfqName GL_QUERY_RESULT ptr
+                        peek ptr)
+                    -- liftIO $ hPutStrLn stderr $ "queried vertice count: " ++ show l'
+                    when (l' > 0) $ do
+                        glDrawArrays (toGLtopology p) (fromIntegral s) l'
+            )
+        drawcall (Just feedbackBuffer, PrimitiveArrayInstanced p il l s a) binds = (attribs a binds, do
+            -- liftIO $ hPutStrLn stderr $ "drawcall 2"
+            Just (tfName, _) <- readIORef (bufTransformFeedback feedbackBuffer)
+            glDrawTransformFeedbackInstanced (toGLtopology p) tfName (fromIntegral il))
+
+        drawcall (Nothing, PrimitiveArraySimple p l s a) binds = (attribs a binds, do
+            -- liftIO $ hPutStrLn stderr $ "drawcall 3"
+            glDrawArrays (toGLtopology p) (fromIntegral s) (fromIntegral l))
+        drawcall (Nothing, PrimitiveArrayIndexed p i s a) binds = (attribs a binds, do
+            -- liftIO $ hPutStrLn stderr $ "drawcall 4"
             bindIndexBuffer i
             glDrawElementsBaseVertex (toGLtopology p) (fromIntegral $ indexArrayLength i) (indexType i) (intPtrToPtr $ fromIntegral $ offset i * glSizeOf (indexType i)) (fromIntegral s))
-        drawcall (PrimitiveArrayInstanced p il l s a) binds = (attribs a binds, glDrawArraysInstanced (toGLtopology p) (fromIntegral s) (fromIntegral l) (fromIntegral il))
-        drawcall (PrimitiveArrayIndexedInstanced p i il s a) binds = (attribs a binds, do
+        drawcall (Nothing, PrimitiveArrayInstanced p il l s a) binds = (attribs a binds, do
+            -- liftIO $ hPutStrLn stderr $ "drawcall 5"
+            glDrawArraysInstanced (toGLtopology p) (fromIntegral s) (fromIntegral l) (fromIntegral il))
+        drawcall (Nothing, PrimitiveArrayIndexedInstanced p i il s a) binds = (attribs a binds, do
+            -- liftIO $ hPutStrLn stderr $ "drawcall 6"
             bindIndexBuffer i
             glDrawElementsInstancedBaseVertex (toGLtopology p) (fromIntegral $ indexArrayLength i) (indexType i) (intPtrToPtr $ fromIntegral $ offset i * glSizeOf (indexType i)) (fromIntegral il) (fromIntegral s))
+
         bindIndexBuffer i = do
             case restart i of
                 Just x -> do
@@ -171,23 +228,24 @@ toPrimitiveStream sf = Shader $ do
         assignIxs _ _ _ _ = error "Too few attributes generated in toPrimitiveStream"
 
         attribs a (binds, uBname, uSize) = let
-                              (_,bindsAssoc) = runState (bindingm a) []
+                              bindsAssoc = execState (makeBind a) [] -- (_,bindsAssoc) = runState (makeBind a) []
                               (ioVaokeys, ios) = unzip $ assignIxs 0 0 binds $ reverse bindsAssoc
                           in (writeUBuffer uBname uSize a >> sequence ioVaokeys, sequence_ ios)
 
-        -- Modify the (OpenGL) shader state which is the set of OpenGL commands to run to draw this this shader.
+        -- Modify the (OpenGL) shader state which is the set of OpenGL commands to run to draw this shader.
         doForInputArray :: Int -> (s -> [([Binding], GLuint, Int) -> ((IO [VAOKey], IO ()), IO ())]) -> ShaderM s ()
-        doForInputArray n io = modifyRenderIO (\s -> s { inputArrayToRenderIOs = insert n io (inputArrayToRenderIOs s) } ) -- modifyRenderIO changes the ShaderState
+        doForInputArray n io = modifyRenderIO (\s -> s { inputArrayToRenderIO = insert n io (inputArrayToRenderIO s) } ) -- modifyRenderIO changes the ShaderState
 
         writeUBuffer _ 0 _ = return () -- If the uniform buffer is size 0 there is no buffer
         writeUBuffer bname size a = do
-                       glBindBuffer GL_COPY_WRITE_BUFFER bname
-                       ptr <- glMapBufferRange GL_COPY_WRITE_BUFFER 0 (fromIntegral size) (GL_MAP_WRITE_BIT + GL_MAP_INVALIDATE_BUFFER_BIT)
-                       void $ runStateT (uWriter a) ptr
-                       void $ glUnmapBuffer GL_COPY_WRITE_BUFFER
+            error "Cannot happen!"
+            glBindBuffer GL_COPY_WRITE_BUFFER bname
+            ptr <- glMapBufferRange GL_COPY_WRITE_BUFFER 0 (fromIntegral size) (GL_MAP_WRITE_BIT + GL_MAP_INVALIDATE_BUFFER_BIT)
+            void $ runStateT (uWriter a) ptr
+            void $ glUnmapBuffer GL_COPY_WRITE_BUFFER
 
 data InputIndices = InputIndices {
-        inputVertexID   :: VInt,
+        inputVertexID :: VInt,
         inputInstanceID :: VInt
     }
 
@@ -202,61 +260,76 @@ type PointSize = VFloat
 withPointSize :: (a -> PointSize -> (b, PointSize)) -> PrimitiveStream Points a -> PrimitiveStream Points b
 withPointSize f (PrimitiveStream xs) = PrimitiveStream $ map (\(a, (ps, d)) -> let (b, ps') = f a (fromMaybe (scalarS' "1") ps) in (b, (Just ps', d))) xs
 
--- Why x which is not needed?
-makeVertexF x f styp _ = do
-                     (n,uoffset,m) <- get
-                     put (n + 1, uoffset,m)
-                     return (f styp $ useVInput styp n)
-
+append :: Monad m => a -> StateT [a] m ()
 append x = modify (x:)
 
+-- Why x which is not needed? Is n < x true?
+makeVertexF x f styp _ = do
+    (n, uoffset, m) <- get
+    put (n + 1, uoffset, m)
+    return (f styp $ useVInput styp n)
+
 makeBindVertexFx norm x typ b = do
-                        let combOffset = bStride b * bSkipElems b + bOffset b
-                        append (\ix -> ( do bn <- readIORef $ bName b
-                                            return $ VAOKey bn combOffset x norm (bInstanceDiv b)
-                                     , do bn <- readIORef $ bName b
-                                          let ix' = fromIntegral ix
-                                          glEnableVertexAttribArray ix'
-                                          glBindBuffer GL_ARRAY_BUFFER bn
-                                          glVertexAttribDivisor ix' (fromIntegral $ bInstanceDiv b)
-                                          glVertexAttribPointer ix' x typ (fromBool norm) (fromIntegral $ bStride b) (intPtrToPtr $ fromIntegral combOffset)))
-                        return undefined
+    let combOffset = bStride b * bSkipElems b + bOffset b
+    append (\ix ->
+        (   do  bn <- readIORef $ bName b
+                return $ VAOKey bn combOffset x norm (bInstanceDiv b)
+        ,   do  bn <- readIORef $ bName b
+                let ix' = fromIntegral ix
+                glEnableVertexAttribArray ix'
+                glBindBuffer GL_ARRAY_BUFFER bn
+                glVertexAttribDivisor ix' (fromIntegral $ bInstanceDiv b)
+                glVertexAttribPointer ix' x typ (fromBool norm) (fromIntegral $ bStride b) (intPtrToPtr $ fromIntegral combOffset))
+        )
+    return undefined
 
 makeBindVertexFnorm = makeBindVertexFx True
 makeBindVertexF = makeBindVertexFx False
 
 makeVertexI x f styp _ = do
-                     (n, uoffset,m) <- get
-                     put (n + 1, uoffset,m)
-                     return (f styp $ useVInput styp n)
+    (n, uoffset,m) <- get
+    put (n + 1, uoffset,m)
+    return (f styp $ useVInput styp n)
+
 makeBindVertexI x typ b = do
-                     let combOffset = bStride b * bSkipElems b + bOffset b
-                     append (\ix -> ( do bn <- readIORef $ bName b
-                                         return $ VAOKey bn combOffset x False (bInstanceDiv b)
-                                  , do bn <- readIORef $ bName b
-                                       let ix' = fromIntegral ix
-                                       glEnableVertexAttribArray ix'
-                                       glBindBuffer GL_ARRAY_BUFFER bn
-                                       glVertexAttribDivisor ix' (fromIntegral $ bInstanceDiv b)
-                                       glVertexAttribIPointer ix' x typ (fromIntegral $ bStride b) (intPtrToPtr $ fromIntegral combOffset)))
-                     return undefined
+    let combOffset = bStride b * bSkipElems b + bOffset b
+    append (\ix ->
+        (   do  bn <- readIORef $ bName b
+                return $ VAOKey bn combOffset x False (bInstanceDiv b)
+        ,   do  bn <- readIORef $ bName b
+                let ix' = fromIntegral ix
+                glEnableVertexAttribArray ix'
+                glBindBuffer GL_ARRAY_BUFFER bn
+                glVertexAttribDivisor ix' (fromIntegral $ bInstanceDiv b)
+                glVertexAttribIPointer ix' x typ (fromIntegral $ bStride b) (intPtrToPtr $ fromIntegral combOffset))
+        )
+    return undefined
+
 noWriter = Kleisli (const $ return undefined)
 
--- Uniform values
-
+-- Uniform vertex values? Some kind of alternate implementation for uniforms not
+-- currently used (the regular uniforms are handled in the Uniform module). It
+-- don’t know if it is something deprecated or experimental. I don’t even know
+-- how it could be used. Obviously, a buffer cannot contains both varying and
+-- uniform data…
+--
+-- [begin]
 toUniformVertex :: forall a b. Storable a => SType -> ToVertex a (S V b)
 toUniformVertex styp = ToVertex (Kleisli uWriter) (Kleisli makeV) (Kleisli makeBind)
     where
         size = sizeOf (undefined :: a)
-        uWriter a = do ptr <- get
-                       put (ptr `plusPtr` size)
-                       lift $ poke (castPtr ptr) a
-                       return undefined
-        makeV a = do (n, uoffset,m) <- get
-                     put (n, uoffset + size, Map.insert uoffset styp m)
-                     useF <- lift ask
-                     return $ S $ useF uoffset
-        makeBind a = return undefined
+        uWriter a = do
+            ptr <- get
+            put (ptr `plusPtr` size)
+            lift $ poke (castPtr ptr) a
+            return undefined
+        makeV a = do
+            (n, uoffset,m) <- get
+            put (n, uoffset + size, Map.insert uoffset styp m)
+            useF <- lift ask
+            return $ S $ useF uoffset
+        makeBind a =
+            return undefined
 
 instance VertexInput Float where
     type VertexFormat Float = VFloat
@@ -269,6 +342,7 @@ instance VertexInput Int32 where
 instance VertexInput Word32 where
     type VertexFormat Word32 = VWord
     toVertex = toUniformVertex STypeUInt
+-- [end]
 
 -- scalars
 
@@ -515,5 +589,3 @@ instance VertexInput a => VertexInput (Plucker a) where
                 e' <- toVertex -< e
                 f' <- toVertex -< f
                 returnA -< Plucker a' b' c' d' e' f'
-
-

@@ -1,73 +1,31 @@
-{-# LANGUAGE AllowAmbiguousTypes   #-}
-{-# LANGUAGE EmptyDataDecls        #-}
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE GADTs                 #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE TypeFamilies          #-}
-{-# OPTIONS_GHC -Wno-missing-signatures #-}
-{-# OPTIONS_GHC -Wno-name-shadowing #-}
-{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
-{-# OPTIONS_GHC -Wno-unused-foralls #-}
+{-# LANGUAGE TypeFamilies, FlexibleContexts, FlexibleInstances, GADTs, MultiParamTypeClasses, ScopedTypeVariables, AllowAmbiguousTypes, EmptyDataDecls #-}
 module Graphics.GPipe.Internal.Texture where
 
-import           Control.Monad.IO.Class                       (MonadIO, liftIO)
-import           Data.IntMap.Polymorphic.Lazy                 (insert)
-import           Data.Text                                    (Text)
-import           Graphics.GPipe.Internal.Buffer               (Buffer (..),
-                                                               BufferColor,
-                                                               BufferFormat (..),
-                                                               BufferStartPos,
-                                                               bufferWriteInternal,
-                                                               makeBuffer)
-import           Graphics.GPipe.Internal.Compiler             (Binding,
-                                                               RenderIOState (samplerNameToRenderIO))
-import           Graphics.GPipe.Internal.Context
-import           Graphics.GPipe.Internal.Expr                 (ExprM, F, FFloat,
-                                                               S (..),
-                                                               SType (..),
-                                                               scalarS, tshow,
-                                                               useSampler,
-                                                               vec2S, vec3S,
-                                                               vec4S)
-import           Graphics.GPipe.Internal.Format               (ColorRenderable,
-                                                               ColorSampleable (..),
-                                                               DepthRenderable,
-                                                               Format,
-                                                               TextureFormat (..),
-                                                               getGlInternalFormat)
-import           Graphics.GPipe.Internal.IDs                  (SamplerId)
-import           Graphics.GPipe.Internal.Shader               (Shader (..),
-                                                               ShaderM, getName,
-                                                               modifyRenderIO)
+import Graphics.GPipe.Internal.Format
+import Graphics.GPipe.Internal.Expr
+import Graphics.GPipe.Internal.Context
+import Graphics.GPipe.Internal.Shader
+import Graphics.GPipe.Internal.Compiler
+import Graphics.GPipe.Internal.Buffer
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Data.IntMap.Lazy (insert)
 
-import           Graphics.GL.Core33
-import           Graphics.GL.Ext.EXT.TextureFilterAnisotropic
-import           Graphics.GL.Types                            (GLenum, GLuint)
+import Graphics.GL.Core45
+import Graphics.GL.Types
+import Graphics.GL.Ext.EXT.TextureFilterAnisotropic
 
-import           Control.Exception                            (throwIO)
-import           Control.Monad                                (foldM, forM_,
-                                                               void, when)
-import           Control.Monad.Exception                      (MonadAsyncException,
-                                                               bracket)
-import           Control.Monad.Trans.Class                    (lift)
-import           Data.IORef                                   (IORef, newIORef,
-                                                               readIORef)
-import           Foreign.Marshal.Alloc                        (alloca,
-                                                               allocaBytes,
-                                                               free,
-                                                               mallocBytes)
-import           Foreign.Marshal.Utils                        (with)
-import           Foreign.Ptr                                  (minusPtr,
-                                                               nullPtr, plusPtr,
-                                                               wordPtrToPtr)
-import           Foreign.Storable                             (Storable (peek))
-import           GHC.IO.Unsafe                                (unsafePerformIO)
-import           Linear.V2                                    (V2 (..))
-import           Linear.V3                                    (V3 (..))
-import           Linear.V4                                    (V4 (..))
+import Foreign.Ptr
+import Foreign.Storable
+import Foreign.Marshal.Alloc
+import Foreign.Marshal.Utils
+import Control.Monad
+import Data.IORef
+import Control.Monad.Exception (bracket, MonadAsyncException)
+import Linear.V4
+import Linear.V3
+import Linear.V2
+import Control.Exception (throwIO)
+import Control.Monad.Trans.Class (lift)
 
 data Texture1D os a = Texture1D TexName Size1 MaxLevels
 data Texture1DArray os a = Texture1DArray TexName Size2 MaxLevels
@@ -82,10 +40,6 @@ type MaxLevels = Int
 type Size1 = Int
 type Size2 = V2 Int
 type Size3 = V3 Int
-
-instance Show (Texture2D os format) where
-    show (Texture2D name _ _) = "Texture2D(" <> show (unsafePerformIO $ readIORef name) <> ")"
-    show (RenderBuffer2D name _) = "RenderBuffer2D(" <> show (unsafePerformIO $ readIORef name) <> ")"
 
 newTexture1D :: forall ctx w os f c m. (ContextHandler ctx, ColorSampleable c, MonadIO m) => Format c -> Size1 -> MaxLevels -> ContextT ctx os m (Texture1D os (Format c))
 newTexture1DArray :: forall ctx w os f c m. (ContextHandler ctx, ColorSampleable c, MonadIO m) => Format c -> Size2 -> MaxLevels -> ContextT ctx os m (Texture1DArray os (Format c))
@@ -238,7 +192,7 @@ texture3DLevels :: Texture3D os f -> Int
 textureCubeLevels :: TextureCube os f -> Int
 texture1DLevels (Texture1D _ _ ls) = ls
 texture1DArrayLevels (Texture1DArray _ _ ls) = ls
-texture2DLevels (Texture2D _ _ ls)   = ls
+texture2DLevels (Texture2D _ _ ls) = ls
 texture2DLevels (RenderBuffer2D _ _) = 1
 texture2DArrayLevels (Texture2DArray _ _ ls) = ls
 texture3DLevels (Texture3D _ _ ls) = ls
@@ -766,7 +720,7 @@ genMips texn target = liftNonWinContextAsyncIO $ do
 generateTexture1DMipmap (Texture1D texn _ _) = genMips texn GL_TEXTURE_1D
 generateTexture1DArrayMipmap (Texture1DArray texn _ _) = genMips texn GL_TEXTURE_1D_ARRAY
 generateTexture2DMipmap (Texture2D texn _ _) = genMips texn GL_TEXTURE_2D
-generateTexture2DMipmap _                    = return () -- Only one level for renderbuffers
+generateTexture2DMipmap _ = return () -- Only one level for renderbuffers
 generateTexture2DArrayMipmap (Texture2DArray texn _ _) = genMips texn GL_TEXTURE_2D_ARRAY
 generateTexture3DMipmap (Texture3D texn _ _) = genMips texn GL_TEXTURE_3D
 generateTextureCubeMipmap (TextureCube texn _ _) = genMips texn GL_TEXTURE_CUBE_MAP
@@ -803,14 +757,14 @@ data ComparisonFunction =
    deriving ( Eq, Ord, Show )
 
 getGlCompFunc :: (Num a, Eq a) => ComparisonFunction -> a
-getGlCompFunc Never    = GL_NEVER
-getGlCompFunc Less     = GL_LESS
-getGlCompFunc Equal    = GL_EQUAL
-getGlCompFunc Lequal   = GL_LEQUAL
-getGlCompFunc Greater  = GL_GREATER
+getGlCompFunc Never = GL_NEVER
+getGlCompFunc Less = GL_LESS
+getGlCompFunc Equal = GL_EQUAL
+getGlCompFunc Lequal = GL_LEQUAL
+getGlCompFunc Greater = GL_GREATER
 getGlCompFunc Notequal = GL_NOTEQUAL
-getGlCompFunc Gequal   = GL_GEQUAL
-getGlCompFunc Always   = GL_ALWAYS
+getGlCompFunc Gequal = GL_GEQUAL
+getGlCompFunc Always = GL_ALWAYS
 
 newSampler1D :: forall os s c. ColorSampleable c => (s -> (Texture1D os (Format c), SamplerFilter c, (EdgeMode,  BorderColor c))) -> Shader os s (Sampler1D (Format c))
 newSampler1DArray :: forall os s c. ColorSampleable c => (s -> (Texture1DArray os (Format c), SamplerFilter c, (EdgeMode, BorderColor c))) -> Shader os s (Sampler1DArray (Format c))
@@ -826,7 +780,7 @@ newSampler2DArrayShadow :: forall os s d. DepthRenderable d => (s -> (Texture2DA
 newSamplerCubeShadow :: forall os s d. DepthRenderable d => (s -> (TextureCube os (Format d), SamplerFilter d, ComparisonFunction)) -> Shader os s (SamplerCube Shadow)
 
 newSampler1D sf = Shader $ do
-                   sampId <- getName
+                   sampId <- getNewName
                    doForSampler sampId $ \s bind -> let (Texture1D tn _ _, filt, (ex, ec)) = sf s
                                                     in  do n <- useTex tn GL_TEXTURE_1D bind
                                                            setNoShadowMode GL_TEXTURE_1D
@@ -835,7 +789,7 @@ newSampler1D sf = Shader $ do
                                                            return n
                    return $ Sampler1D sampId False (samplerPrefix (undefined :: c))
 newSampler1DArray sf = Shader $ do
-                   sampId <- getName
+                   sampId <- getNewName
                    doForSampler sampId $ \s bind -> let (Texture1DArray tn _ _, filt, (ex, ec)) = sf s
                                                     in  do n <- useTex tn GL_TEXTURE_1D_ARRAY bind
                                                            setNoShadowMode GL_TEXTURE_1D_ARRAY
@@ -844,7 +798,7 @@ newSampler1DArray sf = Shader $ do
                                                            return n
                    return $ Sampler1DArray sampId False (samplerPrefix (undefined :: c))
 newSampler2D sf = Shader $ do
-                   sampId <- getName
+                   sampId <- getNewName
                    doForSampler sampId $ \s bind -> let (Texture2D tn _ _, filt, (V2 ex ey, ec)) = sf s
                                                     in  do n <- useTex tn GL_TEXTURE_2D bind
                                                            setNoShadowMode GL_TEXTURE_2D
@@ -853,7 +807,7 @@ newSampler2D sf = Shader $ do
                                                            return n
                    return $ Sampler2D sampId False (samplerPrefix (undefined :: c))
 newSampler2DArray sf = Shader $ do
-                   sampId <- getName
+                   sampId <- getNewName
                    doForSampler sampId $ \s bind -> let (Texture2DArray tn _ _, filt, (V2 ex ey, ec)) = sf s
                                                     in  do n <- useTex tn GL_TEXTURE_2D_ARRAY bind
                                                            setNoShadowMode GL_TEXTURE_2D_ARRAY
@@ -862,7 +816,7 @@ newSampler2DArray sf = Shader $ do
                                                            return n
                    return $ Sampler2DArray sampId False (samplerPrefix (undefined :: c))
 newSampler3D sf = Shader $ do
-                   sampId <- getName
+                   sampId <- getNewName
                    doForSampler sampId $ \s bind -> let (Texture3D tn _ _, filt, (V3 ex ey ez, ec)) = sf s
                                                     in  do n <- useTex tn GL_TEXTURE_3D bind
                                                            setNoShadowMode GL_TEXTURE_3D
@@ -871,7 +825,7 @@ newSampler3D sf = Shader $ do
                                                            return n
                    return $ Sampler3D sampId False (samplerPrefix (undefined :: c))
 newSamplerCube sf = Shader $ do
-                   sampId <- getName
+                   sampId <- getNewName
                    doForSampler sampId $ \s bind -> let (TextureCube tn _ _, filt) = sf s
                                                     in  do n <- useTex tn GL_TEXTURE_CUBE_MAP bind
                                                            setNoShadowMode GL_TEXTURE_CUBE_MAP
@@ -881,7 +835,7 @@ newSamplerCube sf = Shader $ do
 
 
 newSampler1DShadow sf = Shader $ do
-                   sampId <- getName
+                   sampId <- getNewName
                    doForSampler sampId $ \s bind -> let (Texture1D tn _ _, filt, (ex, ec), cf) = sf s
                                                     in  do n <- useTex tn GL_TEXTURE_1D bind
                                                            setShadowFunc GL_TEXTURE_1D cf
@@ -890,7 +844,7 @@ newSampler1DShadow sf = Shader $ do
                                                            return n
                    return $ Sampler1D sampId True ""
 newSampler1DArrayShadow sf = Shader $ do
-                   sampId <- getName
+                   sampId <- getNewName
                    doForSampler sampId $ \s bind -> let (Texture1DArray tn _ _, filt, (ex, ec), cf) = sf s
                                                     in  do n <- useTex tn GL_TEXTURE_1D_ARRAY bind
                                                            setShadowFunc GL_TEXTURE_1D_ARRAY cf
@@ -899,7 +853,7 @@ newSampler1DArrayShadow sf = Shader $ do
                                                            return n
                    return $ Sampler1DArray sampId True ""
 newSampler2DShadow sf = Shader $ do
-                   sampId <- getName
+                   sampId <- getNewName
                    doForSampler sampId $ \s bind -> let (Texture2D tn _ _, filt, (V2 ex ey, ec), cf) = sf s
                                                     in  do n <- useTex tn GL_TEXTURE_2D bind
                                                            setShadowFunc GL_TEXTURE_2D cf
@@ -908,7 +862,7 @@ newSampler2DShadow sf = Shader $ do
                                                            return n
                    return $ Sampler2D sampId True ""
 newSampler2DArrayShadow sf = Shader $ do
-                   sampId <- getName
+                   sampId <- getNewName
                    doForSampler sampId $ \s bind -> let (Texture2DArray tn _ _, filt, (V2 ex ey, ec), cf) = sf s
                                                     in  do n <- useTex tn GL_TEXTURE_2D_ARRAY bind
                                                            setShadowFunc GL_TEXTURE_2D_ARRAY cf
@@ -917,7 +871,7 @@ newSampler2DArrayShadow sf = Shader $ do
                                                            return n
                    return $ Sampler2DArray sampId True ""
 newSamplerCubeShadow sf = Shader $ do
-                   sampId <- getName
+                   sampId <- getNewName
                    doForSampler sampId $ \s bind -> let (TextureCube tn _ _, filt, cf) = sf s
                                                     in  do n <- useTex tn GL_TEXTURE_CUBE_MAP bind
                                                            setShadowFunc GL_TEXTURE_CUBE_MAP cf
@@ -939,10 +893,10 @@ setEdgeMode t (se,te,re) bcio = do glwrap GL_TEXTURE_WRAP_S se
                                    glwrap GL_TEXTURE_WRAP_R re
                                    when (se == Just ClampToBorder || te == Just ClampToBorder || re == Just ClampToBorder)
                                       bcio
-    where glwrap _ Nothing              = return ()
-          glwrap x (Just Repeat)        = glTexParameteri t x GL_REPEAT
-          glwrap x (Just Mirror)        = glTexParameteri t x GL_MIRRORED_REPEAT
-          glwrap x (Just ClampToEdge)   = glTexParameteri t x GL_CLAMP_TO_EDGE
+    where glwrap _ Nothing = return ()
+          glwrap x (Just Repeat) = glTexParameteri t x GL_REPEAT
+          glwrap x (Just Mirror) = glTexParameteri t x GL_MIRRORED_REPEAT
+          glwrap x (Just ClampToEdge) = glTexParameteri t x GL_CLAMP_TO_EDGE
           glwrap x (Just ClampToBorder) = glTexParameteri t x GL_CLAMP_TO_BORDER
 
 setSamplerFilter :: GLenum -> SamplerFilter a -> IO ()
@@ -958,27 +912,27 @@ setSamplerFilter' t magf minf lodf a = do
                                                 Just a' -> glTexParameterf t GL_TEXTURE_MAX_ANISOTROPY_EXT (realToFrac a')
     where glmin = case (minf, lodf) of
                     (Nearest, Nearest) -> GL_NEAREST_MIPMAP_NEAREST
-                    (Linear, Nearest)  -> GL_LINEAR_MIPMAP_NEAREST
-                    (Nearest, Linear)  -> GL_NEAREST_MIPMAP_LINEAR
-                    (Linear, Linear)   -> GL_LINEAR_MIPMAP_LINEAR
+                    (Linear, Nearest) -> GL_LINEAR_MIPMAP_NEAREST
+                    (Nearest, Linear) -> GL_NEAREST_MIPMAP_LINEAR
+                    (Linear, Linear) -> GL_LINEAR_MIPMAP_LINEAR
           glmag = case magf of
                     Nearest -> GL_NEAREST
-                    Linear  -> GL_LINEAR
+                    Linear -> GL_LINEAR
 
 
 
 
-doForSampler :: SamplerId -> (s -> Binding -> IO Int) -> ShaderM s ()
+doForSampler :: Int -> (s -> Binding -> IO Int) -> ShaderM s ()
 doForSampler n io = modifyRenderIO (\s -> s { samplerNameToRenderIO = insert n io (samplerNameToRenderIO s) } )
 
 -- | Used instead of 'Format' for shadow samplers. These samplers have specialized sampler values, see 'sample1DShadow' and friends.
 data Shadow
-data Sampler1D f = Sampler1D SamplerId Bool Text
-data Sampler1DArray f = Sampler1DArray SamplerId Bool Text
-data Sampler2D f = Sampler2D SamplerId Bool Text
-data Sampler2DArray f = Sampler2DArray SamplerId Bool Text
-data Sampler3D f = Sampler3D SamplerId Bool Text
-data SamplerCube f = SamplerCube SamplerId Bool Text
+data Sampler1D f = Sampler1D Int Bool String
+data Sampler1DArray f = Sampler1DArray Int Bool String
+data Sampler2D f = Sampler2D Int Bool String
+data Sampler2DArray f = Sampler2DArray Int Bool String
+data Sampler3D f = Sampler3D Int Bool String
+data SamplerCube f = SamplerCube Int Bool String
 
 -- | A GADT to specify where the level of detail and/or partial derivates should be taken from. Some values of this GADT are restricted to
 --   only 'FragmentStream's.
@@ -1001,8 +955,8 @@ type SampleLod2' x = SampleLod' (V2 (S x Float)) x
 type SampleLod3' x = SampleLod' (V3 (S x Float)) x
 
 fromLod' :: SampleLod' v x -> SampleLod v x
-fromLod' SampleAuto'       = SampleAuto
-fromLod' (SampleBias' x)   = SampleBias x
+fromLod' SampleAuto' = SampleAuto
+fromLod' (SampleBias' x) = SampleBias x
 fromLod' (SampleGrad' x y) = SampleGrad x y
 
 type SampleProj x = Maybe (S x Float)
@@ -1073,123 +1027,123 @@ sampler2DArraySize (Sampler2DArray sampId shadow prefix) = vec3S (STypeIVec 3) .
 sampler3DSize (Sampler3D sampId shadow prefix) = vec3S (STypeIVec 3) . getTextureSize prefix sampId (addShadowPrefix shadow "3D")
 samplerCubeSize (SamplerCube sampId shadow prefix) = (\(V2 x _) -> x) . vec2S (STypeIVec 2) . getTextureSize prefix sampId (addShadowPrefix shadow "Cube")
 
-addShadowPrefix :: Bool -> Text -> Text
-addShadowPrefix shadow = if shadow then (<> "Shadow") else id
+addShadowPrefix :: Bool -> String -> String
+addShadowPrefix shadow = if shadow then (++ "Shadow") else id
 
-getTextureSize :: Text -> SamplerId -> Text -> S c Int -> ExprM Text
+getTextureSize :: String -> Int -> String -> S c Int -> ExprM String
 getTextureSize prefix sampId sName l = do s <- useSampler prefix sName sampId
                                           l' <- unS l
-                                          return $ "textureSize(" <> s <> "," <> l' <> ")"
+                                          return $ "textureSize(" ++ s ++ ',' : l' ++ ")"
 
-sample :: e -> Text -> Text -> Text -> SamplerId -> SampleLod lcoord x -> SampleProj x -> Maybe off -> coord -> (coord -> ExprM Text) -> (lcoord -> ExprM Text) -> (off -> Text) -> (coord -> S x Float -> ExprM Text) -> V4 (S x e)
+sample :: e -> String -> String -> String -> Int -> SampleLod lcoord x -> SampleProj x -> Maybe off -> coord -> (coord -> ExprM String) -> (lcoord -> ExprM String) -> (off -> String) -> (coord -> S x Float -> ExprM String) -> V4 (S x e)
 sample _ prefix sDynType sName sampId lod proj off coord vToS lvToS ivToS pvToS =
     vec4S (STypeDyn sDynType) $ do s <- useSampler prefix sName sampId
                                    sampleFunc s proj lod off coord vToS lvToS ivToS pvToS
 
-sampleShadow :: Text -> SamplerId -> SampleLod lcoord x -> SampleProj x -> Maybe off -> coord -> (coord -> ExprM Text) -> (lcoord -> ExprM Text) -> (off -> Text) -> (coord -> S x Float -> ExprM Text) -> S x Float
+sampleShadow :: String -> Int -> SampleLod lcoord x -> SampleProj x -> Maybe off -> coord -> (coord -> ExprM String) -> (lcoord -> ExprM String) -> (off -> String) -> (coord -> S x Float -> ExprM String) -> S x Float
 sampleShadow sName sampId lod proj off coord vToS lvToS civToS pvToS =
-    scalarS STypeFloat $ do s <- useSampler "" (sName <> "Shadow") sampId
+    scalarS STypeFloat $ do s <- useSampler "" (sName ++ "Shadow") sampId
                             sampleFunc s proj lod off coord vToS lvToS civToS pvToS
 
-fetch :: e -> Text -> Text -> Text -> SamplerId -> S x Int -> Maybe off -> coord -> (coord -> ExprM Text) -> (off -> Text) -> V4 (S x e)
+fetch :: e -> String -> String -> String -> Int -> S x Int -> Maybe off -> coord -> (coord -> ExprM String) -> (off -> String) -> V4 (S x e)
 fetch _ prefix sDynType sName sampId lod off coord ivToS civToS =
     vec4S (STypeDyn sDynType) $ do s <- useSampler prefix sName sampId
                                    fetchFunc s off coord lod ivToS civToS
 
-v1toF :: S c Float -> ExprM Text
-v2toF :: V2 (S c Float) -> ExprM Text
-v3toF :: V3 (S c Float) -> ExprM Text
-v4toF :: V4 (S c Float) -> ExprM Text
+v1toF :: S c Float -> ExprM String
+v2toF :: V2 (S c Float) -> ExprM String
+v3toF :: V3 (S c Float) -> ExprM String
+v4toF :: V4 (S c Float) -> ExprM String
 v1toF = unS
 v2toF (V2 x y) = do x' <- unS x
                     y' <- unS y
-                    return $ "vec2(" <> x' <> "," <> y' <> ")"
+                    return $ "vec2(" ++ x' ++ ',':y' ++ ")"
 v3toF (V3 x y z) = do x' <- unS x
                       y' <- unS y
                       z' <- unS z
-                      return $ "vec3(" <> x' <> "," <> y' <> "," <> z' <> ")"
+                      return $ "vec3(" ++ x' ++ ',':y' ++ ',':z' ++ ")"
 v4toF (V4 x y z w) = do x' <- unS x
                         y' <- unS y
                         z' <- unS z
                         w' <- unS w
-                        return $ "vec4(" <> x' <> "," <> y' <> "," <> z' <> "," <> w' <> ")"
+                        return $ "vec4(" ++ x' ++ ',':y' ++ ',':z' ++ ',':w' ++ ")"
 
-iv1toF :: S c Int -> ExprM Text
-iv2toF :: V2 (S c Int) -> ExprM Text
-iv3toF :: V3 (S c Int) -> ExprM Text
+iv1toF :: S c Int -> ExprM String
+iv2toF :: V2 (S c Int) -> ExprM String
+iv3toF :: V3 (S c Int) -> ExprM String
 iv1toF = unS
 iv2toF (V2 x y) = do x' <- unS x
                      y' <- unS y
-                     return $ "ivec2(" <> x' <> "," <> y' <> ")"
+                     return $ "ivec2(" ++ x' ++ ',':y' ++ ")"
 iv3toF (V3 x y z) = do x' <- unS x
                        y' <- unS y
                        z' <- unS z
-                       return $ "ivec3(" <> x' <> "," <> y' <> "," <> z' <> ")"
+                       return $ "ivec3(" ++ x' ++ ',':y' ++ ',':z' ++ ")"
 
-civ1toF :: Int -> Text
-civ2toF :: V2 Int -> Text
-civ3toF :: V3 Int -> Text
-civ1toF = tshow
-civ2toF (V2 x y) = "ivec2(" <> tshow x <> "," <> tshow y <> ")"
-civ3toF (V3 x y z) = "ivec3(" <> tshow x <> "," <> tshow y <> "," <> tshow z <> ")"
-pv1toF :: S c Float -> S c Float -> ExprM Text
-pv2toF :: V2 (S c Float) -> S c Float -> ExprM Text
-pv3toF :: V3 (S c Float) -> S c Float -> ExprM Text
+civ1toF :: Int -> String
+civ2toF :: V2 Int -> String
+civ3toF :: V3 Int -> String
+civ1toF = show
+civ2toF (V2 x y) = "ivec2(" ++ show x ++ ',':show y ++ ")"
+civ3toF (V3 x y z) = "ivec3(" ++ show x ++ ',':show y ++ ',':show z ++ ")"
+pv1toF :: S c Float -> S c Float -> ExprM String
+pv2toF :: V2 (S c Float) -> S c Float -> ExprM String
+pv3toF :: V3 (S c Float) -> S c Float -> ExprM String
 
 pv1toF x y = do x' <- unS x
                 y' <- unS y
-                return $ "vec2(" <> x' <> "," <> y' <> ")"
+                return $ "vec2(" ++ x' ++ ',':y' ++ ")"
 pv2toF (V2 x y) z = do x' <- unS x
                        y' <- unS y
                        z' <- unS z
-                       return $ "vec3(" <> x' <> "," <> y' <> "," <> z' <> ")"
+                       return $ "vec3(" ++ x' ++ ',':y' ++ ',':z' ++ ")"
 pv3toF (V3 x y z) w = do x' <- unS x
                          y' <- unS y
                          z' <- unS z
                          w' <- unS w
-                         return $ "vec4(" <> x' <> "," <> y' <> "," <> z' <>  "," <> w' <> ")"
+                         return $ "vec4(" ++ x' ++ ',':y' ++ ',':z' ++  ',':w' ++ ")"
 
 sampleFunc s proj lod off coord vToS lvToS civToS pvToS = do
     pc <- projCoordParam proj
     l <- lodParam lod
     b <- biasParam lod
-    return $ "texture" <> projName proj <> lodName lod <> offName off <> "(" <> s <> "," <> pc <> l <> o <> b <> ")"
+    return $ "texture" ++ projName proj ++ lodName lod ++ offName off ++ '(' : s ++ ',' : pc ++ l ++ o ++ b ++ ")"
   where
     o = offParam off civToS
 
     projName Nothing = ""
-    projName _       = "Proj"
+    projName _ = "Proj"
 
-    projCoordParam Nothing  = vToS coord
+    projCoordParam Nothing = vToS coord
     projCoordParam (Just p) = pvToS coord p
 
-    lodParam (SampleLod x) = fmap ("," <>) (unS x)
-    lodParam (SampleGrad x y) = (<>) <$> fmap ("," <>) (lvToS x) <*> fmap ("," <>) (lvToS y)
+    lodParam (SampleLod x) = fmap (',':) (unS x)
+    lodParam (SampleGrad x y) = (++) <$> fmap (',':) (lvToS x) <*> fmap (',':) (lvToS y)
     lodParam _ = return ""
 
-    biasParam :: SampleLod v x -> ExprM Text
+    biasParam :: SampleLod v x -> ExprM String
     biasParam (SampleBias (S x)) = do x' <- x
-                                      return $ "," <> x'
+                                      return $ ',':x'
     biasParam _ = return ""
 
-    lodName (SampleLod _)    = "Lod"
+    lodName (SampleLod _) = "Lod"
     lodName (SampleGrad _ _) = "Grad"
-    lodName _                = ""
+    lodName _ = ""
 
 fetchFunc s off coord lod vToS civToS = do
     c <- vToS coord
     l <- unS lod
-    return $ "texelFetch" <> offName off <> "(" <> s <> "," <> c <> "," <> l <> o <> ")"
+    return $ "texelFetch" ++ offName off ++ '(' : s ++ ',' : c ++ ',': l ++ o ++ ")"
   where
     o = offParam off civToS
 
-offParam :: Maybe t -> (t -> Text) -> Text
-offParam Nothing _       = ""
-offParam (Just x) civToS = "," <> civToS x
+offParam :: Maybe t -> (t -> String) -> String
+offParam Nothing _ = ""
+offParam (Just x) civToS = ',' : civToS x
 
-offName :: Maybe t -> Text
+offName :: Maybe t -> String
 offName Nothing = ""
-offName _       = "Offset"
+offName _ = "Offset"
 
 ----------------------------------------------------------------------------------
 
@@ -1219,32 +1173,77 @@ getTexture2DImage :: Texture2D os f -> Level -> Render os (Image f)
 getTexture2DArrayImage :: Texture2DArray os f -> Level -> Int -> Render os (Image f)
 getTexture3DImage :: Texture3D os f -> Level -> Int -> Render os (Image f)
 getTextureCubeImage :: TextureCube os f -> Level -> CubeSide -> Render os (Image f)
+getLayeredTextureImage :: Texture3D os f -> MaxLevels -> Render os (Image f)
 
-registerRenderWriteTextureName :: TexName -> Render os ()
 registerRenderWriteTextureName tn = Render (lift $ lift $ lift $ readIORef tn) >>= registerRenderWriteTexture . fromIntegral
 
-getTexture1DImage t@(Texture1D tn _ ls) l' = let l = min ls l' in do registerRenderWriteTextureName tn
-                                                                     return $ Image tn 0 l (V2 (texture1DSizes t !! l) 1) $ \attP -> do { n <- readIORef tn; glFramebufferTexture1D GL_DRAW_FRAMEBUFFER attP GL_TEXTURE_1D n (fromIntegral l) }
-getTexture1DArrayImage t@(Texture1DArray tn _ ls) l' y' = let l = min ls l'
-                                                              V2 x y = texture1DArraySizes t !! l
-                                                          in do registerRenderWriteTextureName tn
-                                                                return $ Image tn y' l (V2 x 1) $ \attP -> do { n <- readIORef tn; glFramebufferTextureLayer GL_DRAW_FRAMEBUFFER attP n (fromIntegral l) (fromIntegral $ min y' (y-1)) }
-getTexture2DImage t@(Texture2D tn _ ls) l' = let l = min ls l' in do registerRenderWriteTextureName tn
-                                                                     return $ Image tn 0 l (texture2DSizes t !! l) $ \attP -> do { n <- readIORef tn; glFramebufferTexture2D GL_DRAW_FRAMEBUFFER attP GL_TEXTURE_2D n (fromIntegral l) }
-getTexture2DImage t@(RenderBuffer2D tn _) _ = return $ Image tn (-1) 0 (head $ texture2DSizes t) $ \attP -> do { n <- readIORef tn; glFramebufferRenderbuffer GL_DRAW_FRAMEBUFFER attP GL_RENDERBUFFER n }
-getTexture2DArrayImage t@(Texture2DArray tn _ ls) l' z' = let l = min ls l'
-                                                              V3 x y z = texture2DArraySizes t !! l
-                                                          in do registerRenderWriteTextureName tn
-                                                                return $ Image tn z' l (V2 x y) $ \attP -> do { n <- readIORef tn; glFramebufferTextureLayer GL_DRAW_FRAMEBUFFER attP n (fromIntegral l) (fromIntegral $ min z' (z-1)) }
-getTexture3DImage t@(Texture3D tn _ ls) l' z' = let l = min ls l'
-                                                    V3 x y z = texture3DSizes t !! l
-                                                in do registerRenderWriteTextureName tn
-                                                      return $ Image tn z' l (V2 x y) $ \attP -> do { n <- readIORef tn; glFramebufferTextureLayer GL_DRAW_FRAMEBUFFER attP n (fromIntegral l) (fromIntegral $ min z' (z-1)) }
-getTextureCubeImage t@(TextureCube tn _ ls) l' s = let l = min ls l'
-                                                       x = textureCubeSizes t !! l
-                                                       s' = getGlCubeSide s
-                                                   in do registerRenderWriteTextureName tn
-                                                         return $ Image tn (fromIntegral s') l (V2 x x) $ \attP -> do { n <- readIORef tn; glFramebufferTexture2D GL_DRAW_FRAMEBUFFER attP s' n (fromIntegral l) }
+getTexture1DImage t@(Texture1D tn _ ls) l' =
+    let l = min ls l'
+    in do
+        registerRenderWriteTextureName tn
+        return $ Image tn 0 l (V2 (texture1DSizes t !! l) 1) $ \attP -> do
+            n <- readIORef tn
+            glFramebufferTexture1D GL_DRAW_FRAMEBUFFER attP GL_TEXTURE_1D n (fromIntegral l)
+
+getTexture1DArrayImage t@(Texture1DArray tn _ ls) l' y' =
+    let l = min ls l'
+        V2 x y = texture1DArraySizes t !! l
+    in do
+        registerRenderWriteTextureName tn
+        return $ Image tn y' l (V2 x 1) $ \attP -> do
+            n <- readIORef tn
+            glFramebufferTextureLayer GL_DRAW_FRAMEBUFFER attP n (fromIntegral l) (fromIntegral $ min y' (y-1))
+
+getTexture2DImage t@(Texture2D tn _ ls) l' =
+    let l = min ls l'
+    in do
+        registerRenderWriteTextureName tn
+        return $ Image tn 0 l (texture2DSizes t !! l) $ \attP -> do
+            n <- readIORef tn
+            glFramebufferTexture2D GL_DRAW_FRAMEBUFFER attP GL_TEXTURE_2D n (fromIntegral l)
+
+getTexture2DImage t@(RenderBuffer2D tn _) _ =
+    return $ Image tn (-1) 0 (head $ texture2DSizes t) $ \attP -> do
+        n <- readIORef tn
+        glFramebufferRenderbuffer GL_DRAW_FRAMEBUFFER attP GL_RENDERBUFFER n
+
+getTexture2DArrayImage t@(Texture2DArray tn _ ls) l' z' =
+    let l = min ls l'
+        V3 x y z = texture2DArraySizes t !! l
+    in do
+        registerRenderWriteTextureName tn
+        return $ Image tn z' l (V2 x y) $ \attP -> do
+            n <- readIORef tn
+            glFramebufferTextureLayer GL_DRAW_FRAMEBUFFER attP n (fromIntegral l) (fromIntegral $ min z' (z-1))
+
+getTexture3DImage t@(Texture3D tn _ ls) l' z' =
+    let l = min ls l'
+        V3 x y z = texture3DSizes t !! l
+    in do
+        registerRenderWriteTextureName tn
+        return $ Image tn z' l (V2 x y) $ \attP -> do
+            n <- readIORef tn
+            glFramebufferTextureLayer GL_DRAW_FRAMEBUFFER attP n (fromIntegral l) (fromIntegral $ min z' (z-1))
+
+getTextureCubeImage t@(TextureCube tn _ ls) l' s =
+    let l = min ls l'
+        x = textureCubeSizes t !! l
+        s' = getGlCubeSide s
+    in do
+        registerRenderWriteTextureName tn
+        return $ Image tn (fromIntegral s') l (V2 x x) $ \attP -> do
+            n <- readIORef tn
+            glFramebufferTexture2D GL_DRAW_FRAMEBUFFER attP s' n (fromIntegral l)
+
+-- Experimental. Meant to be used with a geometry shader and emitVertex(PositionAnd)Layer.
+getLayeredTextureImage t@(Texture3D tn _ ls) l' =
+    let l = min ls l'
+        V3 x y _ = texture3DSizes t !! l
+    in  do
+        registerRenderWriteTextureName tn
+        return $ Image tn 0 l (V2 x y) $ \attP -> do
+            n <- readIORef tn
+            glFramebufferTexture GL_DRAW_FRAMEBUFFER attP n (fromIntegral l)
 
 getGlCubeSide :: CubeSide -> GLenum
 getGlCubeSide CubePosX = GL_TEXTURE_CUBE_MAP_POSITIVE_X

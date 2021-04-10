@@ -2,7 +2,7 @@
 {-# LANGUAGE PackageImports      #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies        #-}
--- | Simple example with a geometry shader that produces some extra triangles.
+-- | Geometry shader just emitting its input.
 module Main (main) where
 
 import           Control.Exception           (handle)
@@ -31,10 +31,6 @@ geom g (Triangle p1 p2 p3) = g
   & emitVertexPosition p1
   & emitVertexPosition p2
   & emitVertexPosition p3
-
-  & emitVertexPosition (fst p1 + V4 1.0 0.5 0 0, snd p1 * 10)
-  & emitVertexPosition (fst p1 + V4 0.5 0.5 0 0, snd p2 * 10)
-  & emitVertexPosition (fst p1 + V4 0.5 0.5 0 0, snd p3 * 10)
 
   & endPrimitive
 
@@ -84,7 +80,7 @@ main = do
 
       fragmentStream <- fmap frag
         -- <$> rasterize (const (Front, PolygonFill, ViewPort (V2 0 0) windowSize, DepthRange 0 1)) primitiveStream
-        <$> generateAndRasterize (const (FrontAndBack, PolygonFill, ViewPort (V2 0 0) windowSize, DepthRange 0 1)) 6 expandedGeometries
+        <$> generateAndRasterize (const (FrontAndBack, PolygonFill, ViewPort (V2 0 0) windowSize, DepthRange 0 1)) 3 expandedGeometries
 
       drawWindowColor (const (win, ContextColorOption NoBlending (V3 True True True))) fragmentStream
 

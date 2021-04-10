@@ -7,6 +7,7 @@
 module Main (main) where
 
 import           Control.Arrow               (returnA)
+import           Control.Exception.Base      (handle)
 import           Control.Lens                ((^.))
 import           Control.Monad               (unless, when)
 import           Data.Function               ((&))
@@ -14,6 +15,7 @@ import           Graphics.GPipe
 import qualified Graphics.GPipe.Context.GLFW as GLFW
 import qualified System.Directory            as Dir
 import           System.Environment          (setEnv)
+import           System.Exit                 (exitFailure)
 import           System.FilePath             (takeFileName, (</>))
 
 windowSize :: V2 Int
@@ -48,6 +50,11 @@ instance AnotherFragmentInput a => AnotherFragmentInput (ShaderAttachment a) whe
 
 instance GeometryExplosive a => GeometryExplosive (ShaderAttachment a) where
     exploseGeometry (ShaderAttachment x) n = exploseGeometry x n
+    declareGeometry ~(ShaderAttachment x) = do
+        ws <- sequence [declareGeometry x]
+        return $ sequence_ ws
+    enumerateVaryings ~(ShaderAttachment x) =
+        concat <$> sequence [enumerateVaryings x]
 
 --------------------------------------------------
 
@@ -64,11 +71,11 @@ geom
   -> Geometry Points (VPos, ShaderAttachment VFloat)
   -> GGenerativeGeometry Triangles (VPos, ShaderAttachment VFloat)
 geom g (Point (pos, sa@ShaderAttachment{..})) = g
-  & emitVertex (pos + V4 (-0.1) (-0.1) 0 0, sa)
-  & emitVertex (pos + V4   0.1  (-0.1) 0 0, sa)
-  & emitVertex (pos + V4 (-0.1)   0.1  0 0, sa{color=color * 2})
-  & emitVertex (pos + V4   0.1    0.1  0 0, sa{color=color * 2})
-  & emitVertex (pos + V4   0.0    0.2  0 0, sa{color=color * 2.5})
+  & emitVertexPosition (pos + V4 (-0.1) (-0.1) 0 0, sa)
+  & emitVertexPosition (pos + V4   0.1  (-0.1) 0 0, sa)
+  & emitVertexPosition (pos + V4 (-0.1)   0.1  0 0, sa{color=color * 2})
+  & emitVertexPosition (pos + V4   0.1    0.1  0 0, sa{color=color * 2})
+  & emitVertexPosition (pos + V4   0.0    0.2  0 0, sa{color=color * 2.5})
 
   & endPrimitive
 
@@ -97,7 +104,7 @@ main = do
   setEnv "GPIPE_DEBUG" "1"
   cleanupShaders
 
-  runContextT GLFW.defaultHandleConfig $ do
+  handle handler $ runContextT GLFW.defaultHandleConfig $ do
     win <- newWindow (WindowFormatColor RGB8) (GLFW.defaultWindowConfig "Geometry shader test")
       { GLFW.configWidth = windowSize^._x
       , GLFW.configHeight = windowSize^._y
@@ -125,6 +132,11 @@ main = do
       drawWindowColor (const (win, ContextColorOption NoBlending (V3 True True True))) fragmentStream
 
     loop vertexBuffer shader win
+
+handler :: GPipeException -> IO ()
+handler (GPipeException err) = do
+  putStrLn $ "GPipeException: " <> err
+  exitFailure
 
 
 loop

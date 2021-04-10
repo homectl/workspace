@@ -47,4 +47,18 @@ module Graphics.GPipe.Buffer (
 )
 where
 
-import           Graphics.GPipe.Internal.Buffer
+import Graphics.GPipe.Internal.Buffer
+    ( copyBuffer,
+      newBuffer,
+      writeBuffer,
+      B,
+      B2,
+      B3,
+      B4,
+      BPacked,
+      Buffer(bufferLength),
+      BufferColor,
+      BufferFormat(toBuffer, HostFormat),
+      BufferStartPos,
+      Normalized(..),
+      ToBuffer )

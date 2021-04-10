@@ -62,7 +62,6 @@ data ShadowMap os = ShadowMap
     { shadowColorTex :: MonochromeTex os
     , shadowDepthTex :: DepthTex os
     }
-    deriving (Show)
 
 data FragLight = FragLight
     { fragLightPos     :: V3 FFloat

@@ -71,5 +71,5 @@ main = catch runProgram handler
   where
     handler :: GPipeException -> IO ()
     handler (GPipeException err) = do
-        putStrLn $ "Caught GPipe Exception:\n" ++ T.unpack err
+        putStrLn $ "Caught GPipe Exception:\n" ++ err
         exitFailure

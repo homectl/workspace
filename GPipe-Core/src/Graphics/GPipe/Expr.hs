@@ -25,6 +25,7 @@ module Graphics.GPipe.Expr (
     -- * Type classes where the Prelude ones are lacking
     Convert(..),
     Integral'(..),
+    Bits'(..),
     Real'(..),
     FloatingOrd(..),
 
@@ -43,4 +44,5 @@ module Graphics.GPipe.Expr (
 )
 where
 
-import           Graphics.GPipe.Internal.Expr
+import Data.Boolean
+import Graphics.GPipe.Internal.Expr

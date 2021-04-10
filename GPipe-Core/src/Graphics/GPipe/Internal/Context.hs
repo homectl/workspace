@@ -1,13 +1,5 @@
-{-# LANGUAGE DeriveDataTypeable         #-}
-{-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE GADTs                      #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE RankNTypes                 #-}
-{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE TypeFamilies, RankNTypes, GeneralizedNewtypeDeriving, FlexibleContexts, FlexibleInstances, GADTs, DeriveDataTypeable #-}
 
-{-# OPTIONS_GHC -Wno-unused-top-binds #-}
-{-# OPTIONS_GHC -Wno-unused-matches #-}
 module Graphics.GPipe.Internal.Context
 (
     ContextHandler(..),
@@ -38,36 +30,27 @@ module Graphics.GPipe.Internal.Context
 )
 where
 
-import           Control.Concurrent.MVar          (MVar, modifyMVar_,
-                                                   newEmptyMVar, newMVar,
-                                                   putMVar, readMVar, takeMVar)
-import           Control.Exception                (throwIO)
-import           Control.Monad                    (void)
-import           Control.Monad.Exception          (Exception,
-                                                   MonadAsyncException,
-                                                   MonadException, bracket)
-import           Control.Monad.IO.Class           (MonadIO (..))
-import           Control.Monad.Trans.Class        (MonadTrans (..))
-import           Control.Monad.Trans.Except       (ExceptT (..), runExceptT)
-import           Control.Monad.Trans.Reader       (ReaderT (..), ask, asks)
-import           Control.Monad.Trans.State.Strict (StateT (runStateT),
-                                                   evalStateT, get, gets,
-                                                   modify, put)
-import           Data.IORef                       (IORef, mkWeakIORef,
-                                                   readIORef)
-import           Data.IntMap.Polymorphic          ((!))
-import qualified Data.IntMap.Polymorphic          as IMap
-import qualified Data.IntSet                      as Set
-import qualified Data.Map.Strict                  as Map
-import           Data.Maybe                       (maybeToList)
-import           Data.Text                        (Text)
-import           Data.Typeable                    (Typeable)
-import           Graphics.GL.Core33
-import           Graphics.GL.Types                (GLint, GLuint)
-import           Graphics.GPipe.Internal.Format   (WindowBits, WindowFormat,
-                                                   windowBits)
-import           Linear.V2                        (V2 (V2))
-import           Graphics.GPipe.Internal.IDs
+import Graphics.GPipe.Internal.Format
+import Control.Monad.Exception (MonadException, Exception, MonadAsyncException,bracket)
+import Control.Monad.Trans.Reader
+import qualified Control.Monad.Fail as MF
+import Control.Monad.IO.Class
+import Control.Monad.Trans.Class
+import Data.Typeable
+import qualified Data.IntSet as Set
+import qualified Data.IntMap.Strict as IMap
+import Data.IntMap ((!))
+import qualified Data.Map.Strict as Map
+import Graphics.GL.Core45
+import Graphics.GL.Types
+import Control.Concurrent.MVar
+import Data.IORef
+import Control.Monad
+import Data.Maybe
+import Linear.V2 (V2(V2))
+import Control.Monad.Trans.Except
+import Control.Exception (throwIO)
+import Control.Monad.Trans.State.Strict
 
 -- | Class implementing a window handler that can create openGL contexts, such as GLFW or GLUT
 class ContextHandler ctx where
@@ -117,39 +100,41 @@ class ContextHandler ctx where
 --
 newtype ContextT ctx os m a =
     ContextT (ReaderT (ContextEnv ctx) (StateT (ContextState ctx) m) a)
-    deriving (Functor, Applicative, Monad, MonadIO, MonadFail, MonadException, MonadAsyncException)
+    deriving (Functor, Applicative, Monad, MonadIO, MonadException, MonadAsyncException)
 
 data ContextEnv ctx = ContextEnv {
-    context           :: ctx,
+    context :: ctx,
     sharedContextData :: SharedContextDatas
   }
 
 data ContextState ctx = ContextState {
-    nextName       :: WinId,
+    nextName :: Name,
     perWindowState :: PerWindowState ctx,
-    lastUsedWin    :: WinId -- -1 is no window. 0 is the hidden window. 1.. are visible windows
+    lastUsedWin :: Name -- -1 is no window. 0 is the hidden window. 1.. are visible windows
   }
 
 -- | A monad in which shaders are run.
-newtype Render os a = Render { unRender :: ExceptT Text (ReaderT RenderEnv (StateT RenderState IO)) a } deriving (Monad, Applicative, Functor)
+newtype Render os a = Render { unRender :: ExceptT String (ReaderT RenderEnv (StateT RenderState IO)) a } deriving (Monad, Applicative, Functor)
 
 data RenderEnv = RenderEnv {
     renderSharedContextData :: SharedContextDatas,
-    nonWindowDoAsync        :: ContextDoAsync
+    nonWindowDoAsync :: ContextDoAsync
   }
 
 data RenderState = RenderState {
     perWindowRenderState :: PerWindowRenderState,
-    renderWriteTextures  :: Set.IntSet,
-    renderLastUsedWin    :: WinId
+    renderWriteTextures :: Set.IntSet,
+    renderLastUsedWin :: Name
   }
+
+type Name = Int
 
 type ContextDoAsync = IO () -> IO ()
 
-type PerWindowState ctx = IMap.IntMap WinId (WindowState, ContextWindow ctx) -- -1 is no window. 0 is the hidden window. 1.. are visible windows
-type PerWindowRenderState = IMap.IntMap WinId (WindowState, ContextDoAsync)
-newtype WindowState = WindowState {
-    windowContextData :: ContextData
+type PerWindowState ctx = IMap.IntMap (WindowState, ContextWindow ctx) -- -1 is no window. 0 is the hidden window. 1.. are visible windows
+type PerWindowRenderState = IMap.IntMap (WindowState, ContextDoAsync)
+data WindowState = WindowState {
+    windowContextData :: !ContextData
   }
 
 -- | Run a 'Render' monad, that may have the effect of windows or textures being drawn to.
@@ -166,13 +151,16 @@ render (Render m) = do
     lift $ put $ cs { lastUsedWin = renderLastUsedWin rs}
     case eError of
       Left s -> liftIO $ throwIO $ GPipeException s
-      _      -> return ()
+      _ -> return ()
 
 registerRenderWriteTexture :: Int -> Render os ()
 registerRenderWriteTexture n = Render $ lift $ lift $ modify $ \ rs -> rs { renderWriteTextures = Set.insert n $ renderWriteTextures rs }
 
 instance MonadTrans (ContextT ctx os) where
     lift = ContextT . lift . lift
+
+instance MonadIO m => MF.MonadFail (ContextT ctx os m) where
+    fail = liftIO . MF.fail
 
 -- | Run a 'ContextT' monad transformer that encapsulates an object space.
 --   You need an implementation of a 'ContextHandler', which is provided by an auxillary package, such as @GPipe-GLFW@.
@@ -188,7 +176,7 @@ runContextT chp (ContextT m) = do
      )
      (\ctx -> evalStateT (runReaderT m (ContextEnv ctx cds)) (ContextState 1 IMap.empty (-1)))
 
-data Window os c ds = Window { getWinName :: WinId }
+data Window os c ds = Window { getWinName :: Name }
 
 instance Eq (Window os c ds) where
   (Window a) == (Window b) = a == b
@@ -275,7 +263,6 @@ addContextFinalizer k m = ContextT $ do
   liftIO $ void $ mkWeakIORef k $ contextDoAsync ctx Nothing m
 
 
-getLastRenderWin :: Render os (WinId, ContextData, ContextDoAsync)
 getLastRenderWin = Render $ do
   rs <- lift $ lift get
   let cwid = renderLastUsedWin rs -- There is always a window available since render calls getLastContextWin
@@ -314,7 +301,7 @@ withContextWindow (Window wid) m = ContextT $ do
   liftIO $ m (snd <$> IMap.lookup wid wmap)
 
 -- | This kind of exception may be thrown from GPipe when a GPU hardware limit is reached (for instance, too many textures are drawn to from the same 'FragmentStream')
-newtype GPipeException = GPipeException Text
+data GPipeException = GPipeException String
      deriving (Show, Typeable)
 
 instance Exception GPipeException
