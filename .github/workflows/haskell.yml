@@ -51,3 +51,16 @@ jobs:
           target-branch: "main"
           user-email: homectl@homectl.org
           commit-message: See ORIGIN_COMMIT
+
+      - name: Push to GPipe-GLFW
+        id: push_directory
+        uses: cpina/github-action-push-to-another-repository@master
+        env:
+          API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
+        with:
+          source-directory: "GPipe-GLFW4"
+          destination-github-username: "homectl"
+          destination-repository-name: "GPipe-GLFW"
+          target-branch: "main"
+          user-email: homectl@homectl.org
+          commit-message: See ORIGIN_COMMIT
