@@ -12,32 +12,34 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-      # - uses: actions/setup-haskell@v1
-      #   with:
-      #     ghc-version: "8.10.3"
-      #     cabal-version: "3.2"
+      - uses: actions/setup-haskell@v1
+        with:
+          ghc-version: "8.10.3"
+          cabal-version: "3.2"
 
-      # - name: Cache
-      #   uses: actions/cache@v1
-      #   env:
-      #     cache-name: cache-cabal
-      #   with:
-      #     path: ~/.cabal
-      #     key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}
-      #     restore-keys: |
-      #       ${{ runner.os }}-build-${{ env.cache-name }}-
-      #       ${{ runner.os }}-build-
-      #       ${{ runner.os }}-
+      - name: Cache
+        uses: actions/cache@v1
+        env:
+          cache-name: cache-cabal
+        with:
+          path: ~/.cabal
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
 
-      # - name: Install dependencies
-      #   run: |
-      #     sudo apt-get install libgl1-mesa-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxxf86vm-dev
-      #     cabal update
-      #     cabal build --only-dependencies --enable-tests --enable-benchmarks all
-      # - name: Build
-      #   run: cabal build --enable-tests --enable-benchmarks all
-      # - name: Run tests
-      #   run: cabal test all
+      - name: Install dependencies
+        run: |
+          sudo apt-get install libgl1-mesa-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxxf86vm-dev
+          cabal update
+          cabal build --only-dependencies --enable-tests --enable-benchmarks --enable-doc all
+      - name: Build
+        run: cabal build --enable-tests --enable-benchmarks --enable-doc all
+      - name: Run tests
+        run: cabal test all
+      - name: Build haddock documentation
+        run: cabal haddock --haddock-for-hackage --enabe-doc
 
       - name: Publish to Hackage
         env:
@@ -46,4 +48,7 @@ jobs:
           cabal sdist
           curl --header "Authorization: X-ApiKey $API_TOKEN_HACKAGE" \
             -F "package=@dist-newstyle/sdist/GPipe-Core-2.3.0.tar.gz" \
+            "https://hackage.haskell.org/packages/candidates"
+          curl --header "Authorization: X-ApiKey $API_TOKEN_HACKAGE" \
+            -F "package=@dist-newstyle/sdist/GPipe-Core-2.3.0-doc.tar.gz" \
             "https://hackage.haskell.org/packages/candidates"
