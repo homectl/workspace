@@ -41,7 +41,7 @@ jobs:
       - name: Build haddock documentation
         run: cabal haddock --haddock-for-hackage --enable-doc
 
-      - name: Publish to Hackage
+      - name: Publish candidate to Hackage
         env:
           API_TOKEN_HACKAGE: ${{ secrets.API_TOKEN_HACKAGE }}
           PACKAGE: GPipe-GLFW4
