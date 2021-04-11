@@ -34,6 +34,8 @@ import           Graphics.GL.Types                       (GLuint)
 import           Control.Monad.Trans.State               (evalState)
 import           Data.IORef                              (readIORef, writeIORef)
 import           Data.IntMap.Lazy                        (insert)
+import           Data.Text.Lazy                          (Text)
+import qualified Data.Text.Lazy                          as T
 import           Foreign.C.String                        (newCString)
 import           Foreign.Marshal                         (alloca, free,
                                                           withArray)
@@ -68,7 +70,7 @@ tellDrawcalls w (GeometryStream xs) getTransformFeedbackBuffer maxVertices =  ma
             varyingCount = length varyings
             bufferMode = GL_INTERLEAVED_ATTRIBS
             io s pName = do
-                names <- mapM newCString varyings
+                names <- mapM (newCString . T.unpack) varyings
                 withArray names $ \a -> do
                     glTransformFeedbackVaryings pName (fromIntegral varyingCount) a bufferMode
                 mapM_ free names

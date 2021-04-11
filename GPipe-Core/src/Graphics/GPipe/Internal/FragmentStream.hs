@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeSynonymInstances       #-}
@@ -28,6 +29,10 @@ import           Data.Boolean                            (Boolean (true, (&&*)),
                                                           EqB ((==*)),
                                                           IfB (ifB))
 import           Data.IntMap.Lazy                        (insert)
+import           Data.Maybe                              (isJust)
+import           Data.Text.Lazy                          (Text)
+import qualified Data.Text.Lazy                          as T
+import           Graphics.GL.Core45
 import           Linear.Affine                           (Point (..))
 import           Linear.Plucker                          (Plucker (..))
 import           Linear.Quaternion                       (Quaternion (..))
@@ -36,9 +41,6 @@ import           Linear.V1                               (V1 (..))
 import           Linear.V2                               (V2 (..))
 import           Linear.V3                               (V3 (..))
 import           Linear.V4                               (V4 (..))
-
-import           Data.Maybe                              (isJust)
-import           Graphics.GL.Core45
 
 type VPos = V4 VFloat
 
@@ -90,7 +92,7 @@ rasterize sf (PrimitiveStream xs) = Shader $ do
                                        y' <- y
                                        z' <- z
                                        w' <- w
-                                       tellAssignment' "gl_Position" $ "vec4("++x'++',':y'++',':z'++',':w'++")"
+                                       tellAssignment' "gl_Position" $ "vec4("<>x'<>","<>y'<>","<>z'<>","<>w'<>")"
         makePointSize Nothing       = return ()
         makePointSize (Just (S ps)) = ps >>= tellAssignment' "gl_PointSize"
         io s =
@@ -147,7 +149,7 @@ data FlatVFloat = Flat VFloat
 -- | A float value that doesn't get divided by the interpolated position's w-component during interpolation.
 data NoPerspectiveVFloat = NoPerspective VFloat
 
-makeFragment :: String -> SType -> (a -> ExprM String) -> ToFragment a (S c a1)
+makeFragment :: Text -> SType -> (a -> ExprM Text) -> ToFragment a (S c a1)
 makeFragment qual styp f = ToFragment $ Kleisli $ \ x -> do n <- get
                                                             put (n+1)
                                                             return $ S $ useFInput qual "vf" styp n $ f x

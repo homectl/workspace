@@ -2,6 +2,7 @@
 {-# LANGUAGE EmptyDataDecls       #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
+{-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeSynonymInstances #-}
@@ -15,7 +16,8 @@ import           Graphics.GPipe.Internal.Shader (Render (Render))
 import           Data.Semigroup
 #endif
 import           Data.IORef                     (IORef)
-
+import           Data.Text.Lazy                 (Text)
+import qualified Data.Text.Lazy                 as T
 import           Data.Word                      (Word16, Word32, Word8)
 
 import           Graphics.GL.Core45
@@ -110,8 +112,8 @@ class PrimitiveTopology p where
     toGLtopology :: p -> GLuint
     toPrimitiveSize :: p -> Int
     toGeometryShaderOutputTopology :: p -> GLuint
-    toLayoutIn :: p -> String
-    toLayoutOut :: p -> String
+    toLayoutIn :: p -> Text
+    toLayoutOut :: p -> Text
     data Geometry p a
 
 instance PrimitiveTopology Points where

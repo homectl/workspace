@@ -1,12 +1,14 @@
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Graphics.GPipe.ExprBench (suite) where
 
-import           Criterion.Main              (Benchmark, bench, bgroup, whnfIO)
+import           Criterion.Main               (Benchmark, bench, bgroup, whnfIO)
 
+import           Data.Text.Lazy               (Text)
 import           Graphics.GPipe.Internal.Expr
 
 
-benchCompileExpr :: Int -> IO String
+benchCompileExpr :: Int -> IO Text
 benchCompileExpr n =
     let expr :: FFloat
         expr = sum $ map fromIntegral [0..n] in

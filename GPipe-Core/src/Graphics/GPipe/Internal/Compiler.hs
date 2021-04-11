@@ -13,6 +13,8 @@ import           Data.IntMap                      ((!))
 import qualified Data.IntMap                      as Map
 import qualified Data.IntSet                      as Set
 import           Data.Maybe                       (fromJust, isJust, isNothing)
+import           Data.Text.Lazy                   (Text)
+import qualified Data.Text.Lazy                   as T
 import           Graphics.GPipe.Internal.Context
 
 import           Control.Exception                (throwIO)
@@ -54,9 +56,9 @@ data Drawcall s = Drawcall
         -- Key for RenderIOState::rasterizationNameToRenderIO.
     ,   rasterizationName :: Maybe Int
         -- Shader sources.
-    ,   vertexSource :: String
-    ,   optionalGeometrySource :: Maybe String
-    ,   optionalFragmentSource :: Maybe String
+    ,   vertexSource :: Text
+    ,   optionalGeometrySource :: Maybe Text
+    ,   optionalFragmentSource :: Maybe Text
         -- Inputs.
     ,   usedInputs :: [Int]
         -- Uniforms and texture units used in each shader.
@@ -297,10 +299,10 @@ innerCompile state (drawcall, unis, samps, ubinds, sbinds) = do
                 case mPErr of
                     Just errP -> do
                         glDeleteProgram pName
-                        return $ Left $ "Linking a GPU progam failed:\n" ++ errP ++ concat
-                            [ maybe "" (\e -> "\nVertex source:\n" ++ e ++ "\n") (Just vsource)
-                            , maybe "" (\e -> "\nGeometry source:\n" ++ e ++ "\n") ogsource
-                            , maybe "" (\e -> "\nFragment source:\n" ++ e ++ "\n") ofsource
+                        return $ Left $ "Linking a GPU progam failed:\n" <> errP <> concat
+                            [ maybe "" (\e -> "\nVertex source:\n" <> e <> "\n") (Just $ T.unpack vsource)
+                            , maybe "" (\e -> "\nGeometry source:\n" <> e <> "\n") (T.unpack <$> ogsource)
+                            , maybe "" (\e -> "\nFragment source:\n" <> e <> "\n") (T.unpack <$> ofsource)
                             ]
                     Nothing -> return $ Right pName
             else do
@@ -309,9 +311,9 @@ innerCompile state (drawcall, unis, samps, ubinds, sbinds) = do
                 whenJust' ofShader $ glDeleteShader
 
                 let err = concat
-                        [ maybe "" (\e -> "A vertex shader compilation failed:\n" ++ e ++ "\nSource:\n" ++ vsource) mErrV
-                        , maybe "" (\e -> "A geometry shader compilation failed:\n" ++ e ++ "\nSource:\n" ++ fromJust ogsource) mErrG
-                        , maybe "" (\e -> "A fragment shader compilation failed:\n" ++ e ++ "\nSource:\n" ++ fromJust ofsource) mErrF
+                        [ maybe "" (\e -> "A vertex shader compilation failed:\n" <> e <> "\nSource:\n" <> T.unpack vsource) mErrV
+                        , maybe "" (\e -> "A geometry shader compilation failed:\n" <> e <> "\nSource:\n" <> (T.unpack . fromJust) ogsource) mErrG
+                        , maybe "" (\e -> "A fragment shader compilation failed:\n" <> e <> "\nSource:\n" <> (T.unpack . fromJust) ofsource) mErrF
                         ]
                 return $ Left err
 
@@ -544,10 +546,10 @@ createFeedbackRenderer state (drawcall, unis, ubinds, samps, sbinds) pName getTr
     return ((pNameRef, deleter), renderer)
 
 -- private
-compileOpenGlShader :: GLuint -> String -> IO (Maybe String)
+compileOpenGlShader :: GLuint -> Text -> IO (Maybe String)
 compileOpenGlShader name source = do
     -- writeFile ("shaders/" ++ show name ++ ".glsl") source -- For debug purposes only.
-    withCStringLen source $ \ (ptr, len) ->
+    withCStringLen (T.unpack source) $ \ (ptr, len) ->
                                 with ptr $ \ pptr ->
                                     with (fromIntegral len) $ \ plen ->
                                         glShaderSource name 1 pptr plen

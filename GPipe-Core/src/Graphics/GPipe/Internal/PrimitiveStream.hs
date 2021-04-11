@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeFamilies               #-}
@@ -61,6 +62,8 @@ import           Foreign.Storable                       (Storable (peek, poke, s
 
 import           Data.IORef                             (readIORef)
 import           Data.Maybe                             (fromMaybe)
+import           Data.Text.Lazy                         (Text)
+import qualified Data.Text.Lazy                         as T
 import           Foreign.Marshal.Utils                  (fromBool)
 import           Graphics.GL.Core45
 import           Graphics.GL.Types                      (GLuint)
@@ -132,7 +135,7 @@ data ToVertex a b = ToVertex
             ,   OffsetToSType -- Offset -> SType?
             )
             (   Reader
-                (   Int {- offset -} -> ExprM String -- Ends up calling useVInput and returning the input variable name (eg. 'in123').
+                (   Int {- offset -} -> ExprM Text -- Ends up calling useVInput and returning the input variable name (eg. 'in123').
                 )
             )
         ) a b)
