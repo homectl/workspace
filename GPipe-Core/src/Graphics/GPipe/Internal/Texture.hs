@@ -1,31 +1,75 @@
-{-# LANGUAGE TypeFamilies, FlexibleContexts, FlexibleInstances, GADTs, MultiParamTypeClasses, ScopedTypeVariables, AllowAmbiguousTypes, EmptyDataDecls #-}
+{-# LANGUAGE AllowAmbiguousTypes   #-}
+{-# LANGUAGE EmptyDataDecls        #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeFamilies          #-}
 module Graphics.GPipe.Internal.Texture where
 
-import Graphics.GPipe.Internal.Format
-import Graphics.GPipe.Internal.Expr
-import Graphics.GPipe.Internal.Context
-import Graphics.GPipe.Internal.Shader
-import Graphics.GPipe.Internal.Compiler
-import Graphics.GPipe.Internal.Buffer
-import Control.Monad.IO.Class (MonadIO, liftIO)
-import Data.IntMap.Lazy (insert)
+import           Control.Monad.IO.Class                       (MonadIO, liftIO)
+import           Data.IntMap.Lazy                             (insert)
+import           Graphics.GPipe.Internal.Buffer               (Buffer (bufElementSize, bufName, bufferLength),
+                                                               BufferColor,
+                                                               BufferFormat (..),
+                                                               BufferStartPos,
+                                                               bufferWriteInternal,
+                                                               makeBuffer)
+import           Graphics.GPipe.Internal.Compiler             (Binding,
+                                                               RenderIOState (samplerNameToRenderIO))
+import           Graphics.GPipe.Internal.Context              (ContextHandler,
+                                                               ContextT,
+                                                               FBOKey (FBOKey),
+                                                               GPipeException (GPipeException),
+                                                               Render (Render),
+                                                               addContextFinalizer,
+                                                               addFBOTextureFinalizer,
+                                                               liftNonWinContextAsyncIO,
+                                                               liftNonWinContextIO,
+                                                               registerRenderWriteTexture)
+import           Graphics.GPipe.Internal.Expr                 (ExprM, F, FFloat,
+                                                               S (..),
+                                                               SType (..),
+                                                               scalarS,
+                                                               useSampler,
+                                                               vec2S, vec3S,
+                                                               vec4S)
+import           Graphics.GPipe.Internal.Format               (ColorRenderable,
+                                                               ColorSampleable (..),
+                                                               DepthRenderable,
+                                                               Format,
+                                                               TextureFormat (..),
+                                                               getGlInternalFormat)
+import           Graphics.GPipe.Internal.Shader               (Shader (..),
+                                                               ShaderM,
+                                                               getNewName,
+                                                               modifyRenderIO)
 
-import Graphics.GL.Core45
-import Graphics.GL.Types
-import Graphics.GL.Ext.EXT.TextureFilterAnisotropic
+import           Graphics.GL.Core45
+import           Graphics.GL.Ext.EXT.TextureFilterAnisotropic
+import           Graphics.GL.Types                            (GLenum, GLuint)
 
-import Foreign.Ptr
-import Foreign.Storable
-import Foreign.Marshal.Alloc
-import Foreign.Marshal.Utils
-import Control.Monad
-import Data.IORef
-import Control.Monad.Exception (bracket, MonadAsyncException)
-import Linear.V4
-import Linear.V3
-import Linear.V2
-import Control.Exception (throwIO)
-import Control.Monad.Trans.Class (lift)
+import           Control.Exception                            (throwIO)
+import           Control.Monad                                (foldM, forM_,
+                                                               void, when)
+import           Control.Monad.Exception                      (MonadAsyncException,
+                                                               bracket)
+import           Control.Monad.Trans.Class                    (lift)
+import           Data.IORef                                   (IORef, newIORef,
+                                                               readIORef)
+import           Foreign.Marshal.Alloc                        (alloca,
+                                                               allocaBytes,
+                                                               free,
+                                                               mallocBytes)
+import           Foreign.Marshal.Utils                        (with)
+import           Foreign.Ptr                                  (minusPtr,
+                                                               nullPtr, plusPtr,
+                                                               wordPtrToPtr)
+import           Foreign.Storable                             (Storable (peek))
+import           Linear.V2                                    (V2 (..))
+import           Linear.V3                                    (V3 (..))
+import           Linear.V4                                    (V4 (..))
 
 data Texture1D os a = Texture1D TexName Size1 MaxLevels
 data Texture1DArray os a = Texture1DArray TexName Size2 MaxLevels
@@ -192,7 +236,7 @@ texture3DLevels :: Texture3D os f -> Int
 textureCubeLevels :: TextureCube os f -> Int
 texture1DLevels (Texture1D _ _ ls) = ls
 texture1DArrayLevels (Texture1DArray _ _ ls) = ls
-texture2DLevels (Texture2D _ _ ls) = ls
+texture2DLevels (Texture2D _ _ ls)   = ls
 texture2DLevels (RenderBuffer2D _ _) = 1
 texture2DArrayLevels (Texture2DArray _ _ ls) = ls
 texture3DLevels (Texture3D _ _ ls) = ls
@@ -720,7 +764,7 @@ genMips texn target = liftNonWinContextAsyncIO $ do
 generateTexture1DMipmap (Texture1D texn _ _) = genMips texn GL_TEXTURE_1D
 generateTexture1DArrayMipmap (Texture1DArray texn _ _) = genMips texn GL_TEXTURE_1D_ARRAY
 generateTexture2DMipmap (Texture2D texn _ _) = genMips texn GL_TEXTURE_2D
-generateTexture2DMipmap _ = return () -- Only one level for renderbuffers
+generateTexture2DMipmap _                    = return () -- Only one level for renderbuffers
 generateTexture2DArrayMipmap (Texture2DArray texn _ _) = genMips texn GL_TEXTURE_2D_ARRAY
 generateTexture3DMipmap (Texture3D texn _ _) = genMips texn GL_TEXTURE_3D
 generateTextureCubeMipmap (TextureCube texn _ _) = genMips texn GL_TEXTURE_CUBE_MAP
@@ -757,14 +801,14 @@ data ComparisonFunction =
    deriving ( Eq, Ord, Show )
 
 getGlCompFunc :: (Num a, Eq a) => ComparisonFunction -> a
-getGlCompFunc Never = GL_NEVER
-getGlCompFunc Less = GL_LESS
-getGlCompFunc Equal = GL_EQUAL
-getGlCompFunc Lequal = GL_LEQUAL
-getGlCompFunc Greater = GL_GREATER
+getGlCompFunc Never    = GL_NEVER
+getGlCompFunc Less     = GL_LESS
+getGlCompFunc Equal    = GL_EQUAL
+getGlCompFunc Lequal   = GL_LEQUAL
+getGlCompFunc Greater  = GL_GREATER
 getGlCompFunc Notequal = GL_NOTEQUAL
-getGlCompFunc Gequal = GL_GEQUAL
-getGlCompFunc Always = GL_ALWAYS
+getGlCompFunc Gequal   = GL_GEQUAL
+getGlCompFunc Always   = GL_ALWAYS
 
 newSampler1D :: forall os s c. ColorSampleable c => (s -> (Texture1D os (Format c), SamplerFilter c, (EdgeMode,  BorderColor c))) -> Shader os s (Sampler1D (Format c))
 newSampler1DArray :: forall os s c. ColorSampleable c => (s -> (Texture1DArray os (Format c), SamplerFilter c, (EdgeMode, BorderColor c))) -> Shader os s (Sampler1DArray (Format c))
@@ -893,10 +937,10 @@ setEdgeMode t (se,te,re) bcio = do glwrap GL_TEXTURE_WRAP_S se
                                    glwrap GL_TEXTURE_WRAP_R re
                                    when (se == Just ClampToBorder || te == Just ClampToBorder || re == Just ClampToBorder)
                                       bcio
-    where glwrap _ Nothing = return ()
-          glwrap x (Just Repeat) = glTexParameteri t x GL_REPEAT
-          glwrap x (Just Mirror) = glTexParameteri t x GL_MIRRORED_REPEAT
-          glwrap x (Just ClampToEdge) = glTexParameteri t x GL_CLAMP_TO_EDGE
+    where glwrap _ Nothing              = return ()
+          glwrap x (Just Repeat)        = glTexParameteri t x GL_REPEAT
+          glwrap x (Just Mirror)        = glTexParameteri t x GL_MIRRORED_REPEAT
+          glwrap x (Just ClampToEdge)   = glTexParameteri t x GL_CLAMP_TO_EDGE
           glwrap x (Just ClampToBorder) = glTexParameteri t x GL_CLAMP_TO_BORDER
 
 setSamplerFilter :: GLenum -> SamplerFilter a -> IO ()
@@ -912,12 +956,12 @@ setSamplerFilter' t magf minf lodf a = do
                                                 Just a' -> glTexParameterf t GL_TEXTURE_MAX_ANISOTROPY_EXT (realToFrac a')
     where glmin = case (minf, lodf) of
                     (Nearest, Nearest) -> GL_NEAREST_MIPMAP_NEAREST
-                    (Linear, Nearest) -> GL_LINEAR_MIPMAP_NEAREST
-                    (Nearest, Linear) -> GL_NEAREST_MIPMAP_LINEAR
-                    (Linear, Linear) -> GL_LINEAR_MIPMAP_LINEAR
+                    (Linear, Nearest)  -> GL_LINEAR_MIPMAP_NEAREST
+                    (Nearest, Linear)  -> GL_NEAREST_MIPMAP_LINEAR
+                    (Linear, Linear)   -> GL_LINEAR_MIPMAP_LINEAR
           glmag = case magf of
                     Nearest -> GL_NEAREST
-                    Linear -> GL_LINEAR
+                    Linear  -> GL_LINEAR
 
 
 
@@ -955,8 +999,8 @@ type SampleLod2' x = SampleLod' (V2 (S x Float)) x
 type SampleLod3' x = SampleLod' (V3 (S x Float)) x
 
 fromLod' :: SampleLod' v x -> SampleLod v x
-fromLod' SampleAuto' = SampleAuto
-fromLod' (SampleBias' x) = SampleBias x
+fromLod' SampleAuto'       = SampleAuto
+fromLod' (SampleBias' x)   = SampleBias x
 fromLod' (SampleGrad' x y) = SampleGrad x y
 
 type SampleProj x = Maybe (S x Float)
@@ -1112,9 +1156,9 @@ sampleFunc s proj lod off coord vToS lvToS civToS pvToS = do
     o = offParam off civToS
 
     projName Nothing = ""
-    projName _ = "Proj"
+    projName _       = "Proj"
 
-    projCoordParam Nothing = vToS coord
+    projCoordParam Nothing  = vToS coord
     projCoordParam (Just p) = pvToS coord p
 
     lodParam (SampleLod x) = fmap (',':) (unS x)
@@ -1126,9 +1170,9 @@ sampleFunc s proj lod off coord vToS lvToS civToS pvToS = do
                                       return $ ',':x'
     biasParam _ = return ""
 
-    lodName (SampleLod _) = "Lod"
+    lodName (SampleLod _)    = "Lod"
     lodName (SampleGrad _ _) = "Grad"
-    lodName _ = ""
+    lodName _                = ""
 
 fetchFunc s off coord lod vToS civToS = do
     c <- vToS coord
@@ -1138,12 +1182,12 @@ fetchFunc s off coord lod vToS civToS = do
     o = offParam off civToS
 
 offParam :: Maybe t -> (t -> String) -> String
-offParam Nothing _ = ""
+offParam Nothing _       = ""
 offParam (Just x) civToS = ',' : civToS x
 
 offName :: Maybe t -> String
 offName Nothing = ""
-offName _ = "Offset"
+offName _       = "Offset"
 
 ----------------------------------------------------------------------------------
 

@@ -1,11 +1,11 @@
 module Graphics.GPipe.Internal.Debug where
 
-import Control.Monad
-import Data.Maybe
-import Data.List (intercalate)
-import qualified Debug.Trace as Trace
-import Graphics.GL.Core45
-import Graphics.GL.Types
+import           Control.Monad      (when)
+import           Data.List          (intercalate)
+import           Data.Maybe         (fromMaybe)
+import qualified Debug.Trace        as Trace
+import           Graphics.GL.Core45
+import           Graphics.GL.Types  (GLenum)
 
 traceIt :: Show a => String -> a -> a
 traceIt t a = Trace.trace (t ++ " = " ++ show a) a

@@ -1,18 +1,19 @@
+{-# LANGUAGE EmptyDataDecls        #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE TypeSynonymInstances, EmptyDataDecls #-}
+{-# LANGUAGE TypeSynonymInstances  #-}
 
 module Graphics.GPipe.Internal.Format where
 
-import Graphics.GL.Core45
-import Graphics.GL.Types
-import Foreign.Marshal.Array (withArray)
-import Linear.V4
-import Linear.V3
-import Linear.V2
+import           Foreign.Marshal.Array (withArray)
+import           Graphics.GL.Core45
+import           Graphics.GL.Types     (GLenum)
+import           Linear.V2             (V2 (..))
+import           Linear.V3             (V3 (..))
+import           Linear.V4             (V4 (..))
 
 data RFloat
 data RInt
@@ -107,77 +108,77 @@ data Format a where
     Depth32FStencil8 :: Format DepthStencil
 
 getGlInternalFormat :: Format f -> GLenum
-getGlInternalFormat R8 = GL_R8
-getGlInternalFormat R8S = GL_R8_SNORM
-getGlInternalFormat R16 = GL_R16
-getGlInternalFormat R16S = GL_R16_SNORM
-getGlInternalFormat R16F = GL_R16F
-getGlInternalFormat R32F = GL_R32F
-getGlInternalFormat R8I = GL_R8I
-getGlInternalFormat R16I = GL_R16I
-getGlInternalFormat R32I = GL_R32I
-getGlInternalFormat R8UI = GL_R8UI
-getGlInternalFormat R16UI = GL_R16UI
-getGlInternalFormat R32UI = GL_R32UI
-getGlInternalFormat RG8 = GL_RG8
-getGlInternalFormat RG8S = GL_RG8_SNORM
-getGlInternalFormat RG16 = GL_RG16
-getGlInternalFormat RG16S = GL_RG16_SNORM
-getGlInternalFormat RG16F = GL_RG16F
-getGlInternalFormat RG32F = GL_RG32F
-getGlInternalFormat RG8I = GL_RG8I
-getGlInternalFormat RG16I = GL_RG16I
-getGlInternalFormat RG32I = GL_RG32I
-getGlInternalFormat RG8UI = GL_RG8UI
-getGlInternalFormat RG16UI = GL_RG16UI
-getGlInternalFormat RG32UI = GL_RG32UI
-getGlInternalFormat R3G3B2 = GL_R3_G3_B2
-getGlInternalFormat RGB4 = GL_RGB4
-getGlInternalFormat RGB5 = GL_RGB5
-getGlInternalFormat RGB8 = GL_RGB8
-getGlInternalFormat RGB8S = GL_RGB8_SNORM
-getGlInternalFormat RGB10 = GL_RGB10
-getGlInternalFormat RGB12 = GL_RGB12
-getGlInternalFormat RGB16 = GL_RGB16
-getGlInternalFormat RGB16S = GL_RGB16_SNORM
-getGlInternalFormat RGB16F = GL_RGB16F
-getGlInternalFormat RGB32F = GL_RGB32F
-getGlInternalFormat R11FG11FB10F = GL_R11F_G11F_B10F
-getGlInternalFormat RGB9E5 = GL_RGB9_E5
-getGlInternalFormat SRGB8 = GL_SRGB8
-getGlInternalFormat RGB8I = GL_RGB8I
-getGlInternalFormat RGB16I = GL_RGB16I
-getGlInternalFormat RGB32I = GL_RGB32I
-getGlInternalFormat RGB8UI = GL_RGB8UI
-getGlInternalFormat RGB16UI = GL_RGB16UI
-getGlInternalFormat RGB32UI = GL_RGB32UI
-getGlInternalFormat RGBA2 = GL_RGBA2
-getGlInternalFormat RGBA4 = GL_RGBA4
-getGlInternalFormat RGB5A1 = GL_RGB5_A1
-getGlInternalFormat RGBA8 = GL_RGBA8
-getGlInternalFormat RGBA8S = GL_RGBA8_SNORM
-getGlInternalFormat RGB10A2 = GL_RGB10_A2
-getGlInternalFormat RGBA12 = GL_RGBA12
-getGlInternalFormat RGBA16 = GL_RGBA16
-getGlInternalFormat RGBA16S = GL_RGBA16_SNORM
-getGlInternalFormat RGBA16F = GL_RGBA16F
-getGlInternalFormat RGBA32F = GL_RGBA32F
-getGlInternalFormat SRGB8A8 = GL_SRGB8_ALPHA8
-getGlInternalFormat RGBA8I = GL_RGBA8I
-getGlInternalFormat RGBA16I = GL_RGBA16I
-getGlInternalFormat RGBA32I = GL_RGBA32I
-getGlInternalFormat RGBA8UI = GL_RGBA8UI
-getGlInternalFormat RGBA16UI = GL_RGBA16UI
-getGlInternalFormat RGBA32UI = GL_RGBA32UI
-getGlInternalFormat Depth16 = GL_DEPTH_COMPONENT16
-getGlInternalFormat Depth24 = GL_DEPTH_COMPONENT24
-getGlInternalFormat Depth32 = GL_DEPTH_COMPONENT32
-getGlInternalFormat Depth32F = GL_DEPTH_COMPONENT32F
-getGlInternalFormat Stencil1 = GL_STENCIL_INDEX1
-getGlInternalFormat Stencil4 = GL_STENCIL_INDEX4
-getGlInternalFormat Stencil8 = GL_STENCIL_INDEX8
-getGlInternalFormat Stencil16 = GL_STENCIL_INDEX16
-getGlInternalFormat Depth24Stencil8 = GL_DEPTH24_STENCIL8
+getGlInternalFormat R8               = GL_R8
+getGlInternalFormat R8S              = GL_R8_SNORM
+getGlInternalFormat R16              = GL_R16
+getGlInternalFormat R16S             = GL_R16_SNORM
+getGlInternalFormat R16F             = GL_R16F
+getGlInternalFormat R32F             = GL_R32F
+getGlInternalFormat R8I              = GL_R8I
+getGlInternalFormat R16I             = GL_R16I
+getGlInternalFormat R32I             = GL_R32I
+getGlInternalFormat R8UI             = GL_R8UI
+getGlInternalFormat R16UI            = GL_R16UI
+getGlInternalFormat R32UI            = GL_R32UI
+getGlInternalFormat RG8              = GL_RG8
+getGlInternalFormat RG8S             = GL_RG8_SNORM
+getGlInternalFormat RG16             = GL_RG16
+getGlInternalFormat RG16S            = GL_RG16_SNORM
+getGlInternalFormat RG16F            = GL_RG16F
+getGlInternalFormat RG32F            = GL_RG32F
+getGlInternalFormat RG8I             = GL_RG8I
+getGlInternalFormat RG16I            = GL_RG16I
+getGlInternalFormat RG32I            = GL_RG32I
+getGlInternalFormat RG8UI            = GL_RG8UI
+getGlInternalFormat RG16UI           = GL_RG16UI
+getGlInternalFormat RG32UI           = GL_RG32UI
+getGlInternalFormat R3G3B2           = GL_R3_G3_B2
+getGlInternalFormat RGB4             = GL_RGB4
+getGlInternalFormat RGB5             = GL_RGB5
+getGlInternalFormat RGB8             = GL_RGB8
+getGlInternalFormat RGB8S            = GL_RGB8_SNORM
+getGlInternalFormat RGB10            = GL_RGB10
+getGlInternalFormat RGB12            = GL_RGB12
+getGlInternalFormat RGB16            = GL_RGB16
+getGlInternalFormat RGB16S           = GL_RGB16_SNORM
+getGlInternalFormat RGB16F           = GL_RGB16F
+getGlInternalFormat RGB32F           = GL_RGB32F
+getGlInternalFormat R11FG11FB10F     = GL_R11F_G11F_B10F
+getGlInternalFormat RGB9E5           = GL_RGB9_E5
+getGlInternalFormat SRGB8            = GL_SRGB8
+getGlInternalFormat RGB8I            = GL_RGB8I
+getGlInternalFormat RGB16I           = GL_RGB16I
+getGlInternalFormat RGB32I           = GL_RGB32I
+getGlInternalFormat RGB8UI           = GL_RGB8UI
+getGlInternalFormat RGB16UI          = GL_RGB16UI
+getGlInternalFormat RGB32UI          = GL_RGB32UI
+getGlInternalFormat RGBA2            = GL_RGBA2
+getGlInternalFormat RGBA4            = GL_RGBA4
+getGlInternalFormat RGB5A1           = GL_RGB5_A1
+getGlInternalFormat RGBA8            = GL_RGBA8
+getGlInternalFormat RGBA8S           = GL_RGBA8_SNORM
+getGlInternalFormat RGB10A2          = GL_RGB10_A2
+getGlInternalFormat RGBA12           = GL_RGBA12
+getGlInternalFormat RGBA16           = GL_RGBA16
+getGlInternalFormat RGBA16S          = GL_RGBA16_SNORM
+getGlInternalFormat RGBA16F          = GL_RGBA16F
+getGlInternalFormat RGBA32F          = GL_RGBA32F
+getGlInternalFormat SRGB8A8          = GL_SRGB8_ALPHA8
+getGlInternalFormat RGBA8I           = GL_RGBA8I
+getGlInternalFormat RGBA16I          = GL_RGBA16I
+getGlInternalFormat RGBA32I          = GL_RGBA32I
+getGlInternalFormat RGBA8UI          = GL_RGBA8UI
+getGlInternalFormat RGBA16UI         = GL_RGBA16UI
+getGlInternalFormat RGBA32UI         = GL_RGBA32UI
+getGlInternalFormat Depth16          = GL_DEPTH_COMPONENT16
+getGlInternalFormat Depth24          = GL_DEPTH_COMPONENT24
+getGlInternalFormat Depth32          = GL_DEPTH_COMPONENT32
+getGlInternalFormat Depth32F         = GL_DEPTH_COMPONENT32F
+getGlInternalFormat Stencil1         = GL_STENCIL_INDEX1
+getGlInternalFormat Stencil4         = GL_STENCIL_INDEX4
+getGlInternalFormat Stencil8         = GL_STENCIL_INDEX8
+getGlInternalFormat Stencil16        = GL_STENCIL_INDEX16
+getGlInternalFormat Depth24Stencil8  = GL_DEPTH24_STENCIL8
 getGlInternalFormat Depth32FStencil8 = GL_DEPTH32F_STENCIL8
 
 class TextureFormat f where
@@ -380,7 +381,7 @@ instance ColorRenderable RGWord where
     clearColor _ (V2 r g) = withArray [fromIntegral r, fromIntegral g,0,0] (glClearBufferuiv GL_COLOR 0)
 instance ColorRenderable RGBFloat where
     isSrgb SRGB8 = True
-    isSrgb _ = False
+    isSrgb _     = False
     clearColor _ (V3 r g b) = withArray [realToFrac r, realToFrac g, realToFrac b,0] (glClearBufferfv GL_COLOR 0)
 instance ColorRenderable RGBInt where
     clearColor _ (V3 r g b) = withArray [fromIntegral r, fromIntegral g, fromIntegral b,0] (glClearBufferiv GL_COLOR 0)
@@ -388,7 +389,7 @@ instance ColorRenderable RGBWord where
     clearColor _ (V3 r g b) = withArray [fromIntegral r, fromIntegral g, fromIntegral b,0] (glClearBufferuiv GL_COLOR 0)
 instance ColorRenderable RGBAFloat where
     isSrgb SRGB8A8 = True
-    isSrgb _ = False
+    isSrgb _       = False
     clearColor _ (V4 r g b a) = withArray [realToFrac r, realToFrac g, realToFrac b, realToFrac a] (glClearBufferfv GL_COLOR 0)
 instance ColorRenderable RGBAInt where
     clearColor _ (V4 r g b a) = withArray [fromIntegral r, fromIntegral g, fromIntegral b, fromIntegral a] (glClearBufferiv GL_COLOR 0)
@@ -413,9 +414,9 @@ class ColorRenderable c => ContextColorFormat c where
     alphaBits = error "You cannot create your own instances of ContextColorFormat"
 
 instance ContextColorFormat RFloat where
-    redBits R8 = 8
-    redBits R8S = 8
-    redBits R16 = 16
+    redBits R8   = 8
+    redBits R8S  = 8
+    redBits R16  = 16
     redBits R16S = 16
     redBits R16F = 16
     redBits R32F = 32
@@ -424,9 +425,9 @@ instance ContextColorFormat RFloat where
     alphaBits _ = 0
 
 instance ContextColorFormat RGFloat where
-    redBits RG8 = 8
-    redBits RG8S = 8
-    redBits RG16 = 16
+    redBits RG8   = 8
+    redBits RG8S  = 8
+    redBits RG16  = 16
     redBits RG16S = 16
     redBits RG16F = 16
     redBits RG32F = 32
@@ -435,44 +436,44 @@ instance ContextColorFormat RGFloat where
     alphaBits _ = 0
 
 instance ContextColorFormat RGBFloat where
-    redBits R3G3B2 = 3
-    redBits RGB4 = 4
-    redBits RGB5 = 5
-    redBits RGB8 = 8
-    redBits RGB8S = 8
-    redBits RGB10 = 10
-    redBits RGB12 = 12
-    redBits RGB16 = 16
-    redBits RGB16S = 16
-    redBits RGB16F = 16
-    redBits RGB32F = 32
+    redBits R3G3B2       = 3
+    redBits RGB4         = 4
+    redBits RGB5         = 5
+    redBits RGB8         = 8
+    redBits RGB8S        = 8
+    redBits RGB10        = 10
+    redBits RGB12        = 12
+    redBits RGB16        = 16
+    redBits RGB16S       = 16
+    redBits RGB16F       = 16
+    redBits RGB32F       = 32
     redBits R11FG11FB10F = 11
-    redBits RGB9E5 = 14 -- hmm...
-    redBits SRGB8 = 8
+    redBits RGB9E5       = 14 -- hmm...
+    redBits SRGB8        = 8
     greenBits = redBits
-    blueBits R3G3B2 = 2
+    blueBits R3G3B2       = 2
     blueBits R11FG11FB10F = 10
-    blueBits x = redBits x
+    blueBits x            = redBits x
     alphaBits _ = 0
 
 instance ContextColorFormat RGBAFloat where
-    redBits RGBA2 = 2
-    redBits RGBA4 = 4
-    redBits RGB5A1 = 5
-    redBits RGBA8 = 8
-    redBits RGBA8S = 8
+    redBits RGBA2   = 2
+    redBits RGBA4   = 4
+    redBits RGB5A1  = 5
+    redBits RGBA8   = 8
+    redBits RGBA8S  = 8
     redBits RGB10A2 = 10
-    redBits RGBA12 = 12
-    redBits RGBA16 = 16
+    redBits RGBA12  = 12
+    redBits RGBA16  = 16
     redBits RGBA16S = 16
     redBits RGBA16F = 16
     redBits RGBA32F = 32
     redBits SRGB8A8 = 8
     greenBits = redBits
     blueBits = redBits
-    alphaBits RGB5A1 = 1
+    alphaBits RGB5A1  = 1
     alphaBits RGB10A2 = 2
-    alphaBits x = redBits x
+    alphaBits x       = redBits x
 
 --------------------------------------------------------------------------
 
@@ -480,20 +481,20 @@ colorBits :: ContextColorFormat c => Format c -> (Int, Int, Int, Int, Bool)
 colorBits f = (redBits f, greenBits f, blueBits f, alphaBits f, isSrgb f)
 
 depthBits :: Format Depth  -> Int
-depthBits Depth16 = 16
-depthBits Depth24 = 24
-depthBits Depth32 = 32
+depthBits Depth16  = 16
+depthBits Depth24  = 24
+depthBits Depth32  = 32
 depthBits Depth32F = 32
 
 stencilBits :: Format Stencil -> Int
-stencilBits Stencil1 = 1
-stencilBits Stencil4 = 4
-stencilBits Stencil8 = 8
+stencilBits Stencil1  = 1
+stencilBits Stencil4  = 4
+stencilBits Stencil8  = 8
 stencilBits Stencil16 = 16
 
 depthStencilBits :: Format DepthStencil -> (Int, Int)
 depthStencilBits Depth32FStencil8 = (32, 8)
-depthStencilBits Depth24Stencil8 = (24, 8)
+depthStencilBits Depth24Stencil8  = (24, 8)
 
 data WindowFormat c ds where
     WindowFormatColor :: ContextColorFormat c => Format c -> WindowFormat c ()

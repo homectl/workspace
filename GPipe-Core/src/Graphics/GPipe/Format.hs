@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeFamilies #-}
 -----------------------------------------------------------------------------
 --
 -- Module      :  Graphics.GPipe.Format
@@ -33,4 +33,4 @@ module Graphics.GPipe.Format (
 )
 where
 
-import Graphics.GPipe.Internal.Format
+import           Graphics.GPipe.Internal.Format

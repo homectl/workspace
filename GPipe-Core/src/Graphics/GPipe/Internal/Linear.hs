@@ -1,7 +1,8 @@
 module Graphics.GPipe.Internal.Linear where
 
 import           Control.Lens ((^.))
-import           Linear
+import           Linear       (M44, Metric (dot, signorm), R1 (..), R2 (..),
+                               R3 (..), V3, V4 (..), cross)
 
 
 lookAt :: Floating a => V3 a -> V3 a -> V3 a -> V4 (V4 a)

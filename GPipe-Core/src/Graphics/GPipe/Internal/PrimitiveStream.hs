@@ -1,52 +1,77 @@
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE TypeFamilies, TypeSynonymInstances, FlexibleContexts, FlexibleInstances, ScopedTypeVariables, Arrows, GeneralizedNewtypeDeriving, PatternSynonyms #-}
+{-# LANGUAGE Arrows                     #-}
+{-# LANGUAGE CPP                        #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE PatternSynonyms            #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE TypeSynonymInstances       #-}
 
 module Graphics.GPipe.Internal.PrimitiveStream where
 
-import Control.Arrow
-import Control.Monad.Trans.Class
-import Control.Monad.Trans.State.Strict
-import Control.Monad.Trans.Reader
-import Prelude hiding (length, id, (.))
-import Graphics.GPipe.Internal.Buffer
-import Graphics.GPipe.Internal.Expr
-import Graphics.GPipe.Internal.Shader
-import Graphics.GPipe.Internal.Compiler
-import Graphics.GPipe.Internal.PrimitiveArray
-import Graphics.GPipe.Internal.Context
+import           Control.Arrow                          (Arrow (arr, first),
+                                                         Kleisli (Kleisli),
+                                                         returnA)
+import           Control.Monad.Trans.Class              (MonadTrans (lift))
+import           Control.Monad.Trans.Reader             (Reader, ask, runReader)
+import           Control.Monad.Trans.State.Strict       (State,
+                                                         StateT (runStateT),
+                                                         execState, get, modify,
+                                                         put)
+import           Graphics.GPipe.Internal.Buffer         (B (..), B2 (..),
+                                                         B3 (..), B4 (..),
+                                                         Buffer (bufTransformFeedback),
+                                                         BufferFormat (HostFormat),
+                                                         Normalized (..))
+import           Graphics.GPipe.Internal.Compiler       (Binding,
+                                                         RenderIOState (inputArrayToRenderIO))
+import           Graphics.GPipe.Internal.Context        (VAOKey (VAOKey))
+import           Graphics.GPipe.Internal.Expr           (ExprM, S (S),
+                                                         SType (..), V, VFloat,
+                                                         VInt, VWord, scalarS',
+                                                         useUniform, useVInput,
+                                                         vec2S, vec3S, vec4S)
+import           Graphics.GPipe.Internal.PrimitiveArray (IndexArray (iArrName, indexArrayLength, indexType, offset, restart),
+                                                         Points,
+                                                         PrimitiveArray (getPrimitiveArray),
+                                                         PrimitiveArrayInt (..),
+                                                         PrimitiveTopology (toGLtopology, toPrimitiveSize))
+import           Graphics.GPipe.Internal.Shader         (Shader (..), ShaderM,
+                                                         askUniformAlignment,
+                                                         getNewName,
+                                                         modifyRenderIO)
+import           Prelude                                hiding (id, length, (.))
 -- This import is only needed for the unused uniform alternate implementation.
-import Graphics.GPipe.Internal.Uniform
-import Control.Category
-import Control.Arrow
-import Control.Monad (void, when)
+import           Control.Category                       (Category (..))
+import           Control.Monad                          (void, when)
+import           Graphics.GPipe.Internal.Uniform        (OffsetToSType,
+                                                         buildUDecl)
 #if __GLASGOW_HASKELL__ < 804
-import Data.Semigroup (Semigroup(..))
+import           Data.Semigroup                         (Semigroup (..))
 #endif
-import Data.IntMap.Lazy (insert)
-import Data.Word
-import Data.Int
-import Foreign.Marshal (alloca)
-import Foreign.Storable
-import Foreign.Ptr
-import qualified Data.IntMap as Map
+import           Data.Int                               (Int16, Int32, Int8)
+import qualified Data.IntMap                            as Map
+import           Data.IntMap.Lazy                       (insert)
+import           Data.Word                              (Word16, Word32, Word8)
+import           Foreign.Marshal                        (alloca)
+import           Foreign.Ptr                            (Ptr, castPtr,
+                                                         intPtrToPtr, plusPtr)
+import           Foreign.Storable                       (Storable (peek, poke, sizeOf))
 
-import Graphics.GL.Core45
-import Graphics.GL.Types
-import Foreign.Marshal.Utils
-import Data.IORef
-import Linear.V4
-import Linear.V3
-import Linear.V2
-import Linear.V1
-import Linear.V0
-import Linear.Plucker (Plucker(..))
-import Linear.Quaternion (Quaternion(..))
-import Linear.Affine (Point(..))
-import Data.Maybe (fromMaybe)
-import System.IO
-import Control.Monad.IO.Class
-
-import Graphics.GPipe.Internal.Debug
+import           Data.IORef                             (readIORef)
+import           Data.Maybe                             (fromMaybe)
+import           Foreign.Marshal.Utils                  (fromBool)
+import           Graphics.GL.Core45
+import           Graphics.GL.Types                      (GLuint)
+import           Linear.Affine                          (Point (..))
+import           Linear.Plucker                         (Plucker (..))
+import           Linear.Quaternion                      (Quaternion (..))
+import           Linear.V0                              (V0 (..))
+import           Linear.V1                              (V1 (..))
+import           Linear.V2                              (V2 (..))
+import           Linear.V3                              (V3 (..))
+import           Linear.V4                              (V4 (..))
 
 -- Originally named DrawCallName and later in the code as PrimN. I've sticked
 -- with the latter, because it's more logical.
@@ -245,7 +270,7 @@ toPrimitiveStream' getFeedbackBuffer sf = Shader $ do
             void $ glUnmapBuffer GL_COPY_WRITE_BUFFER
 
 data InputIndices = InputIndices {
-        inputVertexID :: VInt,
+        inputVertexID   :: VInt,
         inputInstanceID :: VInt
     }
 

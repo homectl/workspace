@@ -1,30 +1,51 @@
-{-# LANGUAGE TypeFamilies, FlexibleContexts, GADTs, TypeSynonymInstances, ScopedTypeVariables, FlexibleInstances, GeneralizedNewtypeDeriving, Arrows, MultiParamTypeClasses, AllowAmbiguousTypes #-}
+{-# LANGUAGE AllowAmbiguousTypes        #-}
+{-# LANGUAGE Arrows                     #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GADTs                      #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE TypeSynonymInstances       #-}
 
 module Graphics.GPipe.Internal.Uniform where
 
-import Graphics.GPipe.Internal.Buffer
-import Graphics.GPipe.Internal.Shader
-import Graphics.GPipe.Internal.Compiler
-import Graphics.GPipe.Internal.Expr
-import Control.Arrow
-import Control.Monad.Trans.Writer
-import Control.Monad.Trans.Reader
-import Control.Monad.Trans.Class (lift)
-import Control.Category hiding ((.))
-import qualified Data.IntMap as Map
-import Data.IntMap.Lazy (insert)
-import Data.Word
+import           Control.Arrow                    (Arrow (arr),
+                                                   Kleisli (Kleisli), returnA,
+                                                   (>>>))
+import           Control.Category                 (Category)
+import           Control.Monad.Trans.Class        (lift)
+import           Control.Monad.Trans.Reader       (Reader, ask, runReader)
+import           Control.Monad.Trans.Writer       (WriterT (runWriterT), tell)
+import qualified Data.IntMap                      as Map
+import           Data.IntMap.Lazy                 (insert)
+import           Data.Word                        (Word32)
+import           Graphics.GPipe.Internal.Buffer   (B (..), B2 (..), B3 (..),
+                                                   B4 (..), BInput (..),
+                                                   Buffer (..), BufferFormat,
+                                                   Uniform (..), makeBuffer)
+import           Graphics.GPipe.Internal.Compiler (Binding,
+                                                   RenderIOState (uniformNameToRenderIO))
+import           Graphics.GPipe.Internal.Expr     (ExprM, GlobDeclM, S (S),
+                                                   SType (..), stypeName,
+                                                   stypeSize, tellGlobal,
+                                                   tellGlobalLn, useUniform,
+                                                   vec2S'', vec3S'', vec4S'')
+import           Graphics.GPipe.Internal.Shader   (Shader (..), ShaderM,
+                                                   askUniformAlignment,
+                                                   getNewName, modifyRenderIO)
 
-import Graphics.GL.Core45
-import Data.IORef
-import Data.Int
-import Linear.V4
-import Linear.V3
-import Linear.V2
-import Linear.V1
-import Linear.V0
-import Linear.Plucker (Plucker(..))
-import Linear.Quaternion (Quaternion(..))
+import           Data.IORef                       (readIORef)
+import           Data.Int                         (Int32)
+import           Graphics.GL.Core45
+import           Linear.Plucker                   (Plucker (..))
+import           Linear.Quaternion                (Quaternion (..))
+import           Linear.V0                        (V0 (..))
+import           Linear.V1                        (V1 (..))
+import           Linear.V2                        (V2 (..))
+import           Linear.V3                        (V3 (..))
+import           Linear.V4                        (V4 (..))
 
 -- | This class constraints which buffer types can be loaded as uniforms, and what type those values have.
 class BufferFormat a => UniformInput a where

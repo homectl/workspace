@@ -37,4 +37,4 @@ module Graphics.GPipe.Context (
 )
 where
 
-import Graphics.GPipe.Internal.Context
+import           Graphics.GPipe.Internal.Context

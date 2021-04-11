@@ -32,4 +32,4 @@ module Graphics.GPipe.PrimitiveStream (
 )
 where
 
-import Graphics.GPipe.Internal.PrimitiveStream
+import           Graphics.GPipe.Internal.PrimitiveStream

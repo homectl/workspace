@@ -1,18 +1,25 @@
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE TypeSynonymInstances, FlexibleInstances, ScopedTypeVariables, EmptyDataDecls, TypeFamilies, GADTs #-}
+{-# LANGUAGE CPP                  #-}
+{-# LANGUAGE EmptyDataDecls       #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE GADTs                #-}
+{-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE TypeFamilies         #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 module Graphics.GPipe.Internal.PrimitiveArray where
 
-import Graphics.GPipe.Internal.Buffer
-import Graphics.GPipe.Internal.Shader
+import           Graphics.GPipe.Internal.Buffer (B, BInput (..), BPacked,
+                                                 Buffer (bufBElement, bufName, bufferLength),
+                                                 BufferFormat (getGlType))
+import           Graphics.GPipe.Internal.Shader (Render (Render))
 #if __GLASGOW_HASKELL__ < 804
-import Data.Semigroup
+import           Data.Semigroup
 #endif
-import Data.IORef
+import           Data.IORef                     (IORef)
 
-import Data.Word
+import           Data.Word                      (Word16, Word32, Word8)
 
 import           Graphics.GL.Core45
-import           Graphics.GL.Types
+import           Graphics.GL.Types              (GLuint)
 
 -- | A vertex array is the basic building block for a primitive array. It is created from the contents of a 'Buffer', but unlike a 'Buffer',
 --   it may be truncated, zipped with other vertex arrays, and even morphed into arrays of a different type with the provided 'Functor' instance.
@@ -20,8 +27,8 @@ import           Graphics.GL.Types
 data VertexArray t a = VertexArray  {
     -- | Retrieve the number of elements in a 'VertexArray'.
     vertexArrayLength :: Int,
-    vertexArraySkip :: Int,
-    bArrBFunc:: BInput -> a
+    vertexArraySkip   :: Int,
+    bArrBFunc         :: BInput -> a
     }
 
 -- | A phantom type to indicate that a 'VertexArray' may only be used for instances (in 'toPrimitiveArrayInstanced' and 'toPrimitiveArrayIndexedInstanced').
@@ -69,12 +76,12 @@ type family IndexFormat a where
 -- | An index array is like a vertex array, but contains only integer indices. These indices must come from a tightly packed 'Buffer', hence the lack of
 --   a 'Functor' instance and no conversion from 'VertexArray's.
 data IndexArray = IndexArray {
-    iArrName :: IORef GLuint,
+    iArrName         :: IORef GLuint,
     -- | Numer of indices in an 'IndexArray'.
-    indexArrayLength:: Int,
-    offset:: Int,
-    restart:: Maybe Int,
-    indexType :: GLuint
+    indexArrayLength :: Int,
+    offset           :: Int,
+    restart          :: Maybe Int,
+    indexType        :: GLuint
     }
 
 -- | Create an 'IndexArray' from a 'Buffer' of unsigned integers (as constrained by the closed 'IndexFormat' type family instances). The index array will have the same number of elements as the buffer, use 'takeIndices' and 'dropIndices' to make it smaller.
@@ -116,8 +123,8 @@ instance PrimitiveTopology Points where
     data Geometry Points a = Point a
 
 instance PrimitiveTopology Lines where
-    toGLtopology LineList = GL_LINES
-    toGLtopology LineLoop = GL_LINE_LOOP
+    toGLtopology LineList  = GL_LINES
+    toGLtopology LineLoop  = GL_LINE_LOOP
     toGLtopology LineStrip = GL_LINE_STRIP
     toPrimitiveSize _= 2
     toGeometryShaderOutputTopology _ = GL_LINES
@@ -126,7 +133,7 @@ instance PrimitiveTopology Lines where
     data Geometry Lines a = Line a a
 
 instance PrimitiveTopology LinesWithAdjacency where
-    toGLtopology LineListAdjacency = GL_LINES_ADJACENCY
+    toGLtopology LineListAdjacency  = GL_LINES_ADJACENCY
     toGLtopology LineStripAdjacency = GL_LINE_STRIP_ADJACENCY
     toPrimitiveSize _= 2
     toGeometryShaderOutputTopology _ = GL_LINES
@@ -135,7 +142,7 @@ instance PrimitiveTopology LinesWithAdjacency where
     data Geometry LinesWithAdjacency a = LineWithAdjacency a a a a
 
 instance PrimitiveTopology Triangles where
-    toGLtopology TriangleList = GL_TRIANGLES
+    toGLtopology TriangleList  = GL_TRIANGLES
     toGLtopology TriangleStrip = GL_TRIANGLE_STRIP
     toPrimitiveSize _= 3
     toGeometryShaderOutputTopology _ = GL_TRIANGLES
@@ -144,7 +151,7 @@ instance PrimitiveTopology Triangles where
     data Geometry Triangles a = Triangle a a a
 
 instance PrimitiveTopology TrianglesWithAdjacency where
-    toGLtopology TriangleListAdjacency = GL_TRIANGLES_ADJACENCY
+    toGLtopology TriangleListAdjacency  = GL_TRIANGLES_ADJACENCY
     toGLtopology TriangleStripAdjacency = GL_TRIANGLE_STRIP_ADJACENCY
     toPrimitiveSize _= 3
     toGeometryShaderOutputTopology _ = GL_TRIANGLES

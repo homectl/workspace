@@ -37,4 +37,4 @@ module Graphics.GPipe.FragmentStream (
 )
 where
 
-import Graphics.GPipe.Internal.FragmentStream
+import           Graphics.GPipe.Internal.FragmentStream

@@ -3,4 +3,4 @@ module Graphics.GPipe.TransformFeedback (
 )
 where
 
-import Graphics.GPipe.Internal.TransformFeedback
+import           Graphics.GPipe.Internal.TransformFeedback

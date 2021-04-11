@@ -1,37 +1,78 @@
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE FlexibleInstances, ScopedTypeVariables, Arrows, GeneralizedNewtypeDeriving, GADTs, MultiParamTypeClasses #-}
+{-# LANGUAGE Arrows                     #-}
+{-# LANGUAGE CPP                        #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GADTs                      #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
 
 module Graphics.GPipe.Internal.GeometryStream where
 
-import Control.Arrow
-import Control.Category
-import Control.Monad.Trans.State.Lazy
-import qualified Control.Monad.Trans.Class as T (lift)
-import Control.Monad.Trans.Writer (tell)
+import           Control.Arrow                           (Arrow (arr, first),
+                                                          Kleisli (Kleisli),
+                                                          returnA)
+import           Control.Category                        (Category (..))
+import qualified Control.Monad.Trans.Class               as T (lift)
+import           Control.Monad.Trans.State.Lazy          (State, evalState, get,
+                                                          put)
+import           Control.Monad.Trans.Writer              (tell)
 #if __GLASGOW_HASKELL__ < 804
-import Data.Semigroup (Semigroup(..))
+import           Data.Semigroup                          (Semigroup (..))
 #endif
-import Prelude hiding (length, id, (.))
+import           Prelude                                 hiding (id, length,
+                                                          (.))
 
-import Graphics.GPipe.Internal.Expr
-import Graphics.GPipe.Internal.Shader
-import Graphics.GPipe.Internal.Compiler
-import Graphics.GPipe.Internal.PrimitiveArray
-import Graphics.GPipe.Internal.PrimitiveStream
-import Graphics.GPipe.Internal.FragmentStream
+import           Graphics.GPipe.Internal.Compiler        (RenderIOState (rasterizationNameToRenderIO, transformFeedbackToRenderIO))
+import           Graphics.GPipe.Internal.Expr            (ExprM,
+                                                          GGenerativeGeometry,
+                                                          GlobDeclM, S (..),
+                                                          SType (..), VBool,
+                                                          VFloat, VInt, VWord,
+                                                          declareGeometryLayout,
+                                                          stypeName,
+                                                          tellAssignment',
+                                                          tellGlobal,
+                                                          tellGlobalLn,
+                                                          useFInputFromG,
+                                                          useGInput)
+import           Graphics.GPipe.Internal.FragmentStream  (DepthRange (DepthRange),
+                                                          FlatVFloat (..),
+                                                          FragmentInput (FragmentFormat),
+                                                          FragmentStream (..),
+                                                          FragmentStreamData (..),
+                                                          NoPerspectiveVFloat (..),
+                                                          PolygonMode (..),
+                                                          Side (Back, Front),
+                                                          VPos,
+                                                          ViewPort (ViewPort),
+                                                          unFlat, unNPersp)
+import           Graphics.GPipe.Internal.PrimitiveArray  (Geometry (..), Lines,
+                                                          LinesWithAdjacency,
+                                                          Points,
+                                                          PrimitiveTopology (..),
+                                                          Triangles,
+                                                          TrianglesWithAdjacency)
+import           Graphics.GPipe.Internal.PrimitiveStream (PointSize,
+                                                          PrimitiveStream (..),
+                                                          PrimitiveStreamData)
+import           Graphics.GPipe.Internal.Shader          (Shader (..),
+                                                          getNewName,
+                                                          modifyRenderIO)
 
-import Graphics.GL.Core45
+import           Graphics.GL.Core45
 
-import Data.Boolean
-import Data.IntMap.Lazy (insert)
-import Linear.V4
-import Linear.V3
-import Linear.V2
-import Linear.V1
-import Linear.V0
-import Linear.Plucker (Plucker(..))
-import Linear.Quaternion (Quaternion(..))
-import Linear.Affine (Point(..))
+import           Data.Boolean                            (Boolean (true),
+                                                          EqB ((==*)),
+                                                          IfB (ifB))
+import           Data.IntMap.Lazy                        (insert)
+import           Linear.Affine                           (Point (..))
+import           Linear.Plucker                          (Plucker (..))
+import           Linear.Quaternion                       (Quaternion (..))
+import           Linear.V0                               (V0 (..))
+import           Linear.V1                               (V1 (..))
+import           Linear.V2                               (V2 (..))
+import           Linear.V3                               (V3 (..))
+import           Linear.V4                               (V4 (..))
 
 ------------------------------------------------------------------------------------------------------------------------------------
 
@@ -518,8 +559,8 @@ generateAndRasterize sf maxVertices (GeometryStream xs) = Shader $ do
                             setGLPointSize
 
         setGlCullFace Front = glEnable GL_CULL_FACE >> glCullFace GL_BACK -- Back is culled when front is rasterized
-        setGlCullFace Back = glEnable GL_CULL_FACE >> glCullFace GL_FRONT
-        setGlCullFace _ = glDisable GL_CULL_FACE
+        setGlCullFace Back  = glEnable GL_CULL_FACE >> glCullFace GL_FRONT
+        setGlCullFace _     = glDisable GL_CULL_FACE
 
         setGlPolygonMode PolygonFill      = glPolygonMode GL_FRONT_AND_BACK GL_FILL
         setGlPolygonMode PolygonPoint     = do

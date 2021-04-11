@@ -1,4 +1,10 @@
-{-# LANGUAGE TypeFamilies, RankNTypes, GeneralizedNewtypeDeriving, FlexibleContexts, FlexibleInstances, GADTs, DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable         #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GADTs                      #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE RankNTypes                 #-}
+{-# LANGUAGE TypeFamilies               #-}
 
 module Graphics.GPipe.Internal.Context
 (
@@ -30,27 +36,35 @@ module Graphics.GPipe.Internal.Context
 )
 where
 
-import Graphics.GPipe.Internal.Format
-import Control.Monad.Exception (MonadException, Exception, MonadAsyncException,bracket)
-import Control.Monad.Trans.Reader
-import qualified Control.Monad.Fail as MF
-import Control.Monad.IO.Class
-import Control.Monad.Trans.Class
-import Data.Typeable
-import qualified Data.IntSet as Set
-import qualified Data.IntMap.Strict as IMap
-import Data.IntMap ((!))
-import qualified Data.Map.Strict as Map
-import Graphics.GL.Core45
-import Graphics.GL.Types
-import Control.Concurrent.MVar
-import Data.IORef
-import Control.Monad
-import Data.Maybe
-import Linear.V2 (V2(V2))
-import Control.Monad.Trans.Except
-import Control.Exception (throwIO)
-import Control.Monad.Trans.State.Strict
+import           Control.Concurrent.MVar          (MVar, modifyMVar_,
+                                                   newEmptyMVar, newMVar,
+                                                   putMVar, readMVar, takeMVar)
+import           Control.Exception                (throwIO)
+import           Control.Monad                    (void)
+import           Control.Monad.Exception          (Exception,
+                                                   MonadAsyncException,
+                                                   MonadException, bracket)
+import qualified Control.Monad.Fail               as MF
+import           Control.Monad.IO.Class           (MonadIO (..))
+import           Control.Monad.Trans.Class        (MonadTrans (..))
+import           Control.Monad.Trans.Except       (ExceptT (..), runExceptT)
+import           Control.Monad.Trans.Reader       (ReaderT (..), ask, asks)
+import           Control.Monad.Trans.State.Strict (StateT (runStateT),
+                                                   evalStateT, get, gets,
+                                                   modify, put)
+import           Data.IORef                       (IORef, mkWeakIORef,
+                                                   readIORef)
+import           Data.IntMap                      ((!))
+import qualified Data.IntMap.Strict               as IMap
+import qualified Data.IntSet                      as Set
+import qualified Data.Map.Strict                  as Map
+import           Data.Maybe                       (maybeToList)
+import           Data.Typeable                    (Typeable)
+import           Graphics.GL.Core45
+import           Graphics.GL.Types                (GLint, GLuint)
+import           Graphics.GPipe.Internal.Format   (WindowBits, WindowFormat,
+                                                   windowBits)
+import           Linear.V2                        (V2 (..))
 
 -- | Class implementing a window handler that can create openGL contexts, such as GLFW or GLUT
 class ContextHandler ctx where
@@ -103,14 +117,14 @@ newtype ContextT ctx os m a =
     deriving (Functor, Applicative, Monad, MonadIO, MonadException, MonadAsyncException)
 
 data ContextEnv ctx = ContextEnv {
-    context :: ctx,
+    context           :: ctx,
     sharedContextData :: SharedContextDatas
   }
 
 data ContextState ctx = ContextState {
-    nextName :: Name,
+    nextName       :: Name,
     perWindowState :: PerWindowState ctx,
-    lastUsedWin :: Name -- -1 is no window. 0 is the hidden window. 1.. are visible windows
+    lastUsedWin    :: Name -- -1 is no window. 0 is the hidden window. 1.. are visible windows
   }
 
 -- | A monad in which shaders are run.
@@ -118,13 +132,13 @@ newtype Render os a = Render { unRender :: ExceptT String (ReaderT RenderEnv (St
 
 data RenderEnv = RenderEnv {
     renderSharedContextData :: SharedContextDatas,
-    nonWindowDoAsync :: ContextDoAsync
+    nonWindowDoAsync        :: ContextDoAsync
   }
 
 data RenderState = RenderState {
     perWindowRenderState :: PerWindowRenderState,
-    renderWriteTextures :: Set.IntSet,
-    renderLastUsedWin :: Name
+    renderWriteTextures  :: Set.IntSet,
+    renderLastUsedWin    :: Name
   }
 
 type Name = Int
@@ -151,7 +165,7 @@ render (Render m) = do
     lift $ put $ cs { lastUsedWin = renderLastUsedWin rs}
     case eError of
       Left s -> liftIO $ throwIO $ GPipeException s
-      _ -> return ()
+      _      -> return ()
 
 registerRenderWriteTexture :: Int -> Render os ()
 registerRenderWriteTexture n = Render $ lift $ lift $ modify $ \ rs -> rs { renderWriteTextures = Set.insert n $ renderWriteTextures rs }

@@ -27,4 +27,4 @@ module Graphics.GPipe.GeometryStream (
 )
 where
 
-import Graphics.GPipe.Internal.GeometryStream
+import           Graphics.GPipe.Internal.GeometryStream

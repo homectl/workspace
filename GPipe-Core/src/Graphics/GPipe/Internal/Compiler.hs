@@ -1,35 +1,35 @@
-{-# LANGUAGE PatternGuards, PatternSynonyms #-}
+{-# LANGUAGE PatternGuards   #-}
+{-# LANGUAGE PatternSynonyms #-}
 module Graphics.GPipe.Internal.Compiler where
 
-import Graphics.GPipe.Internal.Context
-import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.Exception (MonadException)
-import qualified Data.IntMap as Map
-import qualified Data.IntSet as Set
-import Data.IntMap ((!))
-import Data.Maybe
-import Control.Monad
-import Control.Monad.Trans.State.Strict
-import Control.Monad.Trans.Reader
-import Control.Monad.Trans.Except
-import Control.Monad.Trans.Class
+import           Control.Monad                    (forM_, void, when)
+import           Control.Monad.Exception          (MonadException)
+import           Control.Monad.IO.Class           (MonadIO (..))
+import           Control.Monad.Trans.Class        (MonadTrans (lift))
+import           Control.Monad.Trans.Except       (throwE)
+import           Control.Monad.Trans.Reader       (ask)
+import           Control.Monad.Trans.State.Strict (evalState, get, put)
+import           Data.IntMap                      ((!))
+import qualified Data.IntMap                      as Map
+import qualified Data.IntSet                      as Set
+import           Data.Maybe                       (fromJust, isJust, isNothing)
+import           Graphics.GPipe.Internal.Context
 
-import Graphics.GL.Core45
-import Graphics.GL.Types
-import Foreign.Marshal.Utils
-import Foreign.Marshal.Alloc (alloca)
-import Foreign.Storable (peek)
-import Foreign.C.String
-import Foreign.Marshal.Array
-import Foreign.Ptr (nullPtr)
-import Data.Either
-import Control.Exception (throwIO)
-import Data.IORef
-import Data.List (zip5)
-import Data.Word
-import Graphics.GPipe.Internal.Debug
-import System.IO
-import Control.Monad.IO.Class
+import           Control.Exception                (throwIO)
+import           Data.Either                      (partitionEithers)
+import           Data.IORef                       (IORef, mkWeakIORef, newIORef,
+                                                   readIORef)
+import           Data.List                        (zip5)
+import           Data.Word                        (Word32)
+import           Foreign.C.String                 (peekCString, withCString,
+                                                   withCStringLen)
+import           Foreign.Marshal.Alloc            (alloca)
+import           Foreign.Marshal.Array            (allocaArray, withArray)
+import           Foreign.Marshal.Utils            (with)
+import           Foreign.Ptr                      (nullPtr)
+import           Foreign.Storable                 (peek)
+import           Graphics.GL.Core45
+import           Graphics.GL.Types                (GLuint)
 
 -- public
 type WinId = Int
@@ -73,7 +73,7 @@ mapDrawcall f dc = dc{ drawcallFbo = drawcallFbo dc . f, feedbackBuffer = feedba
     where
         feedbackBuffer' = case feedbackBuffer dc of
             Nothing -> Nothing
-            Just b -> Just (b . f)
+            Just b  -> Just (b . f)
 
 -- index/binding refers to what is used in the final shader. Index space is
 -- limited, usually 16 attribname is what was declared, but all might not be
@@ -384,7 +384,7 @@ createRenderer state (drawcall, unis, ubinds, samps, sbinds) pName rastN = do
                                             ++ "Try run this shader from a separate render call where no images from the same texture are drawn to or cleared.\n"
                                 return $ mErr <> mErr2
                             case mErr of
-                                Just e -> throwE e
+                                Just e  -> throwE e
                                 Nothing -> return ()
 
             -- Bind the framebuffer.

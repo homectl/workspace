@@ -1,26 +1,43 @@
-{-# LANGUAGE FlexibleInstances, ScopedTypeVariables, Arrows, GeneralizedNewtypeDeriving, GADTs, MultiParamTypeClasses, FlexibleContexts #-}
+{-# LANGUAGE Arrows                     #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GADTs                      #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
 
 module Graphics.GPipe.Internal.TransformFeedback where
 
-import Graphics.GPipe.Internal.Compiler
-import Graphics.GPipe.Internal.Context
-import Graphics.GPipe.Internal.Expr
-import Graphics.GPipe.Internal.GeometryStream
-import Graphics.GPipe.Internal.PrimitiveStream
-import Graphics.GPipe.Internal.PrimitiveArray
-import Graphics.GPipe.Internal.Buffer
-import Graphics.GPipe.Internal.Shader
-import Graphics.GPipe.Internal.Debug
+import           Graphics.GPipe.Internal.Buffer          (Buffer (bufName, bufTransformFeedback))
+import           Graphics.GPipe.Internal.Compiler        (Drawcall (Drawcall),
+                                                          RenderIOState (transformFeedbackToRenderIO))
+import           Graphics.GPipe.Internal.Context         (Window (getWinName))
+import           Graphics.GPipe.Internal.Expr            (ExprM,
+                                                          ExprResult (ExprResult),
+                                                          GGenerativeGeometry,
+                                                          GlobDeclM, S (..),
+                                                          declareGeometryLayout,
+                                                          runExprM)
+import           Graphics.GPipe.Internal.GeometryStream  (GeometryExplosive (declareGeometry, enumerateVaryings),
+                                                          GeometryStream (..),
+                                                          GeometryStreamData (..))
+import           Graphics.GPipe.Internal.PrimitiveArray  (PrimitiveTopology (toGeometryShaderOutputTopology, toLayoutOut))
+import           Graphics.GPipe.Internal.PrimitiveStream (PrimitiveStreamData (PrimitiveStreamData),
+                                                          VertexInput (VertexFormat))
+import           Graphics.GPipe.Internal.Shader          (Shader (..), ShaderM,
+                                                          modifyRenderIO,
+                                                          tellDrawcall)
 
-import Graphics.GL.Core45
-import Graphics.GL.Types
+import           Graphics.GL.Core45
+import           Graphics.GL.Types                       (GLuint)
 
-import Data.IORef
-import Data.IntMap.Lazy (insert)
-import Foreign.C.String
-import Foreign.Marshal
-import Foreign.Storable
-import Control.Monad.Trans.State
+import           Control.Monad.Trans.State               (evalState)
+import           Data.IORef                              (readIORef, writeIORef)
+import           Data.IntMap.Lazy                        (insert)
+import           Foreign.C.String                        (newCString)
+import           Foreign.Marshal                         (alloca, free,
+                                                          withArray)
+import           Foreign.Storable                        (Storable (peek))
 
 drawNothing :: forall p a s c ds os f. (PrimitiveTopology p, VertexInput a, GeometryExplosive (VertexFormat a))
     => Window os c ds

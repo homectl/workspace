@@ -1,35 +1,51 @@
-{-# LANGUAGE GADTs, EmptyDataDecls, NoMonomorphismRestriction, TypeFamilies, ScopedTypeVariables, FlexibleInstances, RankNTypes, MultiParamTypeClasses, FlexibleContexts, OverloadedStrings, ViewPatterns, RecordWildCards #-}
+{-# LANGUAGE EmptyDataDecls            #-}
+{-# LANGUAGE FlexibleContexts          #-}
+{-# LANGUAGE FlexibleInstances         #-}
+{-# LANGUAGE GADTs                     #-}
+{-# LANGUAGE MultiParamTypeClasses     #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE OverloadedStrings         #-}
+{-# LANGUAGE RankNTypes                #-}
+{-# LANGUAGE RecordWildCards           #-}
+{-# LANGUAGE ScopedTypeVariables       #-}
+{-# LANGUAGE TypeFamilies              #-}
+{-# LANGUAGE ViewPatterns              #-}
 
 module Graphics.GPipe.Internal.Expr where
 
-import Prelude hiding ((.), id, (<*))
-import Control.Category
-import Control.Monad (void, when)
-import Control.Monad.Trans.Writer
-import Control.Monad.Trans.State
-import Control.Monad.Trans.Reader
-import Data.Maybe
-import Data.Monoid (mconcat, mappend)
-import qualified Control.Monad.Trans.Class as T (lift)
-import Data.SNMap
-import qualified Data.IntMap as Map
-import Data.Boolean
-import Data.List (intercalate)
-import Control.Applicative (liftA, liftA2, liftA3)
-import Linear.V4
-import Linear.V3
-import Linear.V2
-import Linear.V1
-import Linear.V0
-import Linear.Affine
-import Linear.Metric
-import Linear.Matrix
-import Linear.Vector
-import Linear.Conjugate
-import Data.Foldable (Foldable(toList))
-import Data.Int
-import Data.Word
-import Data.Bits -- (FiniteBits(finiteBitSize))
+import           Control.Applicative        (liftA, liftA2, liftA3)
+import           Control.Category           (Category (id, (.)))
+import           Control.Monad              (void, when)
+import qualified Control.Monad.Trans.Class  as T (lift)
+import           Control.Monad.Trans.Reader (ReaderT (runReaderT), ask)
+import           Control.Monad.Trans.State  (State, StateT, evalState,
+                                             evalStateT, execStateT, get,
+                                             modify, put)
+import           Control.Monad.Trans.Writer (Writer, WriterT (runWriterT),
+                                             execWriter, execWriterT, tell)
+import           Data.Bits                  (FiniteBits (finiteBitSize))
+import           Data.Boolean               (Boolean (..), BooleanOf, EqB (..),
+                                             IfB (..), OrdB (..), maxB, minB)
+import           Data.Foldable              (Foldable (toList))
+import           Data.Int                   (Int16, Int32, Int8)
+import qualified Data.IntMap                as Map
+import           Data.List                  (intercalate)
+import           Data.Maybe                 (fromJust, isJust)
+import           Data.Monoid                (mappend, mconcat)
+import           Data.SNMap                 (SNMapReaderT, memoizeM,
+                                             runSNMapReaderT, scopedM)
+import           Data.Word                  (Word16, Word32, Word8)
+import           Linear.Affine              (distanceA)
+import           Linear.Conjugate           (Conjugate, TrivialConjugate)
+import           Linear.Matrix              ((!*!), (!*), (*!))
+import           Linear.Metric              (Metric (distance, dot, norm, signorm))
+import           Linear.V0                  (V0 (..))
+import           Linear.V1                  (V1 (..))
+import           Linear.V2                  (V2 (..))
+import           Linear.V3                  (V3 (..), cross)
+import           Linear.V4                  (V4 (..))
+import           Linear.Vector              (outer)
+import           Prelude                    hiding (id, (.), (<*))
 
 type NextTempVar = Int
 type NextGlobal = Int
@@ -37,22 +53,22 @@ type NextGlobal = Int
 data SType = STypeFloat | STypeInt | STypeBool | STypeUInt | STypeDyn String | STypeMat Int Int | STypeVec Int | STypeIVec Int | STypeUVec Int | STypeGenerativeGeometry
 
 stypeName :: SType -> String
-stypeName STypeFloat = "float"
-stypeName STypeInt = "int"
-stypeName STypeBool = "bool"
-stypeName STypeUInt = "uint"
-stypeName (STypeDyn s) = s
-stypeName (STypeMat r c) = "mat" ++ show c ++ 'x' : show r
-stypeName (STypeVec n) = "vec" ++ show n
-stypeName (STypeIVec n) = "ivec" ++ show n
-stypeName (STypeUVec n) = "uvec" ++ show n
+stypeName STypeFloat              = "float"
+stypeName STypeInt                = "int"
+stypeName STypeBool               = "bool"
+stypeName STypeUInt               = "uint"
+stypeName (STypeDyn s)            = s
+stypeName (STypeMat r c)          = "mat" ++ show c ++ 'x' : show r
+stypeName (STypeVec n)            = "vec" ++ show n
+stypeName (STypeIVec n)           = "ivec" ++ show n
+stypeName (STypeUVec n)           = "uvec" ++ show n
 stypeName STypeGenerativeGeometry = "bool" -- A generative geometry is inherently a write-only value. The 'bool' type is simply here as a crude workaround (hardly a solution).
 
 stypeSize :: SType -> Int
-stypeSize (STypeVec n) = n * 4
+stypeSize (STypeVec n)  = n * 4
 stypeSize (STypeIVec n) = n * 4
 stypeSize (STypeUVec n) = n * 4
-stypeSize _ = 4
+stypeSize _             = 4
 
 -- A functional shader expression.
 type ExprM = SNMapReaderT
@@ -145,16 +161,16 @@ data ShaderStageInput = ShaderStageInput
         -- by a previous shader (or buffer object). The top level of this
         -- expression is expected (how exactly?) to assign a value to the output
         -- variables declared above.
-    ,   expression :: ExprM ()
+    ,   expression         :: ExprM ()
     }
 
 data ShaderStageOutput = ShaderStageOutput
-    {   source :: String -- ^ The shader GLSL source to be compiled.
-    ,   uniforms :: [Int] -- ^ The uniforms used in this shader.
-    ,   samplers :: [Int] -- ^ The samplers used in this shader.
-    ,   inputs :: [Int] -- ^ The input variables used in this shader.
+    {   source               :: String -- ^ The shader GLSL source to be compiled.
+    ,   uniforms             :: [Int] -- ^ The uniforms used in this shader.
+    ,   samplers             :: [Int] -- ^ The samplers used in this shader.
+    ,   inputs               :: [Int] -- ^ The input variables used in this shader.
     ,   previousDeclarations :: GlobDeclM () -- ^ The output declations to include in the previous shader to provide the needed input variables.
-    ,   prevExpression :: ExprM () -- ^ The expression to evaluate in order to produce the previous shader.
+    ,   prevExpression       :: ExprM () -- ^ The expression to evaluate in order to produce the previous shader.
     }
 
 evaluateExpression :: [ExprM ()] -> ExprM () -> GlobDeclM () -> IO ShaderStageOutput
@@ -162,7 +178,7 @@ evaluateExpression staticExpressions expression requiredOutputDeclarations = do
     ExprResult s u ss is pds pe <- runExprM requiredOutputDeclarations expression
     case staticExpressions of
         (se:ses) -> evaluateExpression ses (pe >> se) pds
-        [] -> return $ ShaderStageOutput s u ss is pds pe
+        []       -> return $ ShaderStageOutput s u ss is pds pe
 
 --------------------------------------------------------------------------------
 

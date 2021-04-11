@@ -44,5 +44,4 @@ module Graphics.GPipe.Expr (
 )
 where
 
-import Data.Boolean
-import Graphics.GPipe.Internal.Expr
+import           Graphics.GPipe.Internal.Expr
