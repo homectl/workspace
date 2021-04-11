@@ -40,7 +40,6 @@ jobs:
         run: cabal test GPipe-Core
 
       - name: Push to GPipe-Core
-        id: push_directory
         uses: cpina/github-action-push-to-another-repository@master
         env:
           API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
@@ -53,7 +52,6 @@ jobs:
           commit-message: See ORIGIN_COMMIT
 
       - name: Push to GPipe-GLFW
-        id: push_directory
         uses: cpina/github-action-push-to-another-repository@master
         env:
           API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
