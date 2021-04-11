@@ -200,8 +200,8 @@ initData win = do
     writeTexture2D tex 0 0 (V2 8 8) (cycle (take 8 whiteBlack ++ take 8 blackWhite))
 
     let lights = LightInfo.fromList
-            [ LightUniforms (V3 (-60000) (-60000) 30000) (V3 0.7 1.0 1.0)
-            -- , LightUniforms (V3 (-60000)   60000  30000) (V3 0.0 0.7 0.0)
+            [ LightUniforms (V3 (-60000) (-60000) 30000) (V3 1.3 1.0 1.0)
+            , LightUniforms (V3 (-60000)   60000  30000) (V3 0.0 0.7 0.0)
             -- , LightUniforms (V3   60000  (-60000) 30000) (V3 0.0 0.0 0.7)
             -- , LightUniforms (V3   60000    60000  30000) (V3 0.3 0.3 0.0)
             -- , LightUniforms (V3   80000        0  30000) (V3 0.0 0.3 0.3)

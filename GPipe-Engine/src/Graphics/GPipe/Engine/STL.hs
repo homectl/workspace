@@ -1,6 +1,6 @@
 {-# LANGUAGE LambdaCase     #-}
 {-# LANGUAGE NamedFieldPuns #-}
-module Graphics.GPipe.Engine.STL where
+module Graphics.GPipe.Engine.STL (mustLoadSTL) where
 
 import qualified Graphics.Formats.STL       as STL
 import           Graphics.Formats.STL.Types (STL (..))

@@ -14,7 +14,6 @@ import           Control.Exception                 (catch)
 import           Control.Lens                      ((^.))
 import           Control.Monad.IO.Class            (liftIO)
 import           Data.Functor                      (void)
-import qualified Data.Text                         as T
 import           Graphics.GPipe
 import qualified Graphics.GPipe.Context.GLFW       as GLFW
 import qualified Graphics.GPipe.Context.GLFW.Input as Input

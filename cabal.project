@@ -3,7 +3,6 @@ packages:
   GPipe-Engine/
   GPipe-Fonts/
   GPipe-GLFW4/
-  STL/
   lambdacnc/
   lambdaray/
   scenegraph/

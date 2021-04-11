@@ -3,7 +3,6 @@ module Graphics.GPipe.ExprSpec where
 
 import           Test.Hspec                   (Spec, describe, it, shouldBe)
 
-import qualified Data.Text                    as T
 import           Graphics.GPipe               (V4 (..), identity, ifB, norm,
                                                (==*))
 import           Graphics.GPipe.Internal.Expr

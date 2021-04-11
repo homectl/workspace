@@ -71,7 +71,7 @@ interpret modName = GHC.runGhc (Just libdir) $ do
         -- C:\\Users\\Pippijn\\Documents\\code\\lambdaray\\dist-newstyle\\packagedb\\ghc-8.10.4
         , GHC.packageDBFlags =
             [ F.PackageDB (F.PkgConfFile db)
-            | db <- [ "C:\\Users\\Pippijn\\Documents\\code\\lambdaray\\dist-newstyle\\packagedb\\ghc-8.10.4"
+            | db <- [ "C:\\Users\\Pippijn\\Documents\\code\\workspace\\dist-newstyle\\packagedb\\ghc-8.10.4"
                     , "C:\\Users\\Pippijn\\AppData\\Roaming\\cabal\\store\\ghc-8.10.4\\package.db"
                     ]
             ]

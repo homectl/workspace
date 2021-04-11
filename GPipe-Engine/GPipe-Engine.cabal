@@ -20,17 +20,25 @@ source-repository head
   subdir:   GPipe-Engine
 
 library
+  default-language: Haskell2010
   hs-source-dirs: src
   exposed-modules:
       Graphics.GPipe.Engine.STL
       Graphics.GPipe.Engine.TimeIt
       Graphics.GPipe.Engine
-  build-depends:
-      base
-    , GPipe-Core
-    , GPipe-GLFW4
-    , STL
-    , time
+  other-modules:
+      Graphics.Formats.STL.Parser
+      Graphics.Formats.STL.Printer
+      Graphics.Formats.STL.Types
+      Graphics.Formats.STL
   ghc-options:
       -Wall
-  default-language: Haskell2010
+  build-depends:
+      base                          >= 4.7 && < 5
+    , GPipe-Core                    >= 0.2.3 && < 0.3
+    , GPipe-GLFW4                   >= 2.0 && < 2.1
+    , attoparsec                    >= 0.10 && < 0.15
+    , bytestring                    >= 0.10.2 && < 0.12
+    , cereal                        >= 0.4 && < 0.6
+    , text                          >= 0.11.1.5 && < 1.3
+    , time                          >= 1.0 && < 1.12
