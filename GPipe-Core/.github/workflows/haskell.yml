@@ -37,18 +37,23 @@ jobs:
       - name: Build
         run: cabal build --enable-tests --enable-benchmarks --enable-doc all
       - name: Run tests
-        run: cabal test all
+        run: cabal test --enable-doc all
       - name: Build haddock documentation
-        run: cabal haddock --haddock-for-hackage --enabe-doc
+        run: cabal haddock --haddock-for-hackage --enable-doc
 
       - name: Publish to Hackage
         env:
           API_TOKEN_HACKAGE: ${{ secrets.API_TOKEN_HACKAGE }}
+          PACKAGE: GPipe-Core
+          VERSION: 0.2.3.0
         run: |
           cabal sdist
           curl --header "Authorization: X-ApiKey $API_TOKEN_HACKAGE" \
-            -F "package=@dist-newstyle/sdist/GPipe-Core-2.3.0.tar.gz" \
+            -F "package=@dist-newstyle/sdist/$PACKAGE-$VERSION.tar.gz" \
             "https://hackage.haskell.org/packages/candidates"
           curl --header "Authorization: X-ApiKey $API_TOKEN_HACKAGE" \
-            -F "package=@dist-newstyle/sdist/GPipe-Core-2.3.0-doc.tar.gz" \
-            "https://hackage.haskell.org/packages/candidates"
+            -X PUT \
+            -H "Content-Type: application/x-tar" \
+            -H "Content-Encoding: gzip" \
+            --data-binary "@dist-newstyle/$PACKAGE-$VERSION-docs.tar.gz" \
+            "https://hackage.haskell.org/package/$PACKAGE-$VERSION/candidate/docs"
