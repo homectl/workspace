@@ -8,6 +8,9 @@ module Graphics.GPipe.GeometryStream (
     AnotherFragmentInput(..),
     GeometryExplosive(..),
 
+    -- * Needed for generic functions.
+    GeometryInput(..),
+
     -- * Creating GeometryStream
     geometrize,
     generateAndRasterize,

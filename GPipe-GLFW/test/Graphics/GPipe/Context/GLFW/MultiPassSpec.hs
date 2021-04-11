@@ -93,7 +93,7 @@ renderLoop start win renderings = do
   swapWindowBuffers win
   closeRequested <- GLFW.windowShouldClose win
   Just now <- liftIO GLFW.getTime
-  unless (now - start > 2 || closeRequested == Just True) $
+  unless (now - start > 1 || closeRequested == Just True) $
     renderLoop start win renderings
 
 
