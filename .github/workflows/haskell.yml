@@ -48,5 +48,6 @@ jobs:
           source-directory: "GPipe-Core"
           destination-github-username: "homectl"
           destination-repository-name: "GPipe-Core"
+          target-branch: "main"
           user-email: homectl@homectl.org
           commit-message: See ORIGIN_COMMIT
