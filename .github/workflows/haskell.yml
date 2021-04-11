@@ -38,3 +38,15 @@ jobs:
         run: cabal build --enable-tests --enable-benchmarks all
       - name: Run tests
         run: cabal test GPipe-Core
+
+      - name: Push to GPipe-Core
+        id: push_directory
+        uses: cpina/github-action-push-to-another-repository@master
+        env:
+          API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
+        with:
+          source-directory: "GPipe-Core"
+          destination-github-username: "homectl"
+          destination-repository-name: "GPipe-Core"
+          user-email: homectl@homectl.org
+          commit-message: See ORIGIN_COMMIT
