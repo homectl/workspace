@@ -1,5 +1,6 @@
 ### 2.0.0
 
+- Add support for timed wait using `WaitTimeout` as `EventPolicy` to limit fps.
 - Add `setWindowSizeCallback` so that it is no longer necessary to poll for
   window size changes.
 - **Potentially breaking change:** Add `configEnableDebug :: Bool` field to the
