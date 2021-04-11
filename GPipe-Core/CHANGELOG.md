@@ -1,3 +1,10 @@
+### 0.2.3.0
+
+Pre-release for GPipe-Core.
+
+- Added geometry shader support.
+- Added transform feedback support.
+
 ### 2.2.4
 
 - Support for GHC 8.6.5 (#63)
@@ -31,7 +38,7 @@
 
 ### 2.1.7
 
-- Runtime optimizations (Use BaseVertex for glDraw* instead of offsetting each attribute)
+- Runtime optimizations (Use BaseVertex for glDraw\* instead of offsetting each attribute)
 
 ### 2.1.6
 
