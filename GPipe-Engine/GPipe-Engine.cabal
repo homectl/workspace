@@ -28,7 +28,7 @@ library
   build-depends:
       base
     , GPipe-Core
-    , GPipe-GLFW
+    , GPipe-GLFW4
     , STL
     , time
   ghc-options:

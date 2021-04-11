@@ -1,4 +1,4 @@
-name:           GPipe-GLFW
+name:           GPipe-GLFW4
 version:        1.4.1.5
 cabal-version:  >= 1.10
 build-type:     Simple
@@ -31,13 +31,6 @@ source-repository this
 
 library
   hs-source-dirs: src
-  build-depends:
-      base
-    , GLFW-b
-    , GPipe-Core
-    , async
-    , containers
-    , stm
   ghc-options:
       -Wall
   default-language: Haskell2010
@@ -54,6 +47,13 @@ library
       Graphics.GPipe.Context.GLFW.Handler
       Graphics.GPipe.Context.GLFW.RPC
       Graphics.GPipe.Context.GLFW.Logger
+  build-depends:
+      base
+    , GLFW-b
+    , GPipe-Core
+    , async
+    , containers
+    , stm
 
 test-suite testsuite
   default-language: Haskell2010
@@ -83,7 +83,7 @@ test-suite testsuite
   build-depends:
       base < 5
     , GPipe-Core
-    , GPipe-GLFW
+    , GPipe-GLFW4
     , exception-transformers
     , hspec
     , lens
@@ -103,7 +103,7 @@ benchmark bench
   build-depends:
       base < 5
     , GPipe-Core
-    , GPipe-GLFW
+    , GPipe-GLFW4
     , JuicyPixels
     , criterion
 
@@ -120,7 +120,7 @@ executable playground
   build-depends:
       base < 5
     , GPipe-Core
-    , GPipe-GLFW
+    , GPipe-GLFW4
     , exception-transformers
     , lens
     , transformers

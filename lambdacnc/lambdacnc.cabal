@@ -38,7 +38,7 @@ library
     , GPipe-Core
     , GPipe-Engine
     , GPipe-Fonts
-    , GPipe-GLFW
+    , GPipe-GLFW4
     , data-default
     , directory
     , filepath

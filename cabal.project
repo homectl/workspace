@@ -2,7 +2,7 @@ packages:
   GPipe-Core/
   GPipe-Engine/
   GPipe-Fonts/
-  GPipe-GLFW/
+  GPipe-GLFW4/
   STL/
   lambdacnc/
   lambdaray/

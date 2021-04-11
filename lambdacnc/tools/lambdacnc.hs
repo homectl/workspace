@@ -50,7 +50,7 @@ interpret modName = GHC.runGhc (Just libdir) $ do
             | pkg <-
                 [ "GPipe-Core"
                 , "GPipe-Engine"
-                , "GPipe-GLFW"
+                , "GPipe-GLFW4"
                 , "data-default"
                 , "directory"
                 , "filepath"
@@ -63,6 +63,7 @@ interpret modName = GHC.runGhc (Just libdir) $ do
             | pkg <-
                 [ "GPipe"
                 , "GPipe-Base"
+                , "GPipe-GLFW"
                 ]
             ]
         -- C:\\Users\\Pippijn\\AppData\\Roaming\\cabal\\store\\ghc-8.10.4\\package.db
