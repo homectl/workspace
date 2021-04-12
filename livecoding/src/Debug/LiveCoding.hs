@@ -46,10 +46,12 @@ interpret modName pkgs = GHC.runGhc (Just libdir) $ do
     dflags <- GHC.getSessionDynFlags
     _ <- GHC.setSessionDynFlags (dflags
         { GHC.ghcLink = GHC.LinkInMemory
-        , GHC.hscTarget = GHC.HscAsm
-        -- TODO: figure out how to make this work with HscAsm.
-        -- It works with HscInterpreted, but with HscAsm I get an "impossible"
-        -- error and crash.
+        -- TODO: figure out how to make HscAsm work. It works, but then it
+        -- doesn't reload the code after recompilation.
+        -- , GHC.hscTarget = GHC.HscAsm
+        , GHC.hscTarget = GHC.HscInterpreted
+        -- TODO: figure out how to make this work. With HscAsm, this crashes.
+        -- With HscInterpreted, this says bytecode can't deal with unboxed values.
         -- , GHC.generalFlags = EnumSet.fromList [F.Opt_HideAllPackages]
         , GHC.packageFlags =
             [ F.ExposePackage pkg (F.PackageArg pkg) (F.ModRenaming True [])
