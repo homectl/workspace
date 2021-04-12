@@ -3,11 +3,13 @@
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 
 module Graphics.GPipe.Internal.Format where
 
+import           Data.Text.Lazy        (Text)
 import           Foreign.Marshal.Array (withArray)
 import           Graphics.GL.Core45
 import           Graphics.GL.Types     (GLenum)
@@ -221,12 +223,12 @@ instance TextureFormat DepthStencil where
 class TextureFormat f => ColorSampleable f where
     type Color f a
     type ColorElement f :: *
-    typeStr :: f -> String
-    typeStr4 :: f -> String
+    typeStr :: f -> Text
+    typeStr4 :: f -> Text
     toColor :: f -> V4 x -> Color f x
     fromColor :: f -> Color f x -> [x]
     setBorderColor :: f -> GLenum -> Color f (ColorElement f) -> IO ()
-    samplerPrefix :: f -> String
+    samplerPrefix :: f -> Text
     typeStr = error "You cannot create your own instances of ColorSampleable"
     typeStr4 = error "You cannot create your own instances of ColorSampleable"
     toColor = error "You cannot create your own instances of ColorSampleable"

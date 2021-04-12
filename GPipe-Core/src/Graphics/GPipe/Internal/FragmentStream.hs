@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeSynonymInstances       #-}
@@ -14,6 +15,7 @@ import           Control.Arrow                           (Arrow (arr, first),
 import           Control.Category                        (Category)
 import           Control.Monad.Trans.State.Lazy          (State, evalState, get,
                                                           put)
+import           Data.Text.Lazy                          (Text)
 import           Graphics.GPipe.Internal.Compiler        (RenderIOState (rasterizationNameToRenderIO))
 import           Graphics.GPipe.Internal.Expr
 import           Graphics.GPipe.Internal.PrimitiveStream (PrimitiveStream (..),
@@ -90,7 +92,7 @@ rasterize sf (PrimitiveStream xs) = Shader $ do
                                        y' <- y
                                        z' <- z
                                        w' <- w
-                                       tellAssignment' "gl_Position" $ "vec4("++x'++',':y'++',':z'++',':w'++")"
+                                       tellAssignment' "gl_Position" $ "vec4("<>x'<>","<>y'<>","<>z'<>","<>w'<>")"
         makePointSize Nothing       = return ()
         makePointSize (Just (S ps)) = ps >>= tellAssignment' "gl_PointSize"
         io s =
@@ -147,7 +149,7 @@ newtype FlatVFloat = Flat VFloat
 -- | A float value that doesn't get divided by the interpolated position's w-component during interpolation.
 newtype NoPerspectiveVFloat = NoPerspective VFloat
 
-makeFragment :: String -> SType -> (a -> ExprM String) -> ToFragment a (S c a1)
+makeFragment :: Text -> SType -> (a -> ExprM Text) -> ToFragment a (S c a1)
 makeFragment qual styp f = ToFragment $ Kleisli $ \ x -> do n <- get
                                                             put (n+1)
                                                             return $ S $ useFInput qual "vf" styp n $ f x

@@ -2,11 +2,14 @@
 {-# LANGUAGE EmptyDataDecls       #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE GADTs                #-}
+{-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 module Graphics.GPipe.Internal.PrimitiveArray where
 
+import           Data.Text.Lazy                 (Text)
+import qualified Data.Text.Lazy                 as LT
 import           Graphics.GPipe.Internal.Buffer (B, BInput (..), BPacked,
                                                  Buffer (bufBElement, bufName, bufferLength),
                                                  BufferFormat (getGlType))
@@ -110,8 +113,8 @@ class PrimitiveTopology p where
     toGLtopology :: p -> GLuint
     toPrimitiveSize :: p -> Int
     toGeometryShaderOutputTopology :: p -> GLuint
-    toLayoutIn :: p -> String
-    toLayoutOut :: p -> String
+    toLayoutIn :: p -> Text
+    toLayoutOut :: p -> Text
     data Geometry p a
 
 instance PrimitiveTopology Points where

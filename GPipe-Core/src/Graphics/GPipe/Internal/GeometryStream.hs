@@ -4,6 +4,7 @@
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 
 module Graphics.GPipe.Internal.GeometryStream where
@@ -32,8 +33,8 @@ import           Graphics.GPipe.Internal.Expr            (ExprM,
                                                           stypeName,
                                                           tellAssignment',
                                                           tellGlobal,
-                                                          tellGlobalLn,
-                                                          useFInputFromG,
+                                                          tellGlobalLn, tellST,
+                                                          tshow, useFInputFromG,
                                                           useGInput)
 import           Graphics.GPipe.Internal.FragmentStream  (DepthRange (DepthRange),
                                                           FlatVFloat (..),
@@ -65,6 +66,8 @@ import           Data.Boolean                            (Boolean (true),
                                                           EqB ((==*)),
                                                           IfB (ifB))
 import           Data.IntMap.Lazy                        (insert)
+import           Data.Text.Lazy                          (Text)
+import qualified Data.Text.Lazy                          as LT
 import           Linear.Affine                           (Point (..))
 import           Linear.Plucker                          (Plucker (..))
 import           Linear.Quaternion                       (Quaternion (..))
@@ -78,7 +81,7 @@ import           Linear.V4                               (V4 (..))
 
 type GeometrizationName = Int
 
-type LayoutName = String
+type LayoutName = Text
 
 data GeometryStreamData = GeometryStreamData GeometrizationName LayoutName PrimitiveStreamData
 
@@ -159,8 +162,8 @@ instance AnotherVertexInput a => GeometryInput TrianglesWithAdjacency a where
 
 ------------------------------------------------------------------------------------------------------------------------------------
 
--- makeAnotherVertex :: String -> SType -> ((S c a) -> ExprM String) -> ToAnotherVertex (S c a) (S c a)
-makeAnotherVertex :: String -> SType -> (b -> ExprM String) -> (S c a -> b) -> ToAnotherVertex b b
+-- makeAnotherVertex :: Text -> SType -> ((S c a) -> ExprM Text) -> ToAnotherVertex (S c a) (S c a)
+makeAnotherVertex :: Text -> SType -> (b -> ExprM Text) -> (S c a -> b) -> ToAnotherVertex b b
 makeAnotherVertex qual styp f f' = ToAnotherVertex $ Kleisli $ \ (i, x) -> do
     (j, n) <- get
     let n' = if i == j then n else 0 -- reset when index change
@@ -316,7 +319,7 @@ emitVertex :: GeometryExplosive a => a -> GGenerativeGeometry p a -> GGenerative
 emitVertex a g = S $ do
     g' <- unS g
     exploseGeometry a 0
-    T.lift $ T.lift $ tell "EmitVertex();\n"
+    T.lift $ tellST "EmitVertex();\n"
     return notMeantToBeRead
 
 emitVertexPosition :: GeometryExplosive a => (VPos, a) -> GGenerativeGeometry p (VPos, a) -> GGenerativeGeometry p (VPos, a)
@@ -326,9 +329,9 @@ emitVertexPosition (V4 x y z w, a) g = S $ do
     y' <- unS y
     z' <- unS z
     w' <- unS w
-    tellAssignment' "gl_Position" $ "vec4("++x'++',':y'++',':z'++',':w'++")"
+    tellAssignment' "gl_Position" $ "vec4("<>x'<>"," <> y'<>"," <> z'<>"," <> w'<>")"
     exploseGeometry a 0
-    T.lift $ T.lift $ tell "EmitVertex();\n"
+    T.lift $ tellST "EmitVertex();\n"
     return notMeantToBeRead
 
 emitVertexLayer :: GeometryExplosive a => (VInt, a) -> GGenerativeGeometry p (VInt, a) -> GGenerativeGeometry p (VInt, a)
@@ -336,7 +339,7 @@ emitVertexLayer (i, a) g = S $ do
     g' <- unS g
     i' <- unS i
     tellAssignment' "gl_Layer" i'
-    T.lift $ T.lift $ tell "EmitVertex();\n"
+    T.lift $ tellST "EmitVertex();\n"
     return notMeantToBeRead
 
 emitVertexPositionAndLayer :: GeometryExplosive a => ((VPos, VInt), a) -> GGenerativeGeometry p ((VPos, VInt), a) -> GGenerativeGeometry p ((VPos, VInt), a)
@@ -346,17 +349,17 @@ emitVertexPositionAndLayer ((V4 x y z w, i), a) g = S $ do
     y' <- unS y
     z' <- unS z
     w' <- unS w
-    tellAssignment' "gl_Position" $ "vec4("++x'++',':y'++',':z'++',':w'++")"
+    tellAssignment' "gl_Position" $ "vec4("<>x'<>"," <> y'<>"," <> z'<>"," <> w'<>")"
     exploseGeometry a 0
     i' <- unS i
     tellAssignment' "gl_Layer" i'
-    T.lift $ T.lift $ tell "EmitVertex();\n"
+    T.lift $ tellST "EmitVertex();\n"
     return notMeantToBeRead
 
 endPrimitive :: GGenerativeGeometry p a -> GGenerativeGeometry p a
 endPrimitive g = S $ do
     g' <- unS g
-    T.lift $ T.lift $ tell "EndPrimitive();\n"
+    T.lift $ tellST "EndPrimitive();\n"
     return notMeantToBeRead
 
 ------------------------------------------------------------------------------------------------------------------------------------
@@ -364,10 +367,10 @@ endPrimitive g = S $ do
 class FragmentInput a => GeometryExplosive a where
     exploseGeometry :: a -> Int -> ExprM Int
     declareGeometry :: a -> State Int (GlobDeclM ())
-    enumerateVaryings :: a -> State Int [String]
+    enumerateVaryings :: a -> State Int [Text]
 
 defaultExploseGeometry f x n = do
-    let name = "vgf" ++ show n
+    let name = "vgf" <> tshow n
     x' <- unS (f x)
     tellAssignment' name x'
     return (n + 1)
@@ -375,16 +378,16 @@ defaultExploseGeometry f x n = do
 defaultDeclareGeometry t x = do
     n <- get
     put (n + 1)
-    let name = "vgf" ++ show n
+    let name = "vgf" <> tshow n
     return $ do
         tellGlobal "out "
         tellGlobal $ stypeName t
-        tellGlobalLn $ ' ':name
+        tellGlobalLn $ " " <> name
 
 defaultEnumerateVaryings x = do
     n <- get
     put (n + 1)
-    return ["vgf" ++ show n]
+    return ["vgf" <> tshow n]
 
 instance GeometryExplosive () where
     exploseGeometry _ n = return n
@@ -579,7 +582,7 @@ newtype ToAnotherFragment a b = ToAnotherFragment (Kleisli (State Int) a b) deri
 class FragmentInput a => AnotherFragmentInput a where
     toFragment2 :: ToAnotherFragment a (FragmentFormat a)
 
-makeAnotherFragment :: String -> SType -> (a -> ExprM String) -> ToAnotherFragment a (S c a1)
+makeAnotherFragment :: Text -> SType -> (a -> ExprM Text) -> ToAnotherFragment a (S c a1)
 makeAnotherFragment qual styp f = ToAnotherFragment $ Kleisli $ \ x -> do
         n <- get
         put (n + 1)
@@ -721,37 +724,37 @@ instance FragmentCreator VFloat where
     createFragment = do
         n <- get
         put (n + 1)
-        return $ S (return $ show n)
+        return $ S (return $ tshow n)
 
 instance FragmentCreator FlatVFloat where
     createFragment = do
         n <- get
         put (n + 1)
-        return $ Flat $ S (return $ show n)
+        return $ Flat $ S (return $ tshow n)
 
 instance FragmentCreator NoPerspectiveVFloat where
     createFragment = do
         n <- get
         put (n + 1)
-        return $ NoPerspective $ S (return $ show n)
+        return $ NoPerspective $ S (return $ tshow n)
 
 instance FragmentCreator VInt where
     createFragment = do
         n <- get
         put (n + 1)
-        return $ S (return $ show n)
+        return $ S (return $ tshow n)
 
 instance FragmentCreator VWord where
     createFragment = do
         n <- get
         put (n + 1)
-        return $ S (return $ show n)
+        return $ S (return $ tshow n)
 
 instance FragmentCreator VBool where
     createFragment = do
         n <- get
         put (n + 1)
-        return $ S (return $ show n)
+        return $ S (return $ tshow n)
 
 instance (FragmentCreator a) => FragmentCreator (V0 a) where
     createFragment = return V0

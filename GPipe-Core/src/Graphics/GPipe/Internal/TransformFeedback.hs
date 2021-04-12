@@ -8,6 +8,8 @@
 
 module Graphics.GPipe.Internal.TransformFeedback where
 
+import           Data.Text.Lazy                          (Text)
+import qualified Data.Text.Lazy                          as LT
 import           Graphics.GPipe.Internal.Buffer          (Buffer (bufName, bufTransformFeedback))
 import           Graphics.GPipe.Internal.Compiler        (Drawcall (Drawcall),
                                                           RenderIOState (transformFeedbackToRenderIO))
@@ -68,7 +70,7 @@ tellDrawcalls w (GeometryStream xs) getTransformFeedbackBuffer maxVertices =  ma
             varyingCount = length varyings
             bufferMode = GL_INTERLEAVED_ATTRIBS
             io s pName = do
-                names <- mapM newCString varyings
+                names <- mapM (newCString . LT.unpack) varyings
                 withArray names $ \a -> do
                     glTransformFeedbackVaryings pName (fromIntegral varyingCount) a bufferMode
                 mapM_ free names

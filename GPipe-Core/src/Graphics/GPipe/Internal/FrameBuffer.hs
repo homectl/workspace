@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TupleSections              #-}
 
@@ -16,6 +17,8 @@ import           Data.IORef                              (mkWeakIORef, newIORef,
                                                           readIORef)
 import qualified Data.IntMap                             as IMap
 import           Data.List                               (intercalate)
+import           Data.Text.Lazy                          (Text)
+import qualified Data.Text.Lazy                          as LT
 import           Foreign.Marshal.Alloc                   (alloca)
 import           Foreign.Marshal.Array                   (withArray)
 import           Foreign.Marshal.Utils                   (fromBool, with)
@@ -40,7 +43,7 @@ import           Graphics.GPipe.Internal.Expr            (ExprM,
                                                           runExprM,
                                                           tellAssignment',
                                                           tellGlobal,
-                                                          tellGlobalLn)
+                                                          tellGlobalLn, tshow)
 import           Graphics.GPipe.Internal.Format          (ColorRenderable (clearColor),
                                                           ColorSampleable (Color, ColorElement, fromColor, typeStr),
                                                           ContextColorFormat,
@@ -272,14 +275,14 @@ makeDrawcall (sh, shd, wOrIo) (FragmentStreamData rastN True shaderpos (Primitiv
 
 setColor :: forall c. ColorSampleable c => c -> Int -> FragColor c -> (ExprM (), GlobDeclM ())
 setColor ct n c =
-    let name = "out" ++ show n
+    let name = "out" <> tshow n
         typeS = typeStr ct
     in  ( do
             xs <- mapM unS (fromColor ct c :: [S F (ColorElement c)])
-            tellAssignment' name (typeS ++ "(" ++ intercalate "," xs ++ ")")
+            tellAssignment' name (typeS <> "(" <> LT.intercalate "," xs <> ")")
         , do
             tellGlobal "layout(location = "
-            tellGlobal $ show n
+            tellGlobal $ tshow n
             tellGlobal ") out "
             tellGlobal typeS
             tellGlobal " "

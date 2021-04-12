@@ -3,12 +3,13 @@
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeSynonymInstances       #-}
 
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TupleSections              #-}
 module Graphics.GPipe.Internal.PrimitiveStream where
 
 import           Control.Arrow                          (Arrow (arr, first),
@@ -20,6 +21,8 @@ import           Control.Monad.Trans.State.Strict       (State,
                                                          StateT (runStateT),
                                                          execState, get, modify,
                                                          put)
+import           Data.Text.Lazy                         (Text)
+import qualified Data.Text.Lazy                         as LT
 import           Graphics.GPipe.Internal.Buffer         (B (..), B2 (..),
                                                          B3 (..), B4 (..),
                                                          Buffer (bufTransformFeedback),
@@ -133,7 +136,7 @@ data ToVertex a b = ToVertex
             ,   OffsetToSType -- Offset -> SType?
             )
             (   Reader
-                (   Int {- offset -} -> ExprM String -- Ends up calling useVInput and returning the input variable name (eg. 'in123').
+                (   Int {- offset -} -> ExprM Text -- Ends up calling useVInput and returning the input variable name (eg. 'in123').
                 )
             )
         ) a b)

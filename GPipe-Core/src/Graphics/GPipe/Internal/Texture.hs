@@ -4,12 +4,15 @@
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeFamilies          #-}
 module Graphics.GPipe.Internal.Texture where
 
 import           Control.Monad.IO.Class                       (MonadIO, liftIO)
 import           Data.IntMap.Lazy                             (insert)
+import           Data.Text.Lazy                               (Text)
+import qualified Data.Text.Lazy                               as LT
 import           Graphics.GPipe.Internal.Buffer               (Buffer (bufElementSize, bufName, bufferLength),
                                                                BufferColor,
                                                                BufferFormat (..),
@@ -31,7 +34,7 @@ import           Graphics.GPipe.Internal.Context              (ContextHandler,
 import           Graphics.GPipe.Internal.Expr                 (ExprM, F, FFloat,
                                                                S (..),
                                                                SType (..),
-                                                               scalarS,
+                                                               scalarS, tshow,
                                                                useSampler,
                                                                vec2S, vec3S,
                                                                vec4S)
@@ -971,12 +974,12 @@ doForSampler n io = modifyRenderIO (\s -> s { samplerNameToRenderIO = insert n i
 
 -- | Used instead of 'Format' for shadow samplers. These samplers have specialized sampler values, see 'sample1DShadow' and friends.
 data Shadow
-data Sampler1D f = Sampler1D Int Bool String
-data Sampler1DArray f = Sampler1DArray Int Bool String
-data Sampler2D f = Sampler2D Int Bool String
-data Sampler2DArray f = Sampler2DArray Int Bool String
-data Sampler3D f = Sampler3D Int Bool String
-data SamplerCube f = SamplerCube Int Bool String
+data Sampler1D f = Sampler1D Int Bool Text
+data Sampler1DArray f = Sampler1DArray Int Bool Text
+data Sampler2D f = Sampler2D Int Bool Text
+data Sampler2DArray f = Sampler2DArray Int Bool Text
+data Sampler3D f = Sampler3D Int Bool Text
+data SamplerCube f = SamplerCube Int Bool Text
 
 -- | A GADT to specify where the level of detail and/or partial derivates should be taken from. Some values of this GADT are restricted to
 --   only 'FragmentStream's.
@@ -1071,87 +1074,87 @@ sampler2DArraySize (Sampler2DArray sampId shadow prefix) = vec3S (STypeIVec 3) .
 sampler3DSize (Sampler3D sampId shadow prefix) = vec3S (STypeIVec 3) . getTextureSize prefix sampId (addShadowPrefix shadow "3D")
 samplerCubeSize (SamplerCube sampId shadow prefix) = (\(V2 x _) -> x) . vec2S (STypeIVec 2) . getTextureSize prefix sampId (addShadowPrefix shadow "Cube")
 
-addShadowPrefix :: Bool -> String -> String
-addShadowPrefix shadow = if shadow then (++ "Shadow") else id
+addShadowPrefix :: Bool -> Text -> Text
+addShadowPrefix shadow = if shadow then (<> "Shadow") else id
 
-getTextureSize :: String -> Int -> String -> S c Int -> ExprM String
+getTextureSize :: Text -> Int -> Text -> S c Int -> ExprM Text
 getTextureSize prefix sampId sName l = do s <- useSampler prefix sName sampId
                                           l' <- unS l
-                                          return $ "textureSize(" ++ s ++ ',' : l' ++ ")"
+                                          return $ "textureSize(" <> s <> "," <> l' <> ")"
 
-sample :: e -> String -> String -> String -> Int -> SampleLod lcoord x -> SampleProj x -> Maybe off -> coord -> (coord -> ExprM String) -> (lcoord -> ExprM String) -> (off -> String) -> (coord -> S x Float -> ExprM String) -> V4 (S x e)
+sample :: e -> Text -> Text -> Text -> Int -> SampleLod lcoord x -> SampleProj x -> Maybe off -> coord -> (coord -> ExprM Text) -> (lcoord -> ExprM Text) -> (off -> Text) -> (coord -> S x Float -> ExprM Text) -> V4 (S x e)
 sample _ prefix sDynType sName sampId lod proj off coord vToS lvToS ivToS pvToS =
     vec4S (STypeDyn sDynType) $ do s <- useSampler prefix sName sampId
                                    sampleFunc s proj lod off coord vToS lvToS ivToS pvToS
 
-sampleShadow :: String -> Int -> SampleLod lcoord x -> SampleProj x -> Maybe off -> coord -> (coord -> ExprM String) -> (lcoord -> ExprM String) -> (off -> String) -> (coord -> S x Float -> ExprM String) -> S x Float
+sampleShadow :: Text -> Int -> SampleLod lcoord x -> SampleProj x -> Maybe off -> coord -> (coord -> ExprM Text) -> (lcoord -> ExprM Text) -> (off -> Text) -> (coord -> S x Float -> ExprM Text) -> S x Float
 sampleShadow sName sampId lod proj off coord vToS lvToS civToS pvToS =
-    scalarS STypeFloat $ do s <- useSampler "" (sName ++ "Shadow") sampId
+    scalarS STypeFloat $ do s <- useSampler "" (sName <> "Shadow") sampId
                             sampleFunc s proj lod off coord vToS lvToS civToS pvToS
 
-fetch :: e -> String -> String -> String -> Int -> S x Int -> Maybe off -> coord -> (coord -> ExprM String) -> (off -> String) -> V4 (S x e)
+fetch :: e -> Text -> Text -> Text -> Int -> S x Int -> Maybe off -> coord -> (coord -> ExprM Text) -> (off -> Text) -> V4 (S x e)
 fetch _ prefix sDynType sName sampId lod off coord ivToS civToS =
     vec4S (STypeDyn sDynType) $ do s <- useSampler prefix sName sampId
                                    fetchFunc s off coord lod ivToS civToS
 
-v1toF :: S c Float -> ExprM String
-v2toF :: V2 (S c Float) -> ExprM String
-v3toF :: V3 (S c Float) -> ExprM String
-v4toF :: V4 (S c Float) -> ExprM String
+v1toF :: S c Float -> ExprM Text
+v2toF :: V2 (S c Float) -> ExprM Text
+v3toF :: V3 (S c Float) -> ExprM Text
+v4toF :: V4 (S c Float) -> ExprM Text
 v1toF = unS
 v2toF (V2 x y) = do x' <- unS x
                     y' <- unS y
-                    return $ "vec2(" ++ x' ++ ',':y' ++ ")"
+                    return $ "vec2(" <> x' <> "," <> y' <> ")"
 v3toF (V3 x y z) = do x' <- unS x
                       y' <- unS y
                       z' <- unS z
-                      return $ "vec3(" ++ x' ++ ',':y' ++ ',':z' ++ ")"
+                      return $ "vec3(" <> x' <> "," <> y' <> "," <> z' <> ")"
 v4toF (V4 x y z w) = do x' <- unS x
                         y' <- unS y
                         z' <- unS z
                         w' <- unS w
-                        return $ "vec4(" ++ x' ++ ',':y' ++ ',':z' ++ ',':w' ++ ")"
+                        return $ "vec4(" <> x' <> "," <> y' <> "," <> z' <> "," <> w' <> ")"
 
-iv1toF :: S c Int -> ExprM String
-iv2toF :: V2 (S c Int) -> ExprM String
-iv3toF :: V3 (S c Int) -> ExprM String
+iv1toF :: S c Int -> ExprM Text
+iv2toF :: V2 (S c Int) -> ExprM Text
+iv3toF :: V3 (S c Int) -> ExprM Text
 iv1toF = unS
 iv2toF (V2 x y) = do x' <- unS x
                      y' <- unS y
-                     return $ "ivec2(" ++ x' ++ ',':y' ++ ")"
+                     return $ "ivec2(" <> x' <> "," <> y' <> ")"
 iv3toF (V3 x y z) = do x' <- unS x
                        y' <- unS y
                        z' <- unS z
-                       return $ "ivec3(" ++ x' ++ ',':y' ++ ',':z' ++ ")"
+                       return $ "ivec3(" <> x' <> "," <> y' <> "," <> z' <> ")"
 
-civ1toF :: Int -> String
-civ2toF :: V2 Int -> String
-civ3toF :: V3 Int -> String
-civ1toF = show
-civ2toF (V2 x y) = "ivec2(" ++ show x ++ ',':show y ++ ")"
-civ3toF (V3 x y z) = "ivec3(" ++ show x ++ ',':show y ++ ',':show z ++ ")"
-pv1toF :: S c Float -> S c Float -> ExprM String
-pv2toF :: V2 (S c Float) -> S c Float -> ExprM String
-pv3toF :: V3 (S c Float) -> S c Float -> ExprM String
+civ1toF :: Int -> Text
+civ2toF :: V2 Int -> Text
+civ3toF :: V3 Int -> Text
+civ1toF = tshow
+civ2toF (V2 x y) = "ivec2(" <> tshow x <> "," <> tshow y <> ")"
+civ3toF (V3 x y z) = "ivec3(" <> tshow x <> "," <> tshow y <> "," <> tshow z <> ")"
+pv1toF :: S c Float -> S c Float -> ExprM Text
+pv2toF :: V2 (S c Float) -> S c Float -> ExprM Text
+pv3toF :: V3 (S c Float) -> S c Float -> ExprM Text
 
 pv1toF x y = do x' <- unS x
                 y' <- unS y
-                return $ "vec2(" ++ x' ++ ',':y' ++ ")"
+                return $ "vec2(" <> x' <> "," <> y' <> ")"
 pv2toF (V2 x y) z = do x' <- unS x
                        y' <- unS y
                        z' <- unS z
-                       return $ "vec3(" ++ x' ++ ',':y' ++ ',':z' ++ ")"
+                       return $ "vec3(" <> x' <> "," <> y' <> "," <> z' <> ")"
 pv3toF (V3 x y z) w = do x' <- unS x
                          y' <- unS y
                          z' <- unS z
                          w' <- unS w
-                         return $ "vec4(" ++ x' ++ ',':y' ++ ',':z' ++  ',':w' ++ ")"
+                         return $ "vec4(" <> x' <> "," <> y' <> "," <> z' <> "," <> w' <> ")"
 
 sampleFunc s proj lod off coord vToS lvToS civToS pvToS = do
     pc <- projCoordParam proj
     l <- lodParam lod
     b <- biasParam lod
-    return $ "texture" ++ projName proj ++ lodName lod ++ offName off ++ '(' : s ++ ',' : pc ++ l ++ o ++ b ++ ")"
+    return $ "texture" <> projName proj <> lodName lod <> offName off <> "(" <> s <> "," <> pc <> l <> o <> b <> ")"
   where
     o = offParam off civToS
 
@@ -1161,13 +1164,13 @@ sampleFunc s proj lod off coord vToS lvToS civToS pvToS = do
     projCoordParam Nothing  = vToS coord
     projCoordParam (Just p) = pvToS coord p
 
-    lodParam (SampleLod x) = fmap (',':) (unS x)
-    lodParam (SampleGrad x y) = (++) <$> fmap (',':) (lvToS x) <*> fmap (',':) (lvToS y)
+    lodParam (SampleLod x) = fmap ("," <> ) (unS x)
+    lodParam (SampleGrad x y) = (<>) <$> fmap ("," <> ) (lvToS x) <*> fmap ("," <> ) (lvToS y)
     lodParam _ = return ""
 
-    biasParam :: SampleLod v x -> ExprM String
+    biasParam :: SampleLod v x -> ExprM Text
     biasParam (SampleBias (S x)) = do x' <- x
-                                      return $ ',':x'
+                                      return $ "," <> x'
     biasParam _ = return ""
 
     lodName (SampleLod _)    = "Lod"
@@ -1177,15 +1180,15 @@ sampleFunc s proj lod off coord vToS lvToS civToS pvToS = do
 fetchFunc s off coord lod vToS civToS = do
     c <- vToS coord
     l <- unS lod
-    return $ "texelFetch" ++ offName off ++ '(' : s ++ ',' : c ++ ',': l ++ o ++ ")"
+    return $ "texelFetch" <> offName off <> "(" <> s <> "," <> c <> "," <>  l <> o <> ")"
   where
     o = offParam off civToS
 
-offParam :: Maybe t -> (t -> String) -> String
+offParam :: Maybe t -> (t -> Text) -> Text
 offParam Nothing _       = ""
-offParam (Just x) civToS = ',' : civToS x
+offParam (Just x) civToS = "," <> civToS x
 
-offName :: Maybe t -> String
+offName :: Maybe t -> Text
 offName Nothing = ""
 offName _       = "Offset"
 

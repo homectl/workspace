@@ -5,6 +5,7 @@
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeSynonymInstances       #-}
@@ -20,6 +21,8 @@ import           Control.Monad.Trans.Reader       (Reader, ask, runReader)
 import           Control.Monad.Trans.Writer       (WriterT (runWriterT), tell)
 import qualified Data.IntMap                      as Map
 import           Data.IntMap.Lazy                 (insert)
+import           Data.Text.Lazy                   (Text)
+import qualified Data.Text.Lazy                   as LT
 import           Data.Word                        (Word32)
 import           Graphics.GPipe.Internal.Buffer   (B (..), B2 (..), B3 (..),
                                                    B4 (..), BInput (..),
@@ -30,8 +33,9 @@ import           Graphics.GPipe.Internal.Compiler (Binding,
 import           Graphics.GPipe.Internal.Expr     (ExprM, GlobDeclM, S (S),
                                                    SType (..), stypeName,
                                                    stypeSize, tellGlobal,
-                                                   tellGlobalLn, useUniform,
-                                                   vec2S'', vec3S'', vec4S'')
+                                                   tellGlobalLn, tshow,
+                                                   useUniform, vec2S'', vec3S'',
+                                                   vec4S'')
 import           Graphics.GPipe.Internal.Shader   (Shader (..), ShaderM,
                                                    askUniformAlignment,
                                                    getNewName, modifyRenderIO)
@@ -68,7 +72,7 @@ getUniform sf = Shader $ do
     blockId <- getNewName
     let (u, offToStype) = shaderGen (useUniform (buildUDecl offToStype) blockId)
         sampleBuffer = makeBuffer undefined undefined uniAl :: Buffer os (Uniform b)
-        shaderGen :: (Int -> ExprM String) -> (UniformFormat b x, OffsetToSType) -- Int is name of uniform block
+        shaderGen :: (Int -> ExprM Text) -> (UniformFormat b x, OffsetToSType) -- Int is name of uniform block
         shaderGen = runReader $ runWriterT $ shaderGenF $ fromBUnifom $ bufBElement sampleBuffer $ BInput 0 0
     doForUniform blockId $ \s bind ->
         let (ub, i) = sf s
@@ -92,11 +96,11 @@ buildUDecl = buildUDecl' 0 . Map.toAscList where
         | off == p = do
             tellGlobal $ stypeName stype
             tellGlobal " u"
-            tellGlobalLn $ show off
+            tellGlobalLn $ tshow off
             buildUDecl' (p + stypeSize stype) xs
         | off > p = do
             tellGlobal "float pad"
-            tellGlobalLn $ show p
+            tellGlobalLn $ tshow p
             buildUDecl' (p + 4) xxs
         | otherwise =
             error "buildUDecl: Expected all offsets to be multiple of 4"
@@ -105,7 +109,7 @@ buildUDecl = buildUDecl' 0 . Map.toAscList where
 type OffsetToSType = Map.IntMap SType
 
 -- | The arrow type for 'toUniform'.
-newtype ToUniform x a b = ToUniform (Kleisli (WriterT OffsetToSType (Reader (Int -> ExprM String))) a b) deriving (Category, Arrow)
+newtype ToUniform x a b = ToUniform (Kleisli (WriterT OffsetToSType (Reader (Int -> ExprM Text))) a b) deriving (Category, Arrow)
 
 makeUniform :: SType -> ToUniform x (B a) (S x b)
 makeUniform styp = ToUniform $ Kleisli $ \bIn -> do
