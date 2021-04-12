@@ -1,12 +1,12 @@
 {-# LANGUAGE NamedFieldPuns #-}
 module Graphics.GPipe.ExprBench (suite) where
 
-import           Criterion.Main              (Benchmark, bench, bgroup, whnfIO)
+import           Criterion.Main               (Benchmark, bench, bgroup, whnfIO)
 
-import Graphics.GPipe.Linear(V2(..), norm)
 import           Graphics.GPipe.Internal.Expr
-import qualified LambdaRay.Config as Config
-import qualified LambdaRay.Schwarzschild as Schwarzschild
+import           Graphics.GPipe.Linear        (V2 (..), norm)
+import qualified LambdaRay.Config             as Config
+import qualified LambdaRay.Schwarzschild      as Schwarzschild
 
 
 benchRaytracer :: Int -> IO String
