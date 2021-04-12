@@ -31,7 +31,7 @@ memoize :: MonadIO m
     -> m a                  -- The "IO call" to execute and cache the result.
     -> m a                  -- The result being naturally also returned.
 memoize getter putter m = do
-    s <- liftIO $ makeStableName $! m -- Does forcing the evaluation make sense here (since we try to avoid it...)? Is it just the first level?
+    s <- liftIO $ makeStableName m
     x <- HT.lookup s . unSNMap <$> getter
     case x of
         Just a -> return a
