@@ -143,9 +143,9 @@ withRasterizedInfo :: (a -> RasterizedInfo -> b) -> FragmentStream a -> Fragment
 withRasterizedInfo f = fmap (\a -> f a (RasterizedInfo (vec4S' "gl_FragCoord") (scalarS' "gl_FrontFacing") (vec2S' "gl_PointCoord")))
 
 -- | A float value that is not interpolated (like integers), and all fragments will instead get the value of the primitive's last vertex
-data FlatVFloat = Flat VFloat
+newtype FlatVFloat = Flat VFloat
 -- | A float value that doesn't get divided by the interpolated position's w-component during interpolation.
-data NoPerspectiveVFloat = NoPerspective VFloat
+newtype NoPerspectiveVFloat = NoPerspective VFloat
 
 makeFragment :: String -> SType -> (a -> ExprM String) -> ToFragment a (S c a1)
 makeFragment qual styp f = ToFragment $ Kleisli $ \ x -> do n <- get

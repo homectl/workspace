@@ -13,7 +13,7 @@
 
 module Graphics.GPipe.Internal.Expr where
 
-import           Control.Applicative        (liftA, liftA2, liftA3)
+import           Control.Applicative        (liftA2, liftA3)
 import           Control.Category           (Category (id, (.)))
 import           Control.Monad              (void, when)
 import qualified Control.Monad.Trans.Class  as T (lift)
@@ -285,7 +285,7 @@ useGInput qual stype i n v = do
             tellGlobal $ stypeName stype
             tellGlobal $ ' ':prefix
             tellGlobal $ show n
-            tellGlobalLn $ "[]"
+            tellGlobalLn "[]"
 
 useFInputFromG :: String -> SType -> Int -> ExprM String -> ExprM String
 useFInputFromG qual stype i v = do
@@ -441,7 +441,7 @@ shaderbaseDeclareDef styp = do
     tell [root]
     return $ S $ return root
 
-shaderbaseAssignDef :: (S x a) -> StateT [String] ExprM ()
+shaderbaseAssignDef :: S x a -> StateT [String] ExprM ()
 shaderbaseAssignDef (S shaderM) = do
     ul <- T.lift shaderM
     xs <- get
@@ -452,8 +452,7 @@ shaderbaseAssignDef (S shaderM) = do
 shaderbaseReturnDef :: ReaderT (ExprM [String]) (State Int) (S x a)
 shaderbaseReturnDef = do
     i <- T.lift getNext
-    m <- ask
-    return $ S $ fmap (!!i) m
+    S . fmap (!!i) <$> ask
 
 -- | Constraint for types that may pass in and out of shader control structures. Define your own instances in terms of others and make sure to
 --   make toBase as lazy as possible.
@@ -890,52 +889,52 @@ instance Real' (S x Float) where
   atan2' = fun2f "atan"
 
 instance (Real' a) => Real' (V0 a) where
-  rsqrt = liftA rsqrt
-  exp2 = liftA exp2
-  log2 = liftA log2
-  floor' = liftA floor'
-  ceiling' = liftA ceiling'
-  fract' = liftA fract'
+  rsqrt = fmap rsqrt
+  exp2 = fmap exp2
+  log2 = fmap log2
+  floor' = fmap floor'
+  ceiling' = fmap ceiling'
+  fract' = fmap fract'
   mod'' = liftA2 mod''
   mix = liftA3 mix
   atan2' = liftA2 atan2'
 instance (Real' a) => Real' (V1 a) where
-  rsqrt = liftA rsqrt
-  exp2 = liftA exp2
-  log2 = liftA log2
-  floor' = liftA floor'
-  ceiling' = liftA ceiling'
-  fract' = liftA fract'
+  rsqrt = fmap rsqrt
+  exp2 = fmap exp2
+  log2 = fmap log2
+  floor' = fmap floor'
+  ceiling' = fmap ceiling'
+  fract' = fmap fract'
   mod'' = liftA2 mod''
   mix = liftA3 mix
   atan2' = liftA2 atan2'
 instance (Real' a) => Real' (V2 a) where
-  rsqrt = liftA rsqrt
-  exp2 = liftA exp2
-  log2 = liftA log2
-  floor' = liftA floor'
-  ceiling' = liftA ceiling'
-  fract' = liftA fract'
+  rsqrt = fmap rsqrt
+  exp2 = fmap exp2
+  log2 = fmap log2
+  floor' = fmap floor'
+  ceiling' = fmap ceiling'
+  fract' = fmap fract'
   mod'' = liftA2 mod''
   mix = liftA3 mix
   atan2' = liftA2 atan2'
 instance (Real' a) => Real' (V3 a) where
-  rsqrt = liftA rsqrt
-  exp2 = liftA exp2
-  log2 = liftA log2
-  floor' = liftA floor'
-  ceiling' = liftA ceiling'
-  fract' = liftA fract'
+  rsqrt = fmap rsqrt
+  exp2 = fmap exp2
+  log2 = fmap log2
+  floor' = fmap floor'
+  ceiling' = fmap ceiling'
+  fract' = fmap fract'
   mod'' = liftA2 mod''
   mix = liftA3 mix
   atan2' = liftA2 atan2'
 instance (Real' a) => Real' (V4 a) where
-  rsqrt = liftA rsqrt
-  exp2 = liftA exp2
-  log2 = liftA log2
-  floor' = liftA floor'
-  ceiling' = liftA ceiling'
-  fract' = liftA fract'
+  rsqrt = fmap rsqrt
+  exp2 = fmap exp2
+  log2 = fmap log2
+  floor' = fmap floor'
+  ceiling' = fmap ceiling'
+  fract' = fmap fract'
   mod'' = liftA2 mod''
   mix = liftA3 mix
   atan2' = liftA2 atan2'

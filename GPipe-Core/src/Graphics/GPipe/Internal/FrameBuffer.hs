@@ -128,11 +128,8 @@ drawDepthStencil :: forall a os f s d st. (DepthRenderable d, StencilRenderable 
     -> Shader os s ()
 
 makeFBOKeys :: IO [FBOKey] -> IO (Maybe FBOKey) -> IO (Maybe FBOKey) -> IO FBOKeys
-makeFBOKeys c d s = do
-    c' <- c
-    d' <- d
-    s' <- s
-    return $ FBOKeys c' d' s'
+makeFBOKeys c d s =
+    FBOKeys <$> c <*> d <*> s
 
 draw sf fs m = Shader $ tellDrawcalls fs $ \c -> let (sh, g, ioc) = runDrawColors (m c) in (sh, g, f ioc)
     where
@@ -637,11 +634,7 @@ clearWindowDepthStencil w d s = inWin w $ do
     glEnable GL_SCISSOR_TEST
 
 maybeThrow :: Monad m => ExceptT e m (Maybe e) -> ExceptT e m ()
-maybeThrow m = do
-    mErr <- m
-    case mErr of
-        Just err -> throwE err
-        Nothing  -> return ()
+maybeThrow = (>>= mapM_ throwE)
 
 ---------------
 glTrue :: Num n => n

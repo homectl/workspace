@@ -147,9 +147,9 @@ type ContextDoAsync = IO () -> IO ()
 
 type PerWindowState ctx = IMap.IntMap (WindowState, ContextWindow ctx) -- -1 is no window. 0 is the hidden window. 1.. are visible windows
 type PerWindowRenderState = IMap.IntMap (WindowState, ContextDoAsync)
-data WindowState = WindowState {
-    windowContextData :: !ContextData
-  }
+newtype WindowState = WindowState
+    { windowContextData :: ContextData
+    }
 
 -- | Run a 'Render' monad, that may have the effect of windows or textures being drawn to.
 --
@@ -190,7 +190,7 @@ runContextT chp (ContextT m) = do
      )
      (\ctx -> evalStateT (runReaderT m (ContextEnv ctx cds)) (ContextState 1 IMap.empty (-1)))
 
-data Window os c ds = Window { getWinName :: Name }
+newtype Window os c ds = Window { getWinName :: Name }
 
 instance Eq (Window os c ds) where
   (Window a) == (Window b) = a == b
@@ -228,7 +228,7 @@ deleteWindow (Window wid) = ContextT $ do
     Just (ws, w) -> do
       ContextEnv ctx cds <-  ask
       let wmap' = IMap.delete wid wmap
-      n' <- if (IMap.null wmap')
+      n' <- if IMap.null wmap'
               then do
                 void $ let ContextT m = createHiddenWin in m -- Create a hidden window before we delete last window
                 return 0 -- The hidden window is now Current
@@ -315,8 +315,8 @@ withContextWindow (Window wid) m = ContextT $ do
   liftIO $ m (snd <$> IMap.lookup wid wmap)
 
 -- | This kind of exception may be thrown from GPipe when a GPU hardware limit is reached (for instance, too many textures are drawn to from the same 'FragmentStream')
-data GPipeException = GPipeException String
-     deriving (Show, Typeable)
+newtype GPipeException = GPipeException String
+    deriving (Show, Typeable)
 
 instance Exception GPipeException
 

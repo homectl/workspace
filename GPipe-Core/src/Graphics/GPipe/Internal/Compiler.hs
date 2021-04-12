@@ -129,7 +129,7 @@ newRenderIOState = RenderIOState Map.empty Map.empty Map.empty Map.empty Map.emp
 -- public
 mapRenderIOState :: (s -> s') -> RenderIOState s' -> RenderIOState s -> RenderIOState s
 mapRenderIOState f (RenderIOState a' b' c' d' e') (RenderIOState a b c d e) =
-    let merge x x' = Map.union x $ Map.map (\ g -> g . f) x'
+    let merge x x' = Map.union x $ Map.map (. f) x'
     in  RenderIOState (merge a a') (merge b b') (merge c c') (merge d d') (merge e e')
 
 -- | May throw a GPipeException
@@ -291,8 +291,8 @@ innerCompile state (drawcall, unis, samps, ubinds, sbinds) = do
                 whenJust' ofShader $ glDetachShader pName
 
                 glDeleteShader vShader
-                whenJust' ogShader $ glDeleteShader
-                whenJust' ofShader $ glDeleteShader
+                whenJust' ogShader glDeleteShader
+                whenJust' ofShader glDeleteShader
 
                 case mPErr of
                     Just errP -> do
@@ -305,8 +305,8 @@ innerCompile state (drawcall, unis, samps, ubinds, sbinds) = do
                     Nothing -> return $ Right pName
             else do
                 glDeleteShader vShader
-                whenJust' ogShader $ glDeleteShader
-                whenJust' ofShader $ glDeleteShader
+                whenJust' ogShader glDeleteShader
+                whenJust' ofShader glDeleteShader
 
                 let err = concat
                         [ maybe "" (\e -> "A vertex shader compilation failed:\n" ++ e ++ "\nSource:\n" ++ vsource) mErrV
@@ -383,9 +383,7 @@ createRenderer state (drawcall, unis, ubinds, samps, sbinds) pName rastN = do
                                         else Just $ "Running shader that samples from texture that currently has an image borrowed from it."
                                             ++ "Try run this shader from a separate render call where no images from the same texture are drawn to or cleared.\n"
                                 return $ mErr <> mErr2
-                            case mErr of
-                                Just e  -> throwE e
-                                Nothing -> return ()
+                            forM_ mErr throwE
 
             -- Bind the framebuffer.
             windowId <- case mFboKeyIO of
@@ -529,7 +527,7 @@ createFeedbackRenderer state (drawcall, unis, ubinds, samps, sbinds) pName getTr
                         drawIO
                         glDisable GL_RASTERIZER_DISCARD
                         glEndTransformFeedback
-                        glEndQuery(GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN);
+                        glEndQuery GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN
                         {-
                         l <- alloca $ \ptr -> do
                             glGetQueryObjectiv tfqName GL_QUERY_RESULT ptr

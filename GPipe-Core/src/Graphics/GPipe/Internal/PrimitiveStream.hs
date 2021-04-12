@@ -8,6 +8,7 @@
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeSynonymInstances       #-}
 
+{-# LANGUAGE TupleSections #-}
 module Graphics.GPipe.Internal.PrimitiveStream where
 
 import           Control.Arrow                          (Arrow (arr, first),
@@ -185,7 +186,7 @@ toPrimitiveStream' getFeedbackBuffer sf = Shader $ do
             fb = getFeedbackBuffer >>= \g -> return (g s)
             ps = getPrimitiveArray (sf s)
         in
-            map drawcall (map (\p -> (fb, p)) ps)
+            map (drawcall . (fb,)) ps
 
     return $ PrimitiveStream [(x, (Nothing, PrimitiveStreamData n uSize))]
 
@@ -205,7 +206,7 @@ toPrimitiveStream' getFeedbackBuffer sf = Shader $ do
                 then glDrawTransformFeedback (toGLtopology p) tfName
                 else do
                     -- Is it costly too do it repeatedly?
-                    l' <- (fromIntegral (toPrimitiveSize p) *) <$> (alloca $ \ptr -> do
+                    l' <- (fromIntegral (toPrimitiveSize p) *) <$> alloca (\ptr -> do
                         glGetQueryObjectiv tfqName GL_QUERY_RESULT ptr
                         peek ptr)
                     -- liftIO $ hPutStrLn stderr $ "queried vertice count: " ++ show l'

@@ -16,10 +16,10 @@ benchCompileExpr n =
 suite :: IO Benchmark
 suite = return $ bgroup "Expr"
     [ bgroup "sum [0..n]"
-        [ bench "10000" $ whnfIO (benchCompileExpr 10000)
-        , bench "20000" $ whnfIO (benchCompileExpr 20000)
-        , bench "30000" $ whnfIO (benchCompileExpr 30000)
-        , bench "40000" $ whnfIO (benchCompileExpr 40000)
-        , bench "50000" $ whnfIO (benchCompileExpr 50000)
+        [ bench "1000" $ whnfIO (benchCompileExpr 1000)
+        , bench "2000" $ whnfIO (benchCompileExpr 2000)
+        , bench "3000" $ whnfIO (benchCompileExpr 3000)
+        , bench "4000" $ whnfIO (benchCompileExpr 4000)
+        , bench "5000" $ whnfIO (benchCompileExpr 5000)
         ]
     ]

@@ -63,7 +63,7 @@ tellDrawcalls :: forall p a s c ds os. (PrimitiveTopology p, VertexInput a, Geom
 tellDrawcalls w (GeometryStream xs) getTransformFeedbackBuffer maxVertices =  mapM_ f xs where
     f (x, gsd@(GeometryStreamData n layoutName _)) = do
 
-        let shaderDeclarations = (evalState (declareGeometry (undefined :: VertexFormat a)) 0)
+        let shaderDeclarations = evalState (declareGeometry (undefined :: VertexFormat a)) 0
             varyings = evalState (enumerateVaryings (undefined :: VertexFormat a)) 0
             varyingCount = length varyings
             bufferMode = GL_INTERLEAVED_ATTRIBS
