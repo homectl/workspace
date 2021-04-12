@@ -45,7 +45,7 @@ jobs:
         env:
           API_TOKEN_HACKAGE: ${{ secrets.API_TOKEN_HACKAGE }}
           PACKAGE: GPipe-Engine
-          VERSION: 0.1
+          VERSION: 0.0.1
         run: |
           cabal sdist
           curl --header "Authorization: X-ApiKey $API_TOKEN_HACKAGE" \

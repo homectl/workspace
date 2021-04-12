@@ -5,4 +5,5 @@ packages:
   GPipe-GLFW4/
   lambdacnc/
   lambdaray/
+  livecoding/
   scenegraph/

@@ -1,5 +1,5 @@
 name:           GPipe-Engine
-version:        0.1
+version:        0.0.1
 cabal-version:  >= 1.10
 build-type:     Simple
 author:         Pippijn van Steenhoven
@@ -8,7 +8,7 @@ license-file:   LICENSE
 copyright:      Pippijn van Steenhoven
 category:       Graphics
 stability:      Experimental
-homepage:       https://github.com/homectl/lambdaray
+homepage:       https://github.com/homectl/GPipe-Engine
 synopsis:       3D rendering engine based on GPipe
 description:
                 3D rendering engine based on GPipe.
@@ -16,7 +16,7 @@ maintainer:     Pippijn van Steenhoven
 
 source-repository head
   type:     git
-  location: https://github.com/homectl/lambdaray
+  location: https://github.com/homectl/workspace
   subdir:   GPipe-Engine
 
 library

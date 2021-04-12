@@ -19,6 +19,11 @@ description:
 maintainer:     Pippijn van Steenhoven
 data-files:     CHANGELOG.md
 
+source-repository head
+  type:     git
+  location: https://github.com/homectl/workspace
+  subdir:   GPipe-Core
+
 library
   hs-source-dirs: src
   default-language: Haskell2010

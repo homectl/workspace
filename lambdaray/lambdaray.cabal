@@ -41,7 +41,5 @@ executable lambdaray
       -threaded
   build-depends:
       base < 5
-    , directory
-    , ghc
-    , ghc-paths
     , lambdaray
+    , livecoding

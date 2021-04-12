@@ -41,7 +41,7 @@ cleanupShaders = do
 
 runProgram :: IO ()
 runProgram = do
-    Env.setEnv "GPIPE_DEBUG" "1"
+    Env.setEnv "GPIPE_DEBUG" "11"
     cleanupShaders
 
     runContextT GLFW.defaultHandleConfig{GLFW.configEventPolicy = Just $ GLFW.WaitTimeout $ 1 / fps } $ do

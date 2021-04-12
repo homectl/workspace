@@ -8,7 +8,7 @@ license-file:   LICENSE
 copyright:      Mark Wassell 2009
 category:       Graphics
 stability:      Experimental
-homepage:       https://github.com/homectl/lambdaray
+homepage:       https://github.com/homectl/workspace
 synopsis:       Scene Graph
 description:
                 Scene Graph Library.
@@ -16,7 +16,7 @@ maintainer:     Pippijn van Steenhoven
 
 source-repository head
   type:     git
-  location: https://github.com/homectl/lambdaray
+  location: https://github.com/homectl/workspace
   subdir:   scenegraph
 
 library
