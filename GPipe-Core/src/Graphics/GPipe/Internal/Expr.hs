@@ -92,7 +92,7 @@ stypeSize _             = 4
 
 -- A functional shader expression.
 type ExprM = SNMapReaderT
-    [Text]                  -- Cached GLSL source code.
+    [Text]                  -- Declared names (t*, vg*, vgf*).
     (StateT ExprState IO)   -- IO to create stable names.
 
 type GlobDeclM = Writer Text
@@ -387,11 +387,11 @@ tellAssignment typ m = fmap head . memoizeM $ do
     tellAssignment' name val
     return [name]
 
-tellST :: Text -> StateT ExprState IO ()
-tellST text = modify' $ \(ExprState s nvar body) -> ExprState s nvar (body <> LTB.fromLazyText text)
-
 tellAssignment' :: Text -> RValue -> ExprM ()
 tellAssignment' name string = T.lift $ tellST $ mconcat [name, " = ", string, ";\n"]
+
+tellST :: Text -> StateT ExprState IO ()
+tellST text = modify' $ \(ExprState s nvar body) -> ExprState s nvar (body <> LTB.fromLazyText text)
 
 discard :: FBool -> ExprM ()
 discard (S m) = do

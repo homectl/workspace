@@ -1,3 +1,9 @@
+### 0.2.3.1
+
+- 10-18x performance improvement in the shader compiler. This should speed up
+  your load times significantly if you have complex shaders. The shaders
+  themselves won't be faster, though.
+
 ### 0.2.3.0
 
 Pre-release for GPipe-Core.

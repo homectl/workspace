@@ -11,12 +11,12 @@ module LambdaRay.GPU (main) where
 import qualified Codec.Picture                     as Pic
 import qualified Codec.Picture.Types               as Pic
 import           Control.Concurrent                (threadDelay)
-import           Control.Concurrent.MVar
+import           Control.Concurrent.MVar           (modifyMVar_, newMVar,
+                                                    readMVar)
 import           Control.Monad                     (unless)
 import           Control.Monad.IO.Class            (MonadIO, liftIO)
 import qualified Data.Time.Clock                   as Time
 import           Graphics.GPipe
-import qualified System.Environment as Env
 import qualified Graphics.GPipe.Context.GLFW       as GLFW
 import qualified Graphics.GPipe.Context.GLFW.Input as Input
 import           LambdaRay.Config                  (Config (..), DiskMode (..),
@@ -25,6 +25,7 @@ import           LambdaRay.Config                  (Config (..), DiskMode (..),
                                                     defaultRuntimeConfig)
 import qualified LambdaRay.Schwarzschild           as Schwarzschild
 import           Prelude                           hiding ((<*))
+import qualified System.Environment                as Env
 import           System.IO                         (hFlush, stdout)
 
 viewPort :: V2 Int
@@ -75,7 +76,7 @@ main = do
       mvStepfactor <- liftIO $ newMVar 1
       mvStepsize <- liftIO $ newMVar 0.4
 
-      _ <- Input.setKeyCallback win $ Just $ \k i s m -> do
+      _ <- Input.setKeyCallback win $ Just $ \k i s _m -> do
         putStrLn $ "Key: " ++ show k ++ " " ++ show i ++ " " ++ show s
         case (k, s) of
           (Input.Key'A, Input.KeyState'Pressed) ->

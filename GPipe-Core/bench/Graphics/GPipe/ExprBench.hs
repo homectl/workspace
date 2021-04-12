@@ -2,7 +2,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Graphics.GPipe.ExprBench (suite) where
 
-import           Criterion.Main               (Benchmark, bench, bgroup, whnfIO)
+import           Criterion.Main               (Benchmark, bench, bgroup, nfIO,
+                                               whnfIO)
 
 import           Graphics.GPipe.Internal.Expr
 import           Graphics.GPipe.Linear        (V2 (..), norm)
@@ -32,17 +33,17 @@ benchSum n = do
 suite :: IO Benchmark
 suite = return $ bgroup "Expr"
     [ bgroup "raytracer"
-        [ {-bench  "5" $ whnfIO (benchRaytracer  5)
-        , bench "10" $ whnfIO (benchRaytracer 10)
-        , bench "15" $ whnfIO (benchRaytracer 15)
-        , bench "20" $ whnfIO (benchRaytracer 20)
-        , -}bench "250" $ whnfIO (benchRaytracer 250)
+        [ bench  "50" $ whnfIO (benchRaytracer  50)
+        , bench "100" $ whnfIO (benchRaytracer 100)
+        , bench "150" $ whnfIO (benchRaytracer 150)
+        , bench "200" $ whnfIO (benchRaytracer 200)
+        , bench "250" $ whnfIO (benchRaytracer 250)
         ]
-    -- , bgroup "sum [0..n]"
-    --     [ bench "1000" $ whnfIO (benchSum 1000)
-    --     , bench "2000" $ whnfIO (benchSum 2000)
-    --     , bench "3000" $ whnfIO (benchSum 3000)
-    --     , bench "4000" $ whnfIO (benchSum 4000)
-    --     , bench "5000" $ whnfIO (benchSum 5000)
-    --     ]
+    , bgroup "sum [0..n]"
+        [ bench "1000" $ nfIO (benchSum 1000)
+        , bench "2000" $ nfIO (benchSum 2000)
+        , bench "3000" $ nfIO (benchSum 3000)
+        , bench "4000" $ nfIO (benchSum 4000)
+        , bench "5000" $ nfIO (benchSum 5000)
+        ]
     ]
