@@ -46,13 +46,14 @@ interpret modName pkgs = GHC.runGhc (Just libdir) $ do
     dflags <- GHC.getSessionDynFlags
     _ <- GHC.setSessionDynFlags (dflags
         { GHC.ghcLink = GHC.LinkInMemory
-        , GHC.hscTarget = GHC.HscInterpreted
-        -- TODO: figure out how to get something like -fobject-code to work here
-        -- , GHC.hscTarget = GHC.HscAsm
+        , GHC.hscTarget = GHC.HscAsm
+        -- TODO: figure out how to make this work with HscAsm.
+        -- It works with HscInterpreted, but with HscAsm I get an "impossible"
+        -- error and crash.
         -- , GHC.generalFlags = EnumSet.fromList [F.Opt_HideAllPackages]
         , GHC.packageFlags =
             [ F.ExposePackage pkg (F.PackageArg pkg) (F.ModRenaming True [])
-            | pkg <- {-"base" :-} pkgs]
+            | pkg <- "base" : pkgs]
         -- C:\\Users\\Pippijn\\AppData\\Roaming\\cabal\\store\\ghc-8.10.4\\package.db
         -- C:\\Users\\Pippijn\\Documents\\code\\lambdaray\\dist-newstyle\\build\\x86_64-windows\\ghc-8.10.4\\lambdaray-0.0.1\\package.conf.inplace
         -- C:\\Users\\Pippijn\\Documents\\code\\lambdaray\\dist-newstyle\\packagedb\\ghc-8.10.4
