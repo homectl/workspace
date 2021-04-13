@@ -4,6 +4,10 @@
   your load times significantly if you have complex shaders. The shaders
   themselves won't be faster, though.
 
+Huge thanks to the following people who helped identify optimisation opportunities:
+- dpwiz
+- Mikolaj Konarski
+
 ### 0.2.3.0
 
 Pre-release for GPipe-Core.
