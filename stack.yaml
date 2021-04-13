@@ -1,0 +1,20 @@
+resolver: lts-16.13
+
+allow-newer: true
+
+packages:
+  - "GPipe-Core"
+  - "GPipe-Engine"
+  - "GPipe-Fonts"
+  - "GPipe-GLFW4"
+  - "lambdacnc"
+  - "lambdaray"
+  - "scenegraph"
+
+# use custom ext-stg whole program compiler GHC
+compiler: ghc-8.11.0.20200527
+
+# use local GHC (for development)
+system-ghc: true
+extra-path:
+  - "/home/pippijn/code/ghc-whole-program-compiler-project/ghc-wpc/_build/stage1/bin"

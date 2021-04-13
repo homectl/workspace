@@ -1,5 +1,4 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-
 module Data.SNMap
     ( SNMapReaderT
     , runSNMapReaderT

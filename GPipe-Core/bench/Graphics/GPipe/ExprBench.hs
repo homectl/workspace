@@ -9,12 +9,10 @@ import           Graphics.GPipe.Internal.Expr
 import           Graphics.GPipe.Linear        (V2 (..), norm)
 import qualified LambdaRay.Config             as Config
 import qualified LambdaRay.Schwarzschild      as Schwarzschild
-import           System.Mem                   (performGC)
 
 
 benchRaytracer :: Int -> IO String
 benchRaytracer iterations = do
-    -- performGC
     let
         config = Config.defaultConfig{Config.iterations}
         rt = Config.defaultRuntimeConfig
@@ -24,7 +22,6 @@ benchRaytracer iterations = do
 
 benchSum :: Int -> IO String
 benchSum n = do
-    performGC
     let expr :: FFloat
         expr = sum $ map fromIntegral [0..n]
     finalSource <$> runExprM (tellGlobal "") (unS expr >>= tellAssignment' "result")
@@ -34,16 +31,16 @@ suite :: IO Benchmark
 suite = return $ bgroup "Expr"
     [ bgroup "raytracer"
         [ bench  "50" $ whnfIO (benchRaytracer  50)
-        , bench "100" $ whnfIO (benchRaytracer 100)
-        , bench "150" $ whnfIO (benchRaytracer 150)
-        , bench "200" $ whnfIO (benchRaytracer 200)
-        , bench "250" $ whnfIO (benchRaytracer 250)
+        -- , bench "100" $ whnfIO (benchRaytracer 100)
+        -- , bench "150" $ whnfIO (benchRaytracer 150)
+        -- , bench "200" $ whnfIO (benchRaytracer 200)
+        -- , bench "250" $ whnfIO (benchRaytracer 250)
         ]
-    , bgroup "sum [0..n]"
-        [ bench "1000" $ nfIO (benchSum 1000)
-        , bench "2000" $ nfIO (benchSum 2000)
-        , bench "3000" $ nfIO (benchSum 3000)
-        , bench "4000" $ nfIO (benchSum 4000)
-        , bench "5000" $ nfIO (benchSum 5000)
-        ]
+    -- , bgroup "sum [0..n]"
+    --     [ bench "1000" $ nfIO (benchSum 1000)
+    --     , bench "2000" $ nfIO (benchSum 2000)
+    --     , bench "3000" $ nfIO (benchSum 3000)
+    --     , bench "4000" $ nfIO (benchSum 4000)
+    --     , bench "5000" $ nfIO (benchSum 5000)
+    --     ]
     ]

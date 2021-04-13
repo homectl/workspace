@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns              #-}
 {-# LANGUAGE EmptyDataDecls            #-}
 {-# LANGUAGE FlexibleContexts          #-}
 {-# LANGUAGE FlexibleInstances         #-}
@@ -10,7 +11,6 @@
 {-# LANGUAGE ScopedTypeVariables       #-}
 {-# LANGUAGE TypeFamilies              #-}
 {-# LANGUAGE ViewPatterns              #-}
-
 module Graphics.GPipe.Internal.Expr where
 
 import           Control.Applicative               (liftA2, liftA3)
@@ -42,6 +42,7 @@ import           Data.Text.Lazy                    (Text)
 import qualified Data.Text.Lazy                    as LT
 import qualified Data.Text.Lazy.Builder            as LTB
 import           Data.Word                         (Word16, Word32, Word8)
+import           GHC.Generics                      (Generic)
 import           Linear.Affine                     (distanceA)
 import           Linear.Conjugate                  (Conjugate, TrivialConjugate)
 import           Linear.Matrix                     ((!*!), (!*), (*!))
@@ -65,11 +66,11 @@ data SType
     | STypeInt
     | STypeBool
     | STypeUInt
-    | STypeDyn Text
-    | STypeMat Int Int
-    | STypeVec Int
-    | STypeIVec Int
-    | STypeUVec Int
+    | STypeDyn !Text
+    | STypeMat !Int !Int
+    | STypeVec !Int
+    | STypeIVec !Int
+    | STypeUVec !Int
     | STypeGenerativeGeometry
 
 stypeName :: SType -> Text
@@ -98,29 +99,35 @@ type ExprM = SNMapReaderT
 type GlobDeclM = Writer Text
 
 data ExprState = ExprState
-    ShaderInputs -- Shader inputs, lazy because this is sometimes undefined.
+    !ShaderInputs -- Shader input variables, uniforms, samplers, declarations.
     !NextTempVar -- Next unique variable name.
     !LTB.Builder -- Generated GLSL source code.
 
+emptyExprState :: ExprState
+emptyExprState = ExprState emptyShaderInputs 0 mempty
+
 data ShaderInputs = ShaderInputs
-    {   shaderUsedUniformBlocks :: Map.IntMap (GlobDeclM ())
-    ,   shaderUsedSamplers :: Map.IntMap (GlobDeclM ())
-    ,   shaderUsedInput :: Map.IntMap -- (For vertex shaders, the value is always undefined and the int is the parameter name, for later shader stages it uses some name local to the transition instead)
+    {   shaderUsedUniformBlocks :: !(Map.IntMap (GlobDeclM ()))
+    ,   shaderUsedSamplers :: !(Map.IntMap (GlobDeclM ()))
+    ,   shaderUsedInput :: !(Map.IntMap -- (For vertex shaders, the value is always undefined and the int is the parameter name, for later shader stages it uses some name local to the transition instead)
         (   GlobDeclM () -- Input declarations for the current shader
         ,   (   ExprM () -- Output assignement required in the previous shader (obviously undefined for the first shader - see comment below.)
             ,   GlobDeclM () -- Output declaration required in the previous shader.
             ) -- Requirements for the previous shader.
-        )
-    ,   shaderGeometry :: Maybe (GlobDeclM ()) -- Input/ouput layout declarations for current shader (if it is a geometry shader).
+        ))
+    ,   shaderGeometry :: !(Maybe (GlobDeclM ())) -- Input/output layout declarations for current shader (if it is a geometry shader).
     }
 
+emptyShaderInputs :: ShaderInputs
+emptyShaderInputs = ShaderInputs Map.empty Map.empty Map.empty Nothing
+
 data ExprResult = ExprResult
-    { finalSource :: String -- Shader source produced.
-    , unis        :: [Int] -- Uniforms used in this shader.
-    , samps       :: [Int] -- Samplers used in this shader.
-    , inps        :: [Int] -- Inputs used in this shader (only varying or uniforms too?).
-    , prevDecls   :: GlobDeclM () -- Output declarations required in the previous shader (how it differs from the inputs used?).
-    , prevSs      :: ExprM () -- Expression to construct in the previous shader.
+    { finalSource :: !String -- Shader source produced.
+    , unis        :: ![Int] -- Uniforms used in this shader.
+    , samps       :: ![Int] -- Samplers used in this shader.
+    , inps        :: ![Int] -- Inputs used in this shader (only varying or uniforms too?).
+    , prevDecls   :: !(GlobDeclM ()) -- Output declarations required in the previous shader (how it differs from the inputs used?).
+    , prevSs      :: !(ExprM ()) -- Expression to construct in the previous shader.
     }
 
 {- Rough idea:
@@ -144,7 +151,7 @@ runExprM
     -> ExprM () -- expression to construct in this shader (including assignements to the output variables)
     -> IO ExprResult
 runExprM d m = do
-    ExprState st _ body <- execStateT (runSNMapReaderT m) (ExprState (ShaderInputs Map.empty Map.empty Map.empty Nothing) 0 mempty)
+    ExprState st _ body <- execStateT (runSNMapReaderT m) emptyExprState
     let (unis, uniDecls) = unzip $ Map.toAscList (shaderUsedUniformBlocks st)
         (samps, sampDecls) = unzip $ Map.toAscList (shaderUsedSamplers st)
         (inps, inpDescs) = unzip $ Map.toAscList (shaderUsedInput st)
@@ -172,21 +179,21 @@ runExprM d m = do
 
 data ShaderStageInput = ShaderStageInput
     {    -- The output declarations to include in the shader's source.
-        outputDeclarations :: GlobDeclM ()
+        outputDeclarations :: !(GlobDeclM ())
         -- The expression to evaluate as a source using variables to be provided
         -- by a previous shader (or buffer object). The top level of this
         -- expression is expected (how exactly?) to assign a value to the output
         -- variables declared above.
-    ,   expression         :: ExprM ()
+    ,   expression         :: !(ExprM ())
     }
 
 data ShaderStageOutput = ShaderStageOutput
-    {   source               :: String -- ^ The shader GLSL source to be compiled.
-    ,   uniforms             :: [Int] -- ^ The uniforms used in this shader.
-    ,   samplers             :: [Int] -- ^ The samplers used in this shader.
-    ,   inputs               :: [Int] -- ^ The input variables used in this shader.
-    ,   previousDeclarations :: GlobDeclM () -- ^ The output declations to include in the previous shader to provide the needed input variables.
-    ,   prevExpression       :: ExprM () -- ^ The expression to evaluate in order to produce the previous shader.
+    {   source               :: !String         -- ^ The shader GLSL source to be compiled.
+    ,   uniforms             :: ![Int]          -- ^ The uniforms used in this shader.
+    ,   samplers             :: ![Int]          -- ^ The samplers used in this shader.
+    ,   inputs               :: ![Int]          -- ^ The input variables used in this shader.
+    ,   previousDeclarations :: !(GlobDeclM ()) -- ^ The output declations to include in the previous shader to provide the needed input variables.
+    ,   prevExpression       :: !(ExprM ())     -- ^ The expression to evaluate in order to produce the previous shader.
     }
 
 evaluateExpression :: [ExprM ()] -> ExprM () -> GlobDeclM () -> IO ShaderStageOutput
@@ -593,7 +600,7 @@ ifThenElse c t e i = fromBase x $ ifThenElse_ c (toBase x . t . fromBase x) (toB
                     scopedM $ void $ evalStateT (shaderbaseAssign $ els lifted) decls
                     T.lift $ tellST "}\n"
                     return decls
-            in  evalState (runReaderT (shaderbaseReturn (toBase x (errShaderType :: b))) ifM) (ExprState undefined 0 mempty)
+            in evalState (runReaderT (shaderbaseReturn (toBase x (errShaderType :: b))) ifM) emptyExprState
 
 -- | @ifThen c f x@ will return @f x@ if @c@ evaluates to 'true' or @x@ otherwise.
 --
@@ -605,7 +612,8 @@ ifThen c t i = fromBase x $ ifThen_ c (toBase x . t . fromBase x) (toBase x i)
         x = undefined :: x
         ifThen_ :: S x Bool -> (ShaderBase (ShaderBaseType a) x -> ShaderBase (ShaderBaseType a) x) -> ShaderBase (ShaderBaseType a) x -> ShaderBase (ShaderBaseType a) x
         ifThen_ bool thn a =
-            let ifM = memoizeM $ do
+            let ifM :: ExprM [Text]
+                ifM = memoizeM $ do
                     boolStr <- unS bool
                     (lifted, decls) <- runWriterT $ shaderbaseDeclare (toBase x (errShaderType :: a))
                     void $ evalStateT (shaderbaseAssign a) decls
@@ -613,7 +621,7 @@ ifThen c t i = fromBase x $ ifThen_ c (toBase x . t . fromBase x) (toBase x i)
                     scopedM $ void $ evalStateT (shaderbaseAssign $ thn lifted) decls
                     T.lift $ tellST "}\n"
                     return decls
-            in  evalState (runReaderT (shaderbaseReturn (toBase x (errShaderType :: a))) ifM) (ExprState undefined 0 mempty)
+            in evalState (runReaderT (shaderbaseReturn (toBase x (errShaderType :: a))) ifM) emptyExprState
 
 tellIf :: RValue -> ExprM ()
 tellIf boolStr = T.lift $ tellST $ mconcat ["if(", boolStr, "){\n" ]
@@ -637,48 +645,58 @@ while c f i = fromBase x $ while_ (c . fromBase x) (toBase x . f . fromBase x) (
                         tellAssignment' boolDecl loopedBoolStr
                     T.lift $ tellST "}\n"
                     return decls
-            in  evalState (runReaderT (shaderbaseReturn (toBase x (errShaderType :: a))) whileM) (ExprState undefined 0 mempty)
+            in evalState (runReaderT (shaderbaseReturn (toBase x (errShaderType :: a))) whileM) emptyExprState
 
 errShaderType :: a
-errShaderType = error "toBase in an instance of ShaderType is not lazy enough! Make sure you use tilde (~) for each pattern match on a data constructor."
+errShaderType = error $ unlines
+    [ "toBase in an instance of ShaderType is not lazy enough!"
+    , "Make sure you use tilde (~) for each pattern match on a data constructor."
+    ]
 
 --------------------------------------------------------------------------------------------------------------------------------
 
 
 bin :: SType -> Text -> S c x -> S c y -> S c z
-bin typ o (S a) (S b) = S $ tellAssignment typ $ do a' <- a
-                                                    b' <- b
-                                                    return $ "(" <> a' <> o <> b' <> ")"
+bin typ o (S a) (S b) = S $ tellAssignment typ $ do
+    a' <- a
+    b' <- b
+    return $ "(" <> a' <> o <> b' <> ")"
 
 fun1 :: SType -> Text -> S c x -> S c y
-fun1 typ f (S a) = S $ tellAssignment typ $ do a' <- a
-                                               return $ f <> "(" <> a' <> ")"
+fun1 typ f (S a) = S $ tellAssignment typ $ do
+    a' <- a
+    return $ f <> "(" <> a' <> ")"
 
 fun2 :: SType -> Text -> S c x -> S c y -> S c z
-fun2 typ f (S a) (S b) = S $ tellAssignment typ $ do a' <- a
-                                                     b' <- b
-                                                     return $ f <> "(" <> a' <> "," <> b' <> ")"
+fun2 typ f (S a) (S b) = S $ tellAssignment typ $ do
+    a' <- a
+    b' <- b
+    return $ f <> "(" <> a' <> "," <> b' <> ")"
 
 fun3 :: SType -> Text -> S c x -> S c y -> S c z -> S c w
-fun3 typ f (S a) (S b) (S c) = S $ tellAssignment typ $ do a' <- a
-                                                           b' <- b
-                                                           c' <- c
-                                                           return $ f <> "(" <> a' <> "," <> b' <> "," <> c' <>")"
+fun3 typ f (S a) (S b) (S c) = S $ tellAssignment typ $ do
+    a' <- a
+    b' <- b
+    c' <- c
+    return $ f <> "(" <> a' <> "," <> b' <> "," <> c' <>")"
 
 fun4 :: SType -> Text -> S c x -> S c y -> S c z -> S c w -> S c r
-fun4 typ f (S a) (S b) (S c) (S d) = S $ tellAssignment typ $ do a' <- a
-                                                                 b' <- b
-                                                                 c' <- c
-                                                                 d' <- d
-                                                                 return $ f <> "(" <> a' <> "," <> b' <> "," <> c' <> "," <> d' <>")"
+fun4 typ f (S a) (S b) (S c) (S d) = S $ tellAssignment typ $ do
+    a' <- a
+    b' <- b
+    c' <- c
+    d' <- d
+    return $ f <> "(" <> a' <> "," <> b' <> "," <> c' <> "," <> d' <>")"
 
 postop :: SType -> Text -> S c x -> S c y
-postop typ f (S a) = S $ tellAssignment typ $ do a' <- a
-                                                 return $ "(" <> a' <> f <> ")"
+postop typ f (S a) = S $ tellAssignment typ $ do
+    a' <- a
+    return $ "(" <> a' <> f <> ")"
 
 preop :: SType -> Text -> S c x -> S c y
-preop typ f (S a) = S $ tellAssignment typ $ do a' <- a
-                                                return $ "(" <> f <> a' <> ")"
+preop typ f (S a) = S $ tellAssignment typ $ do
+    a' <- a
+    return $ "(" <> f <> a' <> ")"
 
 binf :: Text -> S c x -> S c y -> S c Float
 binf = bin STypeFloat
