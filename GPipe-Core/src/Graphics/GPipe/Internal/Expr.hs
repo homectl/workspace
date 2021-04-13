@@ -15,6 +15,7 @@ module Graphics.GPipe.Internal.Expr where
 
 import           Control.Applicative               (liftA2, liftA3)
 import           Control.Category                  (Category (id, (.)))
+import           Control.DeepSeq                   (force)
 import           Control.Monad                     (void, when)
 import qualified Control.Monad.Trans.Class         as T (lift)
 import           Control.Monad.Trans.Reader        (ReaderT (runReaderT), ask)
@@ -122,7 +123,7 @@ emptyShaderInputs :: ShaderInputs
 emptyShaderInputs = ShaderInputs Map.empty Map.empty Map.empty Nothing
 
 data ExprResult = ExprResult
-    { finalSource :: !String -- Shader source produced.
+    { finalSource :: !Text -- Shader source produced.
     , unis        :: ![Int] -- Uniforms used in this shader.
     , samps       :: ![Int] -- Samplers used in this shader.
     , inps        :: ![Int] -- Inputs used in this shader (only varying or uniforms too?).
@@ -150,7 +151,7 @@ runExprM
     :: GlobDeclM () -- output declarations to include in this shader
     -> ExprM () -- expression to construct in this shader (including assignements to the output variables)
     -> IO ExprResult
-runExprM d m = do
+runExprM d (force -> !m) = do
     ExprState st _ body <- execStateT (runSNMapReaderT m) emptyExprState
     let (unis, uniDecls) = unzip $ Map.toAscList (shaderUsedUniformBlocks st)
         (samps, sampDecls) = unzip $ Map.toAscList (shaderUsedSamplers st)
@@ -166,12 +167,12 @@ runExprM d m = do
             sequence_ inpDecls
         finalSource = mconcat
             [ "#version 450\n"
-            , LT.unpack $ execWriter decls
+            , execWriter decls
             , "void main() {\n"
-            , LT.unpack $ LTB.toLazyText body
+            , LTB.toLazyText body
             , "}\n"
             ]
-    return ExprResult{..}
+    return $! ExprResult{..}
 
 --------------------------------------------------------------------------------
 -- The section below is just an unused draft.
@@ -188,7 +189,7 @@ data ShaderStageInput = ShaderStageInput
     }
 
 data ShaderStageOutput = ShaderStageOutput
-    {   source               :: !String         -- ^ The shader GLSL source to be compiled.
+    {   source               :: !Text         -- ^ The shader GLSL source to be compiled.
     ,   uniforms             :: ![Int]          -- ^ The uniforms used in this shader.
     ,   samplers             :: ![Int]          -- ^ The samplers used in this shader.
     ,   inputs               :: ![Int]          -- ^ The input variables used in this shader.

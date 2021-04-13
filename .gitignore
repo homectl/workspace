@@ -3,8 +3,8 @@
 *.geom
 *.vert
 
-test.dot
-test.svg
+/*.dot
+/*.svg
 
 dist
 dist-*

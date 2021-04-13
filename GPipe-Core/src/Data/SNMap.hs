@@ -1,4 +1,6 @@
+{-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE StandaloneDeriving         #-}
 module Data.SNMap
     ( SNMapReaderT
     , runSNMapReaderT
@@ -7,6 +9,7 @@ module Data.SNMap
     ) where
 
 import           Control.Applicative              (Applicative)
+import           Control.DeepSeq                  (NFData)
 import           Control.Monad.Exception          (MonadAsyncException,
                                                    MonadException)
 import           Control.Monad.IO.Class           (MonadIO, liftIO)
@@ -14,6 +17,7 @@ import           Control.Monad.Trans.Class        (MonadTrans (..))
 import           Control.Monad.Trans.State.Strict (StateT (StateT), evalStateT,
                                                    get, put)
 import qualified Data.HashMap.Strict              as HT
+import           GHC.Generics                     (Generic)
 import           System.Mem.StableName            (StableName, makeStableName)
 
 {- A map (SN stands for stable name) to cache the results of computations
@@ -42,7 +46,10 @@ memoize getter putter m = do
 
 -- An (IO) action producing a 'b' value while caching 'a' values along the way.
 newtype SNMapReaderT a m b = SNMapReaderT (StateT (SNMap (SNMapReaderT a m) a) m b)
-    deriving (Functor, Applicative, Monad, MonadIO, MonadException, MonadAsyncException)
+    deriving (Functor, Applicative, Monad, MonadIO, MonadException, MonadAsyncException, NFData)
+
+deriving instance Generic (StateT a m b)
+instance NFData (StateT a m b)
 
 runSNMapReaderT :: MonadIO m => SNMapReaderT a m b -> m b
 runSNMapReaderT (SNMapReaderT m) = do

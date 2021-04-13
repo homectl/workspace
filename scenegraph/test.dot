@@ -1,0 +1,16 @@
+digraph {
+	node [label="\N"];
+	2	[label=Camera];
+	4	[label=<<TABLE><TR><TD>1.0</TD> <TD>0.0</TD> <TD>0.0</TD> <TD>4.0</TD></TR><TR><TD>0.0</TD> <TD>1.0</TD> <TD>0.0</TD> <TD>0.0</TD></TR><TR><TD>0.0</TD> <TD>0.0</TD> <TD>1.0</TD> <TD>-2.0</TD></TR><TR><TD>0.0</TD> <TD>0.0</TD> <TD>0.0</TD> <TD>1.0</TD></TR></TABLE>>];
+	4 -> 2;
+	6	[label=Light];
+	8	[label=<<TABLE><TR><TD>1.0</TD> <TD>0.0</TD> <TD>0.0</TD> <TD>0.0</TD></TR><TR><TD>0.0</TD> <TD>1.0</TD> <TD>0.0</TD> <TD>5.0</TD></TR><TR><TD>0.0</TD> <TD>0.0</TD> <TD>1.0</TD> <TD>3.0</TD></TR><TR><TD>0.0</TD> <TD>0.0</TD> <TD>0.0</TD> <TD>1.0</TD></TR></TABLE>>];
+	8 -> 6;
+	10	[label=<<TABLE><TR><TD>Ambient</TD> <TD><TABLE><TR><TD BGCOLOR="#ffff00">RGBA</TD> <TD>1.0</TD> <TD>1.0</TD> <TD>0.0</TD> <TD>1.0</TD></TR></TABLE></TD></TR><TR><TD>Diffuse</TD> <TD><TABLE><TR><TD BGCOLOR="#ffff00">RGBA</TD> <TD>1.0</TD> <TD>1.0</TD> <TD>0.0</TD> <TD>1.0</TD></TR></TABLE></TD></TR><TR><TD>Specular</TD> <TD><TABLE><TR><TD BGCOLOR="#666666">RGBA</TD> <TD>0.4</TD> <TD>0.4</TD> <TD>0.4</TD> <TD>1.0</TD></TR></TABLE></TD></TR><TR><TD>Shine</TD> <TD>5.0</TD></TR></TABLE>>];
+	10 -> 8;
+	12	[label=<<TABLE><TR><TD>0.99999994</TD> <TD>0.0</TD> <TD>0.0</TD> <TD>0.0</TD></TR><TR><TD>0.0</TD> <TD>-4.371139e-8</TD> <TD>-1.0</TD> <TD>0.0</TD></TR><TR><TD>0.0</TD> <TD>1.0</TD> <TD>-4.371139e-8</TD> <TD>0.0</TD></TR><TR><TD>0.0</TD> <TD>0.0</TD> <TD>0.0</TD> <TD>1.0</TD></TR></TABLE>>];
+	12 -> 10;
+	14	[label=Group];
+	14 -> 4;
+	14 -> 12;
+}
