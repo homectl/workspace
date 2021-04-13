@@ -13,13 +13,21 @@ import qualified Graphics.GPipe.Engine.TimeIt as TimeIt
 
 
 data Solids a = Solids
-    { objBed    :: a
-    , objGround :: a
-    , objXAxis  :: a
-    , objYAxis  :: a
-    , objZAxis  :: a
+    { objBed    :: !a
+    , objGround :: !a
+    , objXAxis  :: !a
+    , objYAxis  :: !a
+    , objZAxis  :: !a
     }
     deriving (Functor, Foldable, Traversable)
+
+solidsSTLs :: Solids String
+solidsSTLs = Solids
+    "data/models/Bed.stl"
+    "data/models/Ground.stl"
+    "data/models/XAxis.stl"
+    "data/models/YAxis.stl"
+    "data/models/ZAxis.stl"
 
 instance Applicative Solids where
     pure a = Solids a a a a a

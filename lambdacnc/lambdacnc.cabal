@@ -53,6 +53,7 @@ executable lambdacnc
   main-is:          lambdacnc.hs
   ghc-options:
       -Wall
+      -rtsopts
       -threaded
   build-depends:
       base < 5

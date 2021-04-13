@@ -28,7 +28,6 @@ library
       Graphics.GPipe.Engine
   other-modules:
       Graphics.Formats.STL.Parser
-      Graphics.Formats.STL.Printer
       Graphics.Formats.STL.Types
       Graphics.Formats.STL
   ghc-options:

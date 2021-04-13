@@ -3,19 +3,20 @@
 
 module Graphics.Formats.STL.Parser where
 
-import           Prelude                    hiding (takeWhile)
+import           Prelude                          hiding (takeWhile)
 
-import           Data.Attoparsec.Text       (Parser, double, inClass, many',
-                                             skipSpace, string, takeWhile)
-import qualified Data.Attoparsec.Text       as P
-import           Data.Text                  (Text)
-import qualified Data.Text.IO               as Text
+import           Data.Attoparsec.ByteString.Char8 (Parser, inClass, many',
+                                                   rational, skipSpace, string,
+                                                   takeWhile)
+import qualified Data.Attoparsec.ByteString.Char8 as P
+import qualified Data.ByteString                  as BS
 
-import           Graphics.Formats.STL.Types (STL (STL), Triangle (Triangle),
-                                             Vector, triple)
+import           Graphics.Formats.STL.Types       (STL (STL),
+                                                   Triangle (Triangle), Vector,
+                                                   triple)
 
 loadSTL :: FilePath -> IO (Either String STL)
-loadSTL f = P.parseOnly stlParser <$> Text.readFile f
+loadSTL f = P.parseOnly stlParser <$> BS.readFile f
 
 mustLoadSTL :: FilePath -> IO STL
 mustLoadSTL f = loadSTL f >>= \case
@@ -28,7 +29,7 @@ mustLoadSTL f = loadSTL f >>= \case
 stlParser :: Parser STL
 stlParser = STL <$> nameParser <*> many' triangle
 
-nameParser :: Parser Text
+nameParser :: Parser BS.ByteString
 nameParser = text "solid" *> takeWhile (inClass " -~") <* skipSpace
 
 triangle :: Parser Triangle
@@ -53,8 +54,8 @@ v3 = triple <$> ss float <*> ss float <*> ss float
 ss :: Parser a -> Parser a
 ss p = p <* skipSpace
 
-text :: Text -> Parser Text
+text :: BS.ByteString -> Parser BS.ByteString
 text t = string t <* skipSpace
 
 float :: Parser Float
-float = realToFrac <$> double
+float = rational

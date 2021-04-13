@@ -24,7 +24,8 @@ import           LambdaCNC.Config                  (GlobalUniformBuffer,
                                                     ObjectUniforms (..),
                                                     Solids (..),
                                                     defaultGlobalUniforms,
-                                                    defaultObjectUniforms)
+                                                    defaultObjectUniforms,
+                                                    solidsSTLs)
 import qualified LambdaCNC.Shaders.Blend           as BlendShader
 import qualified LambdaCNC.Shaders.Bulb            as BulbShader
 import qualified LambdaCNC.Shaders.Common          as Shaders
@@ -162,13 +163,10 @@ initData
 initData win = do
     startTime <- liftIO Time.getCurrentTime
 
-    solids <- timeIt "Loading object meshes" $ do
-        meshes <- liftIO $ Solids
-            <$> STL.mustLoadSTL "data/models/Bed.stl"
-            <*> STL.mustLoadSTL "data/models/Ground.stl"
-            <*> STL.mustLoadSTL "data/models/XAxis.stl"
-            <*> STL.mustLoadSTL "data/models/YAxis.stl"
-            <*> STL.mustLoadSTL "data/models/ZAxis.stl"
+    meshes <- timeIt "Loading object meshes" $ do
+        liftIO $ mapM STL.mustLoadSTL solidsSTLs
+
+    solids <- timeIt "Uploading meshes to GPU" $ do
         forM meshes $ \mesh -> do
             buf <- newBuffer $ length mesh
             writeBuffer buf 0 mesh
