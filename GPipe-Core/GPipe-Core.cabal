@@ -74,7 +74,7 @@ library
     , exception-transformers        >= 0.3 && < 0.5
     , transformers                  >= 0.5.2 && < 0.6
     , gl                            >= 0.8 && < 0.10
-    , lens                          >= 5.0 && < 5.1
+    , lens                          >= 4.15.2 && < 6
     , linear                        >= 1.18 && < 1.22
     , text                          >= 0.10 && < 1.3
     , unordered-containers          >= 0.2 && < 0.3
