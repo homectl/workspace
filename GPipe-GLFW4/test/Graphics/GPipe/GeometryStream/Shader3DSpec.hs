@@ -7,12 +7,6 @@ module Graphics.GPipe.GeometryStream.Shader3DSpec (spec) where
 import           Test.Hspec      (Spec, it)
 
 import           Control.Arrow   (returnA)
-import           Data.Function   ((&))
-import           Graphics.GPipe
-import           Test.ShaderTest (Shaders (Shaders))
-import qualified Test.ShaderTest as S
-
-import           Control.Arrow   (returnA)
 import           Control.Lens    ((^.))
 import           Data.Function   ((&))
 import           Graphics.GPipe

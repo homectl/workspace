@@ -3,6 +3,7 @@ module Graphics.GPipe.ExprSpec where
 
 import           Test.Hspec                   (Spec, describe, it, shouldBe)
 
+import qualified Data.Text.Lazy               as LT
 import           Graphics.GPipe               (V4 (..), identity, ifB, norm,
                                                (==*))
 import           Graphics.GPipe.Internal.Expr
@@ -12,8 +13,8 @@ wrap :: FFloat -> IO ExprResult
 wrap expr = runExprM (tellGlobal "") $ unS expr >>= tellAssignment' "result"
 
 
-golden :: String -> IO ()
-golden = mapM_ (\l -> putStrLn $ "                , " ++ show l) . lines
+golden :: LT.Text -> IO ()
+golden = mapM_ (\l -> putStrLn $ "                , " ++ show l) . LT.lines
 
 
 spec :: Spec
@@ -24,7 +25,7 @@ spec = do
                 b = 2
                 c = a + b
             res <- wrap c
-            finalSource res `shouldBe` unlines
+            finalSource res `shouldBe` LT.unlines
                 [ "#version 450"
                 , "void main() {"
                 , "float t0 = (1+2);"
@@ -36,7 +37,7 @@ spec = do
             let (a, b, c, d) = (1, 2, 3, 4)
                 result = a + b + c + d
             res <- wrap result
-            finalSource res `shouldBe` unlines
+            finalSource res `shouldBe` LT.unlines
                 [ "#version 450"
                 , "void main() {"
                 , "float t0 = (1+2);"
@@ -51,7 +52,7 @@ spec = do
                 e = a + b + c + d
                 result = e + e
             res <- wrap result
-            finalSource res `shouldBe` unlines
+            finalSource res `shouldBe` LT.unlines
                 [ "#version 450"
                 , "void main() {"
                 , "float t0 = (1+2);"
@@ -70,7 +71,7 @@ spec = do
                 c = a ==* b
                 result = norm (ifB c a b)
             res <- wrap result
-            finalSource res `shouldBe` unlines
+            finalSource res `shouldBe` LT.unlines
                 [ "#version 450"
                 , "void main() {"
                 , "bool t0 = (1==5);"
@@ -117,7 +118,7 @@ spec = do
                 c = a ==* b
                 result = norm $ ifThenElse' c a b
             res <- wrap result
-            finalSource res `shouldBe` unlines
+            finalSource res `shouldBe` LT.unlines
                 [ "#version 450"
                 , "void main() {"
                 , "bool t0 = (1==5);"
@@ -155,7 +156,7 @@ spec = do
                 result = norm $ m !* v
             res <- wrap result
             golden $ finalSource res
-            finalSource res `shouldBe` unlines
+            finalSource res `shouldBe` LT.unlines
                 [ "#version 450"
                 , "void main() {"
                 , "vec4 t0 = (vec4(5,6,7,8)*mat4x4(vec4(1,0,0,0),vec4(0,1,0,0),vec4(0,0,1,0),vec4(0,0,0,1)));"

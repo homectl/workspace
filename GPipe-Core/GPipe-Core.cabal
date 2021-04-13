@@ -98,6 +98,7 @@ test-suite testsuite
     , GPipe-Core
     , hspec
     , lens
+    , text
 
 benchmark bench
   default-language: Haskell2010
