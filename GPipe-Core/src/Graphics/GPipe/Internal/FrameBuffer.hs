@@ -269,8 +269,8 @@ makeDrawcall (sh, shd, wOrIo) (FragmentStreamData rastN False shaderpos (Primiti
         ExprResult fsource funis fsamps _ prevDecls prevS <- runExprM shd (discard keep >> sh)
         ExprResult vsource vunis vsamps vinps _ _ <- runExprM prevDecls (prevS >> shaderpos)
         let prefix = "generated-shaders/shader" <> show primN
-        dumpGeneratedFile (prefix <> ".frag") fsource
-        dumpGeneratedFile (prefix <> ".vert") vsource
+        dumpGeneratedFile prefix ".frag" fsource
+        dumpGeneratedFile prefix ".vert" vsource
         return $ Drawcall wOrIo Nothing primN (Just rastN) vsource Nothing (Just fsource) vinps vunis vsamps [] [] funis fsamps ubuff
 makeDrawcall (sh, shd, wOrIo) (FragmentStreamData rastN True shaderpos (PrimitiveStreamData primN ubuff) keep) =
     do
@@ -278,17 +278,17 @@ makeDrawcall (sh, shd, wOrIo) (FragmentStreamData rastN True shaderpos (Primitiv
         ExprResult gsource gunis gsamps _ prevDecls2 prevS2 <- runExprM prevDecls (prevS >> shaderpos)
         ExprResult vsource vunis vsamps vinps _ _ <- runExprM prevDecls2 prevS2
         let prefix = "generated-shaders/shader" <> show primN
-        dumpGeneratedFile (prefix <> ".frag") fsource
-        dumpGeneratedFile (prefix <> ".geom") gsource
-        dumpGeneratedFile (prefix <> ".vert") vsource
+        dumpGeneratedFile prefix ".frag" fsource
+        dumpGeneratedFile prefix ".geom" gsource
+        dumpGeneratedFile prefix ".vert" vsource
         return $ Drawcall wOrIo Nothing primN (Just rastN) vsource (Just gsource) (Just fsource) vinps vunis vsamps gunis gsamps funis fsamps ubuff
 
-dumpGeneratedFile :: FilePath -> Text -> IO ()
-dumpGeneratedFile file text = do
+dumpGeneratedFile :: FilePath -> String -> Text -> IO ()
+dumpGeneratedFile prefix extension text = do
     shouldWrite <- ("GPIPE_DEBUG" `elem`) . map fst <$> Env.getEnvironment
     when shouldWrite $ do
-      LT.writeFile file text
-      LT.writeFile (file <> ".opt") (optimizeShader text)
+      LT.writeFile (prefix <> ".out" <> extension) text
+      LT.writeFile (prefix <> ".opt" <> extension) (optimizeShader text)
 
 setColor :: forall c. ColorSampleable c => c -> Int -> FragColor c -> (ExprM (), GlobDeclM ())
 setColor ct n c =
