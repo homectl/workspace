@@ -19,6 +19,7 @@ import qualified Data.IntMap                             as IMap
 import           Data.List                               (intercalate)
 import           Data.Text.Lazy                          (Text)
 import qualified Data.Text.Lazy                          as LT
+import qualified Data.Text.Lazy.IO                       as LT
 import           Foreign.Marshal.Alloc                   (alloca)
 import           Foreign.Marshal.Array                   (withArray)
 import           Foreign.Marshal.Utils                   (fromBool, with)
@@ -52,6 +53,7 @@ import           Graphics.GPipe.Internal.Format          (ColorRenderable (clear
                                                           StencilRenderable)
 import           Graphics.GPipe.Internal.FragmentStream  (FragmentStream (..),
                                                           FragmentStreamData (..))
+import           Graphics.GPipe.Internal.Optimizer       (optimizeShader)
 import           Graphics.GPipe.Internal.PrimitiveStream (PrimitiveStreamData (PrimitiveStreamData))
 import           Graphics.GPipe.Internal.Shader          (Shader (..), ShaderM,
                                                           tellDrawcall)
@@ -61,6 +63,7 @@ import           Graphics.GPipe.Internal.Texture         (ComparisonFunction,
                                                           getImageFBOKey,
                                                           imageEquals)
 import           Linear.V4                               (V4 (..))
+import qualified System.Environment                      as Env
 
 -- | A monad in which individual color images can be drawn.
 newtype DrawColors os s a = DrawColors (StateT Int (Writer [Int -> (ExprM (), GlobDeclM (), s -> (IO FBOKey, IO (), IO ()))]) a) deriving (Functor, Applicative, Monad)
@@ -265,13 +268,27 @@ makeDrawcall (sh, shd, wOrIo) (FragmentStreamData rastN False shaderpos (Primiti
     do
         ExprResult fsource funis fsamps _ prevDecls prevS <- runExprM shd (discard keep >> sh)
         ExprResult vsource vunis vsamps vinps _ _ <- runExprM prevDecls (prevS >> shaderpos)
+        let prefix = "generated-shaders/shader" <> show primN
+        dumpGeneratedFile (prefix <> ".frag") fsource
+        dumpGeneratedFile (prefix <> ".vert") vsource
         return $ Drawcall wOrIo Nothing primN (Just rastN) vsource Nothing (Just fsource) vinps vunis vsamps [] [] funis fsamps ubuff
 makeDrawcall (sh, shd, wOrIo) (FragmentStreamData rastN True shaderpos (PrimitiveStreamData primN ubuff) keep) =
     do
         ExprResult fsource funis fsamps _ prevDecls prevS <- runExprM shd (discard keep >> sh)
         ExprResult gsource gunis gsamps _ prevDecls2 prevS2 <- runExprM prevDecls (prevS >> shaderpos)
         ExprResult vsource vunis vsamps vinps _ _ <- runExprM prevDecls2 prevS2
+        let prefix = "generated-shaders/shader" <> show primN
+        dumpGeneratedFile (prefix <> ".frag") fsource
+        dumpGeneratedFile (prefix <> ".geom") gsource
+        dumpGeneratedFile (prefix <> ".vert") vsource
         return $ Drawcall wOrIo Nothing primN (Just rastN) vsource (Just gsource) (Just fsource) vinps vunis vsamps gunis gsamps funis fsamps ubuff
+
+dumpGeneratedFile :: FilePath -> Text -> IO ()
+dumpGeneratedFile file text = do
+    shouldWrite <- ("GPIPE_DEBUG" `elem`) . map fst <$> Env.getEnvironment
+    when shouldWrite $ do
+      LT.writeFile file text
+      LT.writeFile (file <> ".opt") (optimizeShader text)
 
 setColor :: forall c. ColorSampleable c => c -> Int -> FragColor c -> (ExprM (), GlobDeclM ())
 setColor ct n c =

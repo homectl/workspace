@@ -15,7 +15,6 @@ module Graphics.GPipe.Internal.Expr where
 
 import           Control.Applicative               (liftA2, liftA3)
 import           Control.Category                  (Category (id, (.)))
-import           Control.DeepSeq                   (force)
 import           Control.Monad                     (void, when)
 import qualified Control.Monad.Trans.Class         as T (lift)
 import           Control.Monad.Trans.Reader        (ReaderT (runReaderT), ask)
@@ -33,7 +32,7 @@ import           Data.Boolean                      (Boolean (..), BooleanOf,
                                                     OrdB (..), maxB, minB)
 import           Data.Foldable                     (Foldable (toList))
 import           Data.Int                          (Int16, Int32, Int8)
-import qualified Data.IntMap.Strict                as Map
+import qualified Data.IntMap.Lazy                  as Map
 import           Data.List                         (intercalate)
 import           Data.Maybe                        (fromJust, isJust)
 import           Data.Monoid                       (mconcat)
@@ -100,7 +99,7 @@ type ExprM = SNMapReaderT
 type GlobDeclM = Writer Text
 
 data ExprState = ExprState
-    !ShaderInputs -- Shader input variables, uniforms, samplers, declarations.
+    ShaderInputs -- Shader input variables, uniforms, samplers, declarations.
     !NextTempVar -- Next unique variable name.
     !LTB.Builder -- Generated GLSL source code.
 
@@ -123,12 +122,15 @@ emptyShaderInputs :: ShaderInputs
 emptyShaderInputs = ShaderInputs Map.empty Map.empty Map.empty Nothing
 
 data ExprResult = ExprResult
-    { finalSource :: !Text -- Shader source produced.
-    , unis        :: ![Int] -- Uniforms used in this shader.
-    , samps       :: ![Int] -- Samplers used in this shader.
-    , inps        :: ![Int] -- Inputs used in this shader (only varying or uniforms too?).
-    , prevDecls   :: !(GlobDeclM ()) -- Output declarations required in the previous shader (how it differs from the inputs used?).
-    , prevSs      :: !(ExprM ()) -- Expression to construct in the previous shader.
+    { finalSource :: !Text          -- ^ Shader source produced.
+    , unis        :: ![Int]         -- ^ Uniforms used in this shader.
+    , samps       :: ![Int]         -- ^ Samplers used in this shader.
+    , inps        :: [Int]          -- ^ Inputs used in this shader (only varying or uniforms too?).
+                                    --   Lazy, because it's not used for fragment and geometry shaders.
+    , prevDecls   :: GlobDeclM ()   -- ^ Output declarations required in the previous shader (how it differs from the inputs used?).
+                                    --   Lazy, because it's not used in the vertex shader.
+    , prevSs      :: ExprM ()       -- ^ Expression to construct in the previous shader.
+                                    --   Lazy, because it's not used in the vertex shader.
     }
 
 {- Rough idea:
@@ -151,7 +153,7 @@ runExprM
     :: GlobDeclM () -- output declarations to include in this shader
     -> ExprM () -- expression to construct in this shader (including assignements to the output variables)
     -> IO ExprResult
-runExprM d (force -> !m) = do
+runExprM d m = do
     ExprState st _ body <- execStateT (runSNMapReaderT m) emptyExprState
     let (unis, uniDecls) = unzip $ Map.toAscList (shaderUsedUniformBlocks st)
         (samps, sampDecls) = unzip $ Map.toAscList (shaderUsedSamplers st)
@@ -172,7 +174,7 @@ runExprM d (force -> !m) = do
             , LTB.toLazyText body
             , "}\n"
             ]
-    return $! ExprResult{..}
+    return ExprResult{..}
 
 --------------------------------------------------------------------------------
 -- The section below is just an unused draft.

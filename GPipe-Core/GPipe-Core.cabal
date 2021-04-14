@@ -57,6 +57,7 @@ library
       Graphics.GPipe.Internal.FrameBuffer
       Graphics.GPipe.Internal.GeometryStream
       Graphics.GPipe.Internal.Linear
+      Graphics.GPipe.Internal.Optimizer
       Graphics.GPipe.Internal.PrimitiveArray
       Graphics.GPipe.Internal.PrimitiveStream
       Graphics.GPipe.Internal.Shader

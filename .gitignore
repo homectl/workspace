@@ -1,10 +1,15 @@
 /wip
 *.frag
+*.frag.opt
 *.geom
+*.geom.opt
 *.vert
+*.vert.opt
 
 /*.dot
 /*.svg
+
+/hie.yaml
 
 dist
 dist-*

@@ -36,8 +36,12 @@ jobs:
           cabal build --only-dependencies --enable-tests --enable-benchmarks all
       - name: Build
         run: cabal build --enable-tests --enable-benchmarks all
-      - name: Run tests
+      - name: Run non-graphics tests
         run: cabal test GPipe-Core
+      - name: Run headless graphics tests
+        uses: GabrielBB/xvfb-action@v1
+        with:
+          run: cabal test GPipe-GLFW4
 
       - name: Push to GPipe-Core
         uses: cpina/github-action-push-to-another-repository@master
