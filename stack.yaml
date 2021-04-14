@@ -13,9 +13,9 @@ packages:
   - "scenegraph"
   - "th-abstraction"
   - "unordered-containers-0.2.10.0"
+  - "Cabal"
 
 extra-deps:
-  - Cabal-3.4.0.0@sha256:74ca2bc93297dc20b291c8dc721055278aa4a7942b0b5aca86766d407e3cbe5f,30533
   - parsec-3.1.14.0@sha256:72d5c57e6e126adaa781ab97b19dc76f68490c0a3d88f14038219994cabe94e1,4356
   - text-1.2.3.2
 
@@ -26,3 +26,6 @@ compiler: ghc-8.11.0.20200527
 system-ghc: true
 extra-path:
   - "/home/pippijn/code/ghc-whole-program-compiler-project/ghc-wpc/_build/stage1/bin"
+
+debug:
+  keep-tmp-files: true
