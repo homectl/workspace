@@ -17,7 +17,7 @@ benchmark = RayTracer
 
 main :: IO ()
 main = do
-    let rt = benchRaytracer 1000
+    let rt = benchRaytracer 100
         sm = benchSum 50000
     case benchmark of
         RayTracer -> replicateM_ iterations $ print . LT.length =<< rt
