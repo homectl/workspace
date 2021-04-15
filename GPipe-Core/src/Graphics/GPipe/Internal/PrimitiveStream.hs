@@ -8,8 +8,12 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeSynonymInstances       #-}
-
 {-# LANGUAGE TupleSections              #-}
+{-# OPTIONS_GHC -Wno-unused-foralls #-}
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
+{-# OPTIONS_GHC -Wno-unused-matches #-}
+{-# OPTIONS_GHC -Wno-missing-signatures #-}
+{-# OPTIONS_GHC -Wno-type-defaults #-}
 module Graphics.GPipe.Internal.PrimitiveStream where
 
 import           Control.Arrow                          (Arrow (arr, first),
@@ -22,7 +26,6 @@ import           Control.Monad.Trans.State.Strict       (State,
                                                          execState, get, modify,
                                                          put)
 import           Data.Text.Lazy                         (Text)
-import qualified Data.Text.Lazy                         as LT
 import           Graphics.GPipe.Internal.Buffer         (B (..), B2 (..),
                                                          B3 (..), B4 (..),
                                                          Buffer (bufTransformFeedback),
@@ -267,7 +270,7 @@ toPrimitiveStream' getFeedbackBuffer sf = Shader $ do
 
         writeUBuffer _ 0 _ = return () -- If the uniform buffer is size 0 there is no buffer
         writeUBuffer bname size a = do
-            error "Cannot happen!"
+            _ <- fail "Cannot happen!"
             glBindBuffer GL_COPY_WRITE_BUFFER bname
             ptr <- glMapBufferRange GL_COPY_WRITE_BUFFER 0 (fromIntegral size) (GL_MAP_WRITE_BIT + GL_MAP_INVALIDATE_BUFFER_BIT)
             void $ runStateT (uWriter a) ptr

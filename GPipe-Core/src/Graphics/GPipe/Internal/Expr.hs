@@ -10,6 +10,8 @@
 {-# LANGUAGE ScopedTypeVariables       #-}
 {-# LANGUAGE TypeFamilies              #-}
 {-# LANGUAGE ViewPatterns              #-}
+{-# OPTIONS_GHC -Wno-type-defaults #-}
+{-# OPTIONS_GHC -Wno-missing-signatures #-}
 module Graphics.GPipe.Internal.Expr where
 
 import           Control.Applicative               (liftA2, liftA3)
@@ -19,8 +21,7 @@ import qualified Control.Monad.Trans.Class         as T (lift)
 import           Control.Monad.Trans.Reader        (ReaderT (runReaderT), ask)
 import           Control.Monad.Trans.State.Strict  (State, StateT, evalState,
                                                     evalStateT, execStateT, get,
-                                                    modify, modify', put,
-                                                    runStateT)
+                                                    modify, modify', put)
 import           Control.Monad.Trans.Writer.Strict (Writer,
                                                     WriterT (runWriterT),
                                                     execWriter, execWriterT,
@@ -32,16 +33,13 @@ import           Data.Boolean                      (Boolean (..), BooleanOf,
 import           Data.Foldable                     (Foldable (toList))
 import           Data.Int                          (Int16, Int32, Int8)
 import qualified Data.IntMap.Lazy                  as Map
-import           Data.List                         (intercalate)
 import           Data.Maybe                        (fromJust, isJust)
-import           Data.Monoid                       (mconcat)
 import           Data.SNMap                        (SNMapReaderT, memoizeM,
                                                     runSNMapReaderT, scopedM)
 import           Data.Text.Lazy                    (Text)
 import qualified Data.Text.Lazy                    as LT
 import qualified Data.Text.Lazy.Builder            as LTB
 import           Data.Word                         (Word16, Word32, Word8)
-import           GHC.Generics                      (Generic)
 import           Linear.Affine                     (distanceA)
 import           Linear.Conjugate                  (Conjugate, TrivialConjugate)
 import           Linear.Matrix                     ((!*!), (!*), (*!))
@@ -1064,8 +1062,9 @@ dFdy = fun1f "dFdy"
 fwidth = fun1f "fwidth"
 
 ---------------------------------
-fromV f s v = S $ do params <- mapM (unS . f) $ toList v
-                     return $ s <> "(" <> LT.intercalate "," params <> ")"
+fromV f s v = S $ do
+    params <- mapM (unS . f) $ toList v
+    return $ s <> "(" <> LT.intercalate "," params <> ")"
 
 fromVec4 :: V4 (S x Float) -> S x (V4 Float)
 fromVec4 = fromV id "vec4"

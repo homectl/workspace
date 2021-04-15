@@ -7,6 +7,8 @@
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE TypeFamilies               #-}
 
+{-# OPTIONS_GHC -Wno-deprecations #-}
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 module Graphics.GPipe.Internal.Shader (
     Shader(..),
     ShaderM(..),

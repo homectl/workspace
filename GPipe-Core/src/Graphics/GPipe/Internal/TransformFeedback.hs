@@ -6,9 +6,10 @@
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 
+{-# OPTIONS_GHC -Wno-unused-matches #-}
+{-# OPTIONS_GHC -Wno-unused-foralls #-}
 module Graphics.GPipe.Internal.TransformFeedback where
 
-import           Data.Text.Lazy                          (Text)
 import qualified Data.Text.Lazy                          as LT
 import           Graphics.GPipe.Internal.Buffer          (Buffer (bufName, bufTransformFeedback))
 import           Graphics.GPipe.Internal.Compiler        (Drawcall (Drawcall),

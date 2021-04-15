@@ -6,10 +6,10 @@
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# OPTIONS_GHC -Wno-unused-foralls #-}
 module Graphics.GPipe.Internal.PrimitiveArray where
 
 import           Data.Text.Lazy                 (Text)
-import qualified Data.Text.Lazy                 as LT
 import           Graphics.GPipe.Internal.Buffer (B, BInput (..), BPacked,
                                                  Buffer (bufBElement, bufName, bufferLength),
                                                  BufferFormat (getGlType))

@@ -57,7 +57,6 @@ library
       Graphics.GPipe.Internal.FrameBuffer
       Graphics.GPipe.Internal.GeometryStream
       Graphics.GPipe.Internal.Linear
-      Graphics.GPipe.Internal.Optimizer
       Graphics.GPipe.Internal.PrimitiveArray
       Graphics.GPipe.Internal.PrimitiveStream
       Graphics.GPipe.Internal.Shader
@@ -65,20 +64,29 @@ library
       Graphics.GPipe.Internal.TransformFeedback
       Graphics.GPipe.Internal.Uniform
       Graphics.GPipe.Internal.Orphans
+      Graphics.GPipe.Optimizer.DFG
+      Graphics.GPipe.Optimizer.GLSL
+      Graphics.GPipe.Optimizer.PeepHole
+      Graphics.GPipe.Optimizer.StructuralEquality
+      Graphics.GPipe.Optimizer
   other-modules:
       -- Data structures, not useful for users of the library.
       Data.SNMap
+  ghc-options:
+      -Wall
   build-depends:
       base                          >= 4.9 && < 5
     , Boolean                       >= 0.2 && < 0.3
     , attoparsec                    >= 0.10 && < 0.15
     , containers                    >= 0.5 && < 0.7
     , exception-transformers        >= 0.3 && < 0.5
-    , transformers                  >= 0.5.2 && < 0.6
+    , fgl                           >= 5.3 && < 6
     , gl                            >= 0.8 && < 0.10
+    , graphviz                      >= 2999.10 && < 2999.21
     , lens                          >= 4.15.2 && < 6
     , linear                        >= 1.18 && < 1.22
     , text                          >= 0.10 && < 1.3
+    , transformers                  >= 0.5.2 && < 0.6
     , unordered-containers          >= 0.2 && < 0.3
     , deepseq
 
@@ -140,4 +148,17 @@ benchmark bench-simple
       base < 5
     , GPipe-Core
     , lens
+    , text
+
+executable optshader
+  default-language: Haskell2010
+  hs-source-dirs:   tools
+  main-is:          optshader.hs
+  ghc-options:
+      -Wall
+      -rtsopts
+      -threaded
+  build-depends:
+      base < 5
+    , GPipe-Core
     , text

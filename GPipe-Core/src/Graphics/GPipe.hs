@@ -43,7 +43,6 @@ module Graphics.GPipe (
     module Graphics.GPipe.Uniform,
     module Graphics.GPipe.Texture,
     module Graphics.GPipe.Sampler,
-    module Graphics.GPipe.Orphans,
     module Data.Boolean
 )
 where
@@ -57,7 +56,7 @@ import           Graphics.GPipe.FragmentStream
 import           Graphics.GPipe.FrameBuffer
 import           Graphics.GPipe.GeometryStream
 import           Graphics.GPipe.Linear
-import           Graphics.GPipe.Orphans
+import           Graphics.GPipe.Orphans           ()
 import           Graphics.GPipe.PrimitiveArray
 import           Graphics.GPipe.PrimitiveStream
 import           Graphics.GPipe.Sampler

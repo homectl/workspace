@@ -6,6 +6,8 @@
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE TypeFamilies               #-}
 
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
+{-# OPTIONS_GHC -Wno-unused-matches #-}
 module Graphics.GPipe.Internal.Context
 (
     ContextHandler(..),
@@ -277,6 +279,7 @@ addContextFinalizer k m = ContextT $ do
   liftIO $ void $ mkWeakIORef k $ contextDoAsync ctx Nothing m
 
 
+getLastRenderWin :: Render os (Name, ContextData, ContextDoAsync)
 getLastRenderWin = Render $ do
   rs <- lift $ lift get
   let cwid = renderLastUsedWin rs -- There is always a window available since render calls getLastContextWin
@@ -357,10 +360,13 @@ removeContextData r cd = modifyMVar_ r $ return . remove cd
         remove _ []                  = []
 
 addCacheFinalizer :: MonadIO m => (GLuint -> (VAOCache, FBOCache) -> (VAOCache, FBOCache)) -> IORef GLuint -> ContextT ctx os m ()
-addCacheFinalizer f r =  ContextT $ do cds <- asks sharedContextData
-                                       liftIO $ do n <- readIORef r
-                                                   void $ mkWeakIORef r $ do cs' <- readMVar cds
-                                                                             mapM_ (\(cd,_) -> modifyMVar_ cd (return . f n)) cs'
+addCacheFinalizer f r = ContextT $ do
+    cds <- asks sharedContextData
+    liftIO $ do
+        n <- readIORef r
+        void $ mkWeakIORef r $ do
+            cs' <- readMVar cds
+            mapM_ (\(cd,_) -> modifyMVar_ cd (return . f n)) cs'
 
 -- | Removes a VAO entry from all SharedContextDatas when one of the buffers are deleted. This will in turn make the VAO finalizer to be run.
 addVAOBufferFinalizer :: MonadIO m => IORef GLuint -> ContextT ctx os m ()

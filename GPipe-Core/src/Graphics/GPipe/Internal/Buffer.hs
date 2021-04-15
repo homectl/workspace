@@ -45,8 +45,8 @@ import           Control.Monad.Trans.State.Strict  (StateT (runStateT), get,
                                                     put)
 import           Control.Monad.Trans.Writer.Strict (WriterT (runWriterT), tell)
 import           Data.IORef                        (IORef, newIORef, readIORef)
-import           Data.Int                          (Int, Int16, Int32, Int8)
-import           Data.Word                         (Word, Word16, Word32, Word8)
+import           Data.Int                          (Int16, Int32, Int8)
+import           Data.Word                         (Word16, Word32, Word8)
 import           Foreign.Ptr                       (Ptr, castPtr, minusPtr,
                                                     nullPtr, plusPtr)
 import           Foreign.Storable                  (Storable (peek, peekElemOff, poke, sizeOf))

@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies     #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 module Graphics.GPipe.Internal.Orphans where
 
 import           Data.Boolean      (Boolean (false, true, (&&*), (||*)),
@@ -48,7 +49,7 @@ instance EqB (f a) => EqB (Point f a) where
   P a /=* P x = a /=* x
 
 instance IfB a => IfB (V0 a) where
-        ifB q _ _ = V0
+        ifB _ _ _ = V0
 instance IfB a => IfB (V1 a) where
         ifB q (V1 a) (V1 x) = V1 (ifB q a x)
 instance IfB a => IfB (V2 a) where

@@ -1,5 +1,8 @@
 {-# LANGUAGE PatternGuards   #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# OPTIONS_GHC -Wno-unused-matches #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 module Graphics.GPipe.Internal.Compiler where
 
 import           Control.Monad                    (forM_, void, when)
@@ -24,8 +27,7 @@ import           Data.IORef                       (IORef, mkWeakIORef, newIORef,
                                                    readIORef)
 import           Data.List                        (zip5)
 import           Data.Word                        (Word32)
-import           Foreign.C.String                 (peekCString, withCString,
-                                                   withCStringLen)
+import           Foreign.C.String                 (peekCString, withCString)
 import           Foreign.Marshal.Alloc            (alloca)
 import           Foreign.Marshal.Array            (allocaArray, withArray)
 import           Foreign.Marshal.Utils            (with)

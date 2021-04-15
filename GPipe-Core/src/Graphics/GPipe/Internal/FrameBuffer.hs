@@ -3,6 +3,8 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TupleSections              #-}
 
+{-# OPTIONS_GHC -Wno-unused-foralls #-}
+{-# OPTIONS_GHC -Wno-unused-matches #-}
 module Graphics.GPipe.Internal.FrameBuffer where
 
 import           Control.Monad                           (void, when)
@@ -16,7 +18,6 @@ import           Control.Monad.Trans.Writer.Lazy         (Writer, execWriter,
 import           Data.IORef                              (mkWeakIORef, newIORef,
                                                           readIORef)
 import qualified Data.IntMap                             as IMap
-import           Data.List                               (intercalate)
 import           Data.Text.Lazy                          (Text)
 import qualified Data.Text.Lazy                          as LT
 import qualified Data.Text.Lazy.IO                       as LT
@@ -53,7 +54,7 @@ import           Graphics.GPipe.Internal.Format          (ColorRenderable (clear
                                                           StencilRenderable)
 import           Graphics.GPipe.Internal.FragmentStream  (FragmentStream (..),
                                                           FragmentStreamData (..))
-import           Graphics.GPipe.Internal.Optimizer       (optimizeShader)
+import           Graphics.GPipe.Optimizer       (optimizeShader)
 import           Graphics.GPipe.Internal.PrimitiveStream (PrimitiveStreamData (PrimitiveStreamData))
 import           Graphics.GPipe.Internal.Shader          (Shader (..), ShaderM,
                                                           tellDrawcall)
@@ -288,7 +289,10 @@ dumpGeneratedFile prefix extension text = do
     shouldWrite <- ("GPIPE_DEBUG" `elem`) . map fst <$> Env.getEnvironment
     when shouldWrite $ do
       LT.writeFile (prefix <> ".out" <> extension) text
-      LT.writeFile (prefix <> ".opt" <> extension) (optimizeShader text)
+      LT.writeFile (prefix <> ".opt" <> extension) $
+            case optimizeShader text of
+                Left err -> "// " <> LT.pack err
+                Right ok -> ok
 
 setColor :: forall c. ColorSampleable c => c -> Int -> FragColor c -> (ExprM (), GlobDeclM ())
 setColor ct n c =
@@ -441,6 +445,7 @@ data BlendingFactor
     | OneMinusConstantAlpha
     | SrcAlphaSaturate
 
+usesConstantColor :: BlendingFactor -> Bool
 usesConstantColor ConstantColor         = True
 usesConstantColor OneMinusConstantColor = True
 usesConstantColor ConstantAlpha         = True
@@ -610,6 +615,7 @@ clearImageDepthStencil i d s = do
                 glClearBufferfi GL_DEPTH_STENCIL 0 (realToFrac d) (fromIntegral s)
                 glEnable GL_SCISSOR_TEST
 
+inWin :: Window os c ds -> IO () -> Render os ()
 inWin w m = Render $ do
     rs <- lift $ lift StrictState.get
     case IMap.lookup (getWinName w) (perWindowRenderState rs) of
