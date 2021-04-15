@@ -13,16 +13,13 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-haskell@v1.1
-        with:
-          enable-stack: true
-          stack-version: 'latest'
 
       - name: Cache
         uses: actions/cache@v1
         env:
-          cache-name: cache-stack
+          cache-name: cache-cabal
         with:
-          path: ~/.stack
+          path: ~/.cabal
           key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}
           restore-keys: |
             ${{ runner.os }}-build-${{ env.cache-name }}-
@@ -32,52 +29,49 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get install libgl1-mesa-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxxf86vm-dev
-          stack --no-terminal build --stack-root="$PWD/.stack-root" --only-dependencies --test --bench
-      # - name: Build
-      #   run: stack --no-terminal build --test --bench
-      # - name: Run non-graphics tests
-      #   run: stack --no-terminal test GPipe-Core
-      # - name: Run headless graphics tests
-      #   uses: GabrielBB/xvfb-action@v1
-      #   with:
-      #     run: stack --no-terminal test GPipe-GLFW4
-      # - name: Upload coverage data
-      #   run: |
-      #     curl -L https://github.com/rubik/stack-hpc-coveralls/releases/download/v0.0.6.1/shc-linux-x64-8.10.4.tar.bz2 | tar -xj
-      #     ./shc
+          cabal update
+          cabal build --only-dependencies --enable-tests --enable-benchmarks all
+      - name: Build
+        run: cabal build --enable-tests --enable-benchmarks all
+      - name: Run non-graphics tests
+        run: cabal test GPipe-Core
+      - name: Run headless graphics tests
+        uses: GabrielBB/xvfb-action@v1
+        with:
+          run: cabal test GPipe-GLFW4
 
-      # - name: Push to GPipe-Core
-      #   uses: cpina/github-action-push-to-another-repository@master
-      #   env:
-      #     API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
-      #   with:
-      #     source-directory: "GPipe-Core"
-      #     destination-github-username: "homectl"
-      #     destination-repository-name: "GPipe-Core"
-      #     target-branch: "main"
-      #     user-email: homectl@homectl.org
-      #     commit-message: See ORIGIN_COMMIT
+      - name: Push to GPipe-Core
+        uses: cpina/github-action-push-to-another-repository@master
+        env:
+          API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
+        with:
+          source-directory: "GPipe-Core"
+          destination-github-username: "homectl"
+          destination-repository-name: "GPipe-Core"
+          target-branch: "main"
+          user-email: homectl@homectl.org
+          commit-message: See ORIGIN_COMMIT
 
-      # - name: Push to GPipe-GLFW4
-      #   uses: cpina/github-action-push-to-another-repository@master
-      #   env:
-      #     API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
-      #   with:
-      #     source-directory: "GPipe-GLFW4"
-      #     destination-github-username: "homectl"
-      #     destination-repository-name: "GPipe-GLFW4"
-      #     target-branch: "main"
-      #     user-email: homectl@homectl.org
-      #     commit-message: See ORIGIN_COMMIT
+      - name: Push to GPipe-GLFW4
+        uses: cpina/github-action-push-to-another-repository@master
+        env:
+          API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
+        with:
+          source-directory: "GPipe-GLFW4"
+          destination-github-username: "homectl"
+          destination-repository-name: "GPipe-GLFW4"
+          target-branch: "main"
+          user-email: homectl@homectl.org
+          commit-message: See ORIGIN_COMMIT
 
-      # - name: Push to GPipe-Engine
-      #   uses: cpina/github-action-push-to-another-repository@master
-      #   env:
-      #     API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
-      #   with:
-      #     source-directory: "GPipe-Engine"
-      #     destination-github-username: "homectl"
-      #     destination-repository-name: "GPipe-Engine"
-      #     target-branch: "main"
-      #     user-email: homectl@homectl.org
-      #     commit-message: See ORIGIN_COMMIT
+      - name: Push to GPipe-Engine
+        uses: cpina/github-action-push-to-another-repository@master
+        env:
+          API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
+        with:
+          source-directory: "GPipe-Engine"
+          destination-github-username: "homectl"
+          destination-repository-name: "GPipe-Engine"
+          target-branch: "main"
+          user-email: homectl@homectl.org
+          commit-message: See ORIGIN_COMMIT
