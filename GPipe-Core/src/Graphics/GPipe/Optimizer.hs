@@ -2,10 +2,12 @@
 {-# LANGUAGE StrictData        #-}
 module Graphics.GPipe.Optimizer where
 
+import           Control.Monad                     (when)
 import qualified Data.Text.Lazy                    as LT
 import qualified Data.Text.Lazy.IO                 as IO
 import qualified Graphics.GPipe.Optimizer.DFG      as DFG
-import           Graphics.GPipe.Optimizer.GLSL     (GLSL, parseShader,
+import           Graphics.GPipe.Optimizer.GLSL     (GLSL, parseGLSL,
+                                                    parseShader, parseTest,
                                                     printShader)
 import qualified Graphics.GPipe.Optimizer.PeepHole as PeepHole
 
@@ -22,10 +24,11 @@ optimize = PeepHole.pass
 main :: IO ()
 main = do
   putStrLn "Loading shader source..."
-  -- inText <- IO.readFile "../lambdacnc/generated-shaders/shader9.out.frag"
-  inText <- IO.readFile "../shader1.out.frag"
-  -- inText <- IO.readFile "../shader1.out.vert"
-  -- parseTest parseGLSL inText
+  -- inText <- IO.readFile "../large-shaders/lambdacnc.frag"
+  -- inText <- IO.readFile "../large-shaders/lambdaray.frag"
+  inText <- IO.readFile "../large-shaders/xax.frag"
+  -- inText <- IO.readFile "../large-shaders/xax.vert"
+  when False $ parseTest parseGLSL inText
   case parseShader inText of
     Left err -> writeFile "../opt.vert" $ "// Error\n" <> err
     Right ok -> do

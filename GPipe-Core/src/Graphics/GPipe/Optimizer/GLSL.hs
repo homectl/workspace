@@ -271,6 +271,7 @@ data FunName
   | PrimVec2
   | PrimVec3
   | PrimVec4
+  | PrimPow
   | PrimDot
   | PrimCos
   | PrimAtan
@@ -296,6 +297,7 @@ parseFunName =
   <|> ("vec2" >> pure PrimVec2)
   <|> ("vec3" >> pure PrimVec3)
   <|> ("vec4" >> pure PrimVec4)
+  <|> ("pow" >> pure PrimPow)
   <|> ("dot" >> pure PrimDot)
   <|> ("cos" >> pure PrimCos)
   <|> ("atan" >> pure PrimAtan)
@@ -319,6 +321,7 @@ ppFunName PrimMat4x4     = "mat4x4"
 ppFunName PrimVec2       = "vec2"
 ppFunName PrimVec3       = "vec3"
 ppFunName PrimVec4       = "vec4"
+ppFunName PrimPow        = "pow"
 ppFunName PrimDot        = "dot"
 ppFunName PrimCos        = "cos"
 ppFunName PrimAtan       = "atan"
@@ -409,6 +412,8 @@ data BinaryOp
   | BOpGT
   | BOpLE
   | BOpLT
+  | BOpAnd
+  | BOpOr
   deriving (Show, Eq)
 
 parseBinaryOp :: Parser BinaryOp
@@ -421,6 +426,8 @@ parseBinaryOp =
   <|> (">" >> pure BOpGT)
   <|> ("<=" >> pure BOpLE)
   <|> ("<" >> pure BOpLT)
+  <|> ("&&" >> pure BOpAnd)
+  <|> ("||" >> pure BOpOr)
 
 ppBinaryOp :: BinaryOp -> LTB.Builder
 ppBinaryOp BOpPlus  = "+"
@@ -431,17 +438,22 @@ ppBinaryOp BOpGE    = ">="
 ppBinaryOp BOpGT    = ">"
 ppBinaryOp BOpLE    = "<="
 ppBinaryOp BOpLT    = "<"
+ppBinaryOp BOpAnd   = "&&"
+ppBinaryOp BOpOr    = "||"
 
 data UnaryOp
   = UOpMinus
+  | UOpNot
   deriving (Show, Eq)
 
 parseUnaryOp :: Parser UnaryOp
 parseUnaryOp =
-  char '-' >> pure UOpMinus
+  (char '-' >> pure UOpMinus)
+  <|> (char '!' >> pure UOpMinus)
 
 ppUnaryOp :: UnaryOp -> LTB.Builder
 ppUnaryOp UOpMinus = "-"
+ppUnaryOp UOpNot   = "!"
 
 data Stmt
   = AssignStmt Name Expr

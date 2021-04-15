@@ -1062,6 +1062,7 @@ dFdy = fun1f "dFdy"
 fwidth = fun1f "fwidth"
 
 ---------------------------------
+fromV :: Foldable t => (a -> S x b) -> Text -> t a -> S x (t b)
 fromV f s v = S $ do
     params <- mapM (unS . f) $ toList v
     return $ s <> "(" <> LT.intercalate "," params <> ")"
@@ -1095,19 +1096,27 @@ fromMat43 = fromV fromVec3 "mat4x3"
 fromMat44 :: V4 (V4 (S x Float)) -> S x (V4 (V4 Float))
 fromMat44 = fromV fromVec4 "mat4x4"
 
+mulToV4 :: S x (f1 a) -> S x (f2 b) -> V4 (S x Float)
 mulToV4 a b = vec4S'' $ bin (STypeVec 4) "*" a b
+mulToV3 :: S x (f1 a) -> S x (f2 b) -> V3 (S x Float)
 mulToV3 a b = vec3S'' $ bin (STypeVec 3) "*" a b
+mulToV2 :: S x (f1 a) -> S x (f2 b) -> V2 (S x Float)
 mulToV2 a b = vec2S'' $ bin (STypeVec 2) "*" a b
 
+mulToM :: Functor f => (Int, S c z -> f a) -> (Int, a -> b) -> S c x -> S c y -> f b
 mulToM (r,x) (c,y) a b = fmap y $ x $ bin (STypeMat c r) "*" a b
 
+d2 :: Num a => (a, S x b -> V2 (S x b))
 d2 = (2,vec2S'')
+d3 :: Num a => (a, S x b -> V3 (S x b))
 d3 = (3,vec3S'')
+d4 :: Num a => (a, S x b -> V4 (S x b))
 d4 = (4,vec4S'')
 
 unV1 :: V1 t -> t
 unV1 (V1 x) = x
 
+outerToM :: Functor f => (Int, S c z -> f a) -> (Int, a -> b) -> S c x -> S c y -> f b
 outerToM (r,x) (c,y) a b = fmap y $ x $ fun2 (STypeMat c r) "outerProduct" a b
 
 ------------------------------------------------------------------------------------------------------------------------------------

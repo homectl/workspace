@@ -33,7 +33,7 @@ defaultConfig = Config
     , horizonMode = HorizonBlack
     , diskMode = DiskSolid
     , skyMode = SkyBlack
-    , iterations = 70
+    , iterations = 250
     }
 
 data RuntimeConfig a = RuntimeConfig
