@@ -35,7 +35,6 @@ addDecl NsU (NameId n) nodeId decls@Decls{..} = decls{declsU = M.insert n nodeId
 addDecl NsVF (NameId n) nodeId decls@Decls{..} = decls{declsVF = M.insert n nodeId declsVF}
 addDecl NsIn (NameId n) nodeId decls@Decls{..} = decls{declsIn = M.insert n nodeId declsIn}
 addDecl NsOut (NameId n) nodeId decls@Decls{..} = decls{declsOut = M.insert n nodeId declsOut}
-addDecl NsUBlock _ _ decls = decls -- Ignore struct names.
 
 getDecls :: Namespace -> Decls -> M.IntMap Node
 getDecls NsT Decls{..}   = declsT
@@ -44,7 +43,6 @@ getDecls NsU Decls{..}   = declsU
 getDecls NsVF Decls{..}  = declsVF
 getDecls NsIn Decls{..}  = declsIn
 getDecls NsOut Decls{..} = declsOut
-getDecls NsUBlock _      = M.empty -- Ignore struct names.
 
 getDecl :: Namespace -> NameId -> Decls -> Maybe Node
 getDecl ns (NameId n) decls = M.lookup n (getDecls ns decls)
@@ -126,16 +124,20 @@ dfgLocalDecl (LDecl _ (Name ns n) e) = do
   maybe (return ()) (`dfgExpr` nodeId) e
 
 dfgExpr :: Expr -> Node -> DFGState ()
-dfgExpr LitIntExpr{} _                = return ()
-dfgExpr LitFloatExpr{} _              = return ()
-dfgExpr (IndexExpr e _) declNode      = dfgExpr e declNode
-dfgExpr (ParenExpr e) declNode        = dfgExpr e declNode
-dfgExpr (FunCallExpr _ args) declNode = mapM_ (`dfgExpr` declNode) args
-dfgExpr (UnaryExpr _ e) declNode      = dfgExpr e declNode
-dfgExpr (BinaryExpr l _ r) declNode   = mapM_ (`dfgExpr` declNode) [l, r]
-dfgExpr (IdentifierExpr n) declNode   = nodeForName n >>= addEdge declNode
-dfgExpr (UniformExpr n m)  declNode   = nodeForUniform n m >>= addEdge declNode
-dfgExpr (SwizzleExpr n _)  declNode   = nodeFor NsT n >>= addEdge declNode
+dfgExpr (FunCallExpr _ args) declNode = mapM_ (`dfgExprAtom` declNode) args
+dfgExpr (TextureExpr t x y) declNode  = mapM_ (`dfgExprAtom` declNode) [t, x, y]
+dfgExpr (UnaryExpr _ e) declNode      = dfgExprAtom e declNode
+dfgExpr (AtomExpr e) declNode         = dfgExprAtom e declNode
+dfgExpr (BinaryExpr l _ r) declNode   = mapM_ (`dfgExprAtom` declNode) [l, r]
+
+dfgExprAtom :: ExprAtom -> Node -> DFGState ()
+dfgExprAtom LitIntExpr{} _                = return ()
+dfgExprAtom LitFloatExpr{} _              = return ()
+dfgExprAtom (IdentifierExpr n) declNode   = nodeForName n >>= addEdge declNode
+dfgExprAtom (UniformExpr n m)  declNode   = nodeForUniform n m >>= addEdge declNode
+dfgExprAtom (SwizzleExpr n _)  declNode   = nodeFor NsT n >>= addEdge declNode
+dfgExprAtom (VecIndexExpr n _) declNode   = nodeForName n >>= addEdge declNode
+dfgExprAtom (MatIndexExpr n _ _) declNode = nodeForName n >>= addEdge declNode
 
 
 nodeForUniform :: NameId -> NameId -> DFGState Node

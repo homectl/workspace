@@ -7,12 +7,13 @@
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeFamilies          #-}
+{-# OPTIONS_GHC -Wno-incomplete-patterns #-}
+{-# OPTIONS_GHC -Wno-unused-foralls #-}
 module Graphics.GPipe.Internal.Texture where
 
 import           Control.Monad.IO.Class                       (MonadIO, liftIO)
 import           Data.IntMap.Lazy                             (insert)
 import           Data.Text.Lazy                               (Text)
-import qualified Data.Text.Lazy                               as LT
 import           Graphics.GPipe.Internal.Buffer               (Buffer (bufElementSize, bufName, bufferLength),
                                                                BufferColor,
                                                                BufferFormat (..),
@@ -760,6 +761,9 @@ generateTexture2DArrayMipmap :: (ContextHandler ctx, MonadIO m) => Texture2DArra
 generateTexture3DMipmap :: (ContextHandler ctx, MonadIO m) => Texture3D os f -> ContextT ctx os m ()
 generateTextureCubeMipmap :: (ContextHandler ctx, MonadIO m) => TextureCube os f -> ContextT ctx os m ()
 
+genMips
+    :: (ContextHandler ctx, MonadIO m)
+    => TexName -> GLenum -> ContextT ctx os m ()
 genMips texn target = liftNonWinContextAsyncIO $ do
                      useTexSync texn target
                      glGenerateMipmap target
@@ -1150,6 +1154,17 @@ pv3toF (V3 x y z) w = do x' <- unS x
                          w' <- unS w
                          return $ "vec4(" <> x' <> "," <> y' <> "," <> z' <> "," <> w' <> ")"
 
+sampleFunc
+    :: Text
+    -> Maybe a
+    -> SampleLod vx x
+    -> Maybe t
+    -> coord
+    -> (coord -> ExprM Text)
+    -> (vx -> ExprM Text)
+    -> (t -> Text)
+    -> (coord -> a -> ExprM Text)
+    -> ExprM Text
 sampleFunc s proj lod off coord vToS lvToS civToS pvToS = do
     pc <- projCoordParam proj
     l <- lodParam lod
@@ -1177,6 +1192,14 @@ sampleFunc s proj lod off coord vToS lvToS civToS pvToS = do
     lodName (SampleGrad _ _) = "Grad"
     lodName _                = ""
 
+fetchFunc
+    :: Text
+    -> Maybe t
+    -> coord
+    -> S x a
+    -> (coord -> ExprM Text)
+    -> (t -> Text)
+    -> ExprM Text
 fetchFunc s off coord lod vToS civToS = do
     c <- vToS coord
     l <- unS lod
@@ -1222,6 +1245,7 @@ getTexture3DImage :: Texture3D os f -> Level -> Int -> Render os (Image f)
 getTextureCubeImage :: TextureCube os f -> Level -> CubeSide -> Render os (Image f)
 getLayeredTextureImage :: Texture3D os f -> MaxLevels -> Render os (Image f)
 
+registerRenderWriteTextureName :: TexName -> Render os ()
 registerRenderWriteTextureName tn = Render (lift $ lift $ lift $ readIORef tn) >>= registerRenderWriteTexture . fromIntegral
 
 getTexture1DImage t@(Texture1D tn _ ls) l' =

@@ -10,11 +10,15 @@ main :: IO ()
 main = Env.getArgs >>= mapM_ process
   where
     process inFile = do
+      putStrLn "Loading file..."
       inText <- IO.readFile inFile
+      putStrLn "Parsing file..."
       case GLSL.parseShader inText of
         Left err -> fail err
         Right ok -> do
+          putStrLn "Generating data flow graph (opt.dot)..."
           let dfg = DFG.genDFG ok
           DFG.toDot "opt.dot" dfg
           -- DFG.toSvg dfg "../opt.svg"
-          IO.writeFile "opt.vert" $ GLSL.printShader $ Opt.optimize ok
+          putStrLn "Optimizing shader (opt.glsl)..."
+          IO.writeFile "opt.glsl" $ GLSL.printShader $ Opt.optimize ok

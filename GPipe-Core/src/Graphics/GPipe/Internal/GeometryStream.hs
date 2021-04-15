@@ -7,6 +7,9 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 
+{-# OPTIONS_GHC -Wno-unused-matches #-}
+{-# OPTIONS_GHC -Wno-unused-foralls #-}
+{-# OPTIONS_GHC -Wno-unused-do-bind #-}
 module Graphics.GPipe.Internal.GeometryStream where
 
 import           Control.Arrow                           (Arrow (arr, first),
@@ -16,7 +19,6 @@ import           Control.Category                        (Category (..))
 import qualified Control.Monad.Trans.Class               as T (lift)
 import           Control.Monad.Trans.State.Lazy          (State, evalState, get,
                                                           put)
-import           Control.Monad.Trans.Writer              (tell)
 #if __GLASGOW_HASKELL__ < 804
 import           Data.Semigroup                          (Semigroup (..))
 #endif
@@ -67,7 +69,6 @@ import           Data.Boolean                            (Boolean (true),
                                                           IfB (ifB))
 import           Data.IntMap.Lazy                        (insert)
 import           Data.Text.Lazy                          (Text)
-import qualified Data.Text.Lazy                          as LT
 import           Linear.Affine                           (Point (..))
 import           Linear.Plucker                          (Plucker (..))
 import           Linear.Quaternion                       (Quaternion (..))
@@ -304,6 +305,7 @@ geometrize (PrimitiveStream xs) = Shader $ do
 
 ------------------------------------------------------------------------------------------------------------------------------------
 
+notMeantToBeRead :: Text
 notMeantToBeRead = "false" -- error "a generative geometry is inherently a write-only value"
 
 generativePoints :: FragmentInput a => GGenerativeGeometry Points a

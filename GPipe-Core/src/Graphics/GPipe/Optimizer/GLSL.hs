@@ -164,7 +164,7 @@ data GDeclKind
   deriving (Show)
 
 parseGDeclKind :: Parser GDeclKind
-parseGDeclKind = (char ' ' <|> pure ' ') >>
+parseGDeclKind =
   ("in" >> return GkIn) <|>
   ("out" >> return GkOut) <|>
   ("uniform" >> return GkUniform)
@@ -243,13 +243,11 @@ data Namespace
   | NsVF
   | NsIn
   | NsOut
-  | NsUBlock
   deriving (Show, Eq)
 
 parseNamespace :: Parser Namespace
 parseNamespace =
-  ("uBlock" >> pure NsUBlock)
-  <|> ("in" >> pure NsIn)
+  ("in" >> pure NsIn)
   <|> ("out" >> pure NsOut)
   <|> ("vf" >> pure NsVF)
   <|> (char 't' >> pure NsT)
@@ -263,10 +261,10 @@ ppNamespace NsU      = "u"
 ppNamespace NsVF     = "vf"
 ppNamespace NsIn     = "in"
 ppNamespace NsOut    = "out"
-ppNamespace NsUBlock = "uBlock"
 
 data FunName
   = PrimMain
+  | PrimMat3x3
   | PrimMat4x4
   | PrimVec2
   | PrimVec3
@@ -277,6 +275,8 @@ data FunName
   | PrimAtan
   | PrimMod
   | PrimAbs
+  | PrimCross
+  | PrimLength
   | PrimAsin
   | PrimSmoothstep
   | PrimStep
@@ -285,14 +285,13 @@ data FunName
   | PrimSin
   | PrimTan
   | PrimSqrt
-  | PrimFloat
-  | PrimTexture
   | PrimNormalize
   deriving (Show, Eq)
 
 parseFunName :: Parser FunName
 parseFunName =
   ("main" >> pure PrimMain)
+  <|> ("mat3x3" >> pure PrimMat3x3)
   <|> ("mat4x4" >> pure PrimMat4x4)
   <|> ("vec2" >> pure PrimVec2)
   <|> ("vec3" >> pure PrimVec3)
@@ -303,6 +302,8 @@ parseFunName =
   <|> ("atan" >> pure PrimAtan)
   <|> ("mod" >> pure PrimMod)
   <|> ("abs" >> pure PrimAbs)
+  <|> ("cross" >> pure PrimCross)
+  <|> ("length" >> pure PrimLength)
   <|> ("asin" >> pure PrimAsin)
   <|> ("smoothstep" >> pure PrimSmoothstep)
   <|> ("step" >> pure PrimStep)
@@ -311,12 +312,11 @@ parseFunName =
   <|> ("sin" >> pure PrimSin)
   <|> ("tan" >> pure PrimTan)
   <|> ("sqrt" >> pure PrimSqrt)
-  <|> ("float" >> pure PrimFloat)
-  <|> ("texture" >> pure PrimTexture)
   <|> ("normalize" >> pure PrimNormalize)
 
 ppFunName :: FunName -> LTB.Builder
 ppFunName PrimMain       = "main"
+ppFunName PrimMat3x3     = "mat3x3"
 ppFunName PrimMat4x4     = "mat4x4"
 ppFunName PrimVec2       = "vec2"
 ppFunName PrimVec3       = "vec3"
@@ -327,6 +327,8 @@ ppFunName PrimCos        = "cos"
 ppFunName PrimAtan       = "atan"
 ppFunName PrimMod        = "mod"
 ppFunName PrimAbs        = "abs"
+ppFunName PrimCross      = "cross"
+ppFunName PrimLength     = "length"
 ppFunName PrimAsin       = "asin"
 ppFunName PrimSmoothstep = "smoothstep"
 ppFunName PrimStep       = "step"
@@ -335,8 +337,6 @@ ppFunName PrimFloor      = "floor"
 ppFunName PrimSin        = "sin"
 ppFunName PrimTan        = "tan"
 ppFunName PrimSqrt       = "sqrt"
-ppFunName PrimFloat      = "float"
-ppFunName PrimTexture    = "texture"
 ppFunName PrimNormalize  = "normalize"
 
 data Swizzle
@@ -356,52 +356,92 @@ ppSwizzle Y = "y"
 ppSwizzle Z = "z"
 ppSwizzle W = "w"
 
-data Expr
-  = LitIntExpr Int
-  | LitFloatExpr Float
+parseVecIndex :: Parser Swizzle
+parseVecIndex =
+  (char '0' >> pure X)
+  <|> (char '1' >> pure Y)
+  <|> (char '2' >> pure Z)
+  <|> (char '3' >> pure W)
+
+ppVecIndex :: Swizzle -> LTB.Builder
+ppVecIndex X = "0"
+ppVecIndex Y = "1"
+ppVecIndex Z = "2"
+ppVecIndex W = "3"
+
+data Cast
+  = Cast
+  | NoCast
+  deriving (Show)
+
+data ExprAtom
+  = LitIntExpr Cast Int
+  | LitFloatExpr Cast Float
   | IdentifierExpr Name
   | UniformExpr NameId NameId
   | SwizzleExpr NameId Swizzle
-  | IndexExpr Expr [Int]
-  | ParenExpr Expr
-  | UnaryExpr UnaryOp Expr
-  | BinaryExpr Expr BinaryOp Expr
-  | FunCallExpr FunName [Expr]
+  | VecIndexExpr Name Swizzle
+  | MatIndexExpr Name Swizzle Swizzle
+  deriving (Show)
+
+parseExprAtom :: Parser ExprAtom
+parseExprAtom =
+  LitFloatExpr NoCast <$> rational
+  <|> LitIntExpr NoCast <$> decimal
+  <|> LitIntExpr Cast <$> ("int(" >> decimal >>= (")" >>) . pure)
+  <|> LitFloatExpr Cast <$> ("float(" >> rational >>= (")" >>) . pure)
+  <|> UniformExpr <$> (char 'u' >> parseNameId) <*> (".u" >> parseNameId)
+  <|> SwizzleExpr <$> (char 't' >> parseNameId) <*> (char '.' >> parseSwizzle)
+  <|> MatIndexExpr <$> parseName <*> ("[" >> parseVecIndex) <*> ("][" >> parseVecIndex >>= ("]" >>) . pure)
+  <|> VecIndexExpr <$> parseName <*> ("[" >> parseVecIndex >>= ("]" >>) . pure)
+  <|> IdentifierExpr <$> parseName
+
+ppExprAtom :: ExprAtom -> LTB.Builder
+ppExprAtom (LitIntExpr Cast i)     = "int(" <> LTB.decimal i <> ")"
+ppExprAtom (LitIntExpr NoCast i)   = LTB.decimal i
+ppExprAtom (LitFloatExpr Cast n)   = "float(" <> LTB.realFloat n <> ")"
+ppExprAtom (LitFloatExpr NoCast r) = LTB.realFloat r
+ppExprAtom (IdentifierExpr n)      = ppName n
+ppExprAtom (UniformExpr n m)       = "u" <> ppNameId n <> ".u" <> ppNameId m
+ppExprAtom (SwizzleExpr n m)       = "t" <> ppNameId n <> "." <> ppSwizzle m
+ppExprAtom (VecIndexExpr n i)      = ppName n <> "[" <> ppVecIndex i <> "]"
+ppExprAtom (MatIndexExpr n i j)    = ppName n <> "[" <> ppVecIndex i <> "]" <> "[" <> ppVecIndex j <> "]"
+
+data Expr
+  = UnaryExpr UnaryOp ExprAtom
+  | BinaryExpr ExprAtom BinaryOp ExprAtom
+  | FunCallExpr FunName [ExprAtom]
+  | TextureExpr ExprAtom ExprAtom ExprAtom
+  | AtomExpr ExprAtom
   deriving (Show)
 
 parseExpr :: Parser Expr
 parseExpr =
-  BinaryExpr <$> indexExpr <*> parseBinaryOp <*> parseExpr
-  <|> UnaryExpr <$> parseUnaryOp <*> parseExpr
-  <|> indexExpr
+  (char '(' >> operatorExpr >>= (char ')' >>) . pure)
+  <|> textureExpr
+  <|> funCallExpr
+  <|> AtomExpr <$> parseExprAtom
 
   where
-    indexExpr =
-      IndexExpr <$> atomicExpr <*> many1 (char '[' >> decimal >>= (char ']' >>) . pure)
-      <|> atomicExpr
+    operatorExpr =
+      BinaryExpr <$> parseExprAtom <*> parseBinaryOp <*> parseExprAtom
+      <|> UnaryExpr <$> parseUnaryOp <*> parseExprAtom
 
-    atomicExpr =
-      LitFloatExpr <$> rational
-      <|> LitIntExpr <$> decimal
-      <|> FunCallExpr <$> parseFunName <*> args
-      <|> UniformExpr <$> (char 'u' >> parseNameId) <*> (".u" >> parseNameId)
-      <|> SwizzleExpr <$> (char 't' >> parseNameId) <*> (char '.' >> parseSwizzle)
-      <|> IdentifierExpr <$> parseName
-      <|> ParenExpr <$> (char '(' >> parseExpr >>= (char ')' >>) . pure)
+    textureExpr = TextureExpr
+      <$> ("texture(" >> parseExprAtom)
+      <*> (",vec2(" >> parseExprAtom)
+      <*> ("," >> parseExprAtom >>= ("))" >>) . pure)
 
-    args = char '(' >> sepBy1 parseExpr (char ',') >>= (char ')' >>) . pure
+    funCallExpr = FunCallExpr
+      <$> parseFunName
+      <*> (char '(' >> sepBy1 parseExprAtom (char ',') >>= (char ')' >>) . pure)
 
 ppExpr :: Expr -> LTB.Builder
-ppExpr (LitIntExpr i) = LTB.decimal i
-ppExpr (LitFloatExpr r) = LTB.realFloat r
-ppExpr (IdentifierExpr n) = ppName n
-ppExpr (UniformExpr n m) = "u" <> ppNameId n <> ".u" <> ppNameId m
-ppExpr (SwizzleExpr n m) = "t" <> ppNameId n <> "." <> ppSwizzle m
-ppExpr (IndexExpr n is) = ppExpr n <> (mconcat . map (\i -> "[" <> LTB.decimal i <> "]") $ is)
-ppExpr (ParenExpr e) = "(" <> ppExpr e <> ")"
-ppExpr (UnaryExpr o e) = ppUnaryOp o <> ppExpr e
-ppExpr (BinaryExpr l o r) = ppExpr l <> ppBinaryOp o <> ppExpr r
-ppExpr (FunCallExpr n args) = ppFunName n <> "(" <> (mconcat . intersperse "," . map ppExpr $ args) <> ")"
+ppExpr (AtomExpr e) = ppExprAtom e
+ppExpr (UnaryExpr o e) = "(" <> ppUnaryOp o <> ppExprAtom e <> ")"
+ppExpr (BinaryExpr l o r) = "(" <> ppExprAtom l <> ppBinaryOp o <> ppExprAtom r <> ")"
+ppExpr (FunCallExpr n args) = ppFunName n <> "(" <> (mconcat . intersperse "," . map ppExprAtom $ args) <> ")"
+ppExpr (TextureExpr t x y) = "texture(" <> ppExprAtom t <> ",vec2(" <> ppExprAtom x <> "," <> ppExprAtom y <> "))"
 
 data BinaryOp
   = BOpPlus

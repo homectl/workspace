@@ -2,6 +2,7 @@
 *.frag
 *.geom
 *.vert
+*.glsl
 
 /*.dot
 /*.svg

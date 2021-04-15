@@ -71,6 +71,7 @@ spec = do
                 c = a ==* b
                 result = norm (ifB c a b)
             res <- wrap result
+            -- golden $ finalSource res
             finalSource res `shouldBe` LT.unlines
                 [ "#version 450"
                 , "void main() {"
@@ -105,8 +106,9 @@ spec = do
                 , "} else {"
                 , "t10 = 8;"
                 , "}"
-                , "float t11 = length(vec4(t7,t8,t9,t10));"
-                , "result = t11;"
+                , "vec4 t11 = vec4(t7,t8,t9,t10);"
+                , "float t12 = length(t11);"
+                , "result = t12;"
                 , "}"
                 ]
 
@@ -118,6 +120,7 @@ spec = do
                 c = a ==* b
                 result = norm $ ifThenElse' c a b
             res <- wrap result
+            -- golden $ finalSource res
             finalSource res `shouldBe` LT.unlines
                 [ "#version 450"
                 , "void main() {"
@@ -143,8 +146,9 @@ spec = do
                 , "t9 = 7;"
                 , "t10 = 8;"
                 , "}"
-                , "float t11 = length(vec4(t7,t8,t9,t10));"
-                , "result = t11;"
+                , "vec4 t11 = vec4(t7,t8,t9,t10);"
+                , "float t12 = length(t11);"
+                , "result = t12;"
                 , "}"
                 ]
 
@@ -155,12 +159,19 @@ spec = do
                 v = V4 5 6 7 8
                 result = norm $ m !* v
             res <- wrap result
-            golden $ finalSource res
+            -- golden $ finalSource res
             finalSource res `shouldBe` LT.unlines
                 [ "#version 450"
                 , "void main() {"
-                , "vec4 t0 = (vec4(5,6,7,8)*mat4x4(vec4(1,0,0,0),vec4(0,1,0,0),vec4(0,0,1,0),vec4(0,0,0,1)));"
-                , "float t1 = length(vec4(t0[0],t0[1],t0[2],t0[3]));"
-                , "result = t1;"
+                , "vec4 t0 = vec4(5,6,7,8);"
+                , "vec4 t1 = vec4(1,0,0,0);"
+                , "vec4 t2 = vec4(0,1,0,0);"
+                , "vec4 t3 = vec4(0,0,1,0);"
+                , "vec4 t4 = vec4(0,0,0,1);"
+                , "mat4x4 t5 = mat4x4(t1,t2,t3,t4);"
+                , "vec4 t6 = (t0*t5);"
+                , "vec4 t7 = vec4(t6[0],t6[1],t6[2],t6[3]);"
+                , "float t8 = length(t7);"
+                , "result = t8;"
                 , "}"
                 ]

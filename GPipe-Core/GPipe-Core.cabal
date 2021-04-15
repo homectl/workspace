@@ -64,6 +64,7 @@ library
       Graphics.GPipe.Internal.TransformFeedback
       Graphics.GPipe.Internal.Uniform
       Graphics.GPipe.Internal.Orphans
+      Graphics.GPipe.Optimizer.ConstExpr
       Graphics.GPipe.Optimizer.DFG
       Graphics.GPipe.Optimizer.GLSL
       Graphics.GPipe.Optimizer.PeepHole
@@ -80,6 +81,7 @@ library
     , attoparsec                    >= 0.10 && < 0.15
     , containers                    >= 0.5 && < 0.7
     , exception-transformers        >= 0.3 && < 0.5
+    -- , extra                         >= 1.7.8 && < 1.8
     , fgl                           >= 5.3 && < 6
     , gl                            >= 0.8 && < 0.10
     , graphviz                      >= 2999.10 && < 2999.21

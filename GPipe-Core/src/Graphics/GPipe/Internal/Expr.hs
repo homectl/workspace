@@ -244,7 +244,7 @@ vec3S'' s =
     in  V3 x y z
 vec4S'' :: S c a -> V4 (S c a)
 vec4S'' s =
-    let f p = S $ fmap (<> ("[" <> tshow (p :: Int) <>"]")) (unS s)
+    let f p = S $ fmap (<> ("[" <> tshow (p :: Int) <> "]")) (unS s)
     in  V4 (f 0) (f 1) (f 2) (f 3)
 
 -- | Phantom type used as first argument in @'S' 'V' a@ that denotes that the shader value is a vertex value
@@ -288,6 +288,7 @@ useGInput qual stype i n v = do
     return $ prefix <> tshow n <> "[" <> tshow i <> "]"
     where
         prefix = "vg"
+        space = if LT.null qual then "" else " "
 
         -- Output assignement in the previous shader
         assignOutput = do
@@ -297,14 +298,14 @@ useGInput qual stype i n v = do
 
         -- Output declaration in the previous shader.
         gDeclOut = do
-            tellGlobal $ qual <> " out "
+            tellGlobal $ qual <> space <> "out "
             tellGlobal $ stypeName stype
             tellGlobal $ " " <> prefix
             tellGlobalLn $ tshow n
 
         -- Input declaration in the current shader.
         gDeclIn = do
-            tellGlobal $ qual <> " in "
+            tellGlobal $ qual <> space <> "in "
             tellGlobal $ stypeName stype
             tellGlobal $ " " <> prefix
             tellGlobal $ tshow n
@@ -314,10 +315,11 @@ useFInputFromG :: Text -> SType -> Int -> ExprM Text -> ExprM Text
 useFInputFromG qual stype i v = do
     ExprState s nvar body <- T.lift get
     val :: Int <- read . LT.unpack <$> v
-    T.lift $ put (ExprState s{ shaderUsedInput = Map.insert i (gDecl val (qual <> " in "), (return (), gDecl val (qual <> " out "))) $ shaderUsedInput s } nvar body)
+    T.lift $ put (ExprState s{ shaderUsedInput = Map.insert i (gDeclIn val, (return (), gDeclOut val)) $ shaderUsedInput s } nvar body)
     return $ prefix <> tshow val
     where
         prefix = "vgf"
+        space = if LT.null qual then "" else " "
 
         gDecl val s = do
             tellGlobal s
@@ -325,12 +327,17 @@ useFInputFromG qual stype i v = do
             tellGlobal $ " " <> prefix
             tellGlobalLn $ tshow val
 
+        gDeclOut val = gDecl val (qual <> space <> "out ")
+        gDeclIn val = gDecl val (qual <> space <> "in ")
+
 useFInput :: Text -> Text -> SType -> Int -> ExprM Text -> ExprM Text
 useFInput qual prefix stype i v = do
     ExprState s nvar body <- T.lift get
-    T.lift $ put (ExprState s{ shaderUsedInput = Map.insert i (gDecl (qual <> " in "), (assignOutput, gDecl (qual <> " out "))) $ shaderUsedInput s } nvar body)
+    T.lift $ put (ExprState s{ shaderUsedInput = Map.insert i (gDeclIn, (assignOutput, gDeclOut)) $ shaderUsedInput s } nvar body)
     return $ prefix <> tshow i
     where
+        space = if LT.null qual then "" else " "
+
         assignOutput = do
             val <- v
             let name = prefix <> tshow i
@@ -341,6 +348,9 @@ useFInput qual prefix stype i v = do
             tellGlobal $ stypeName stype
             tellGlobal $ " " <> prefix
             tellGlobalLn $ tshow i
+
+        gDeclOut = gDecl (qual <> space <> "out ")
+        gDeclIn = gDecl (qual <> space <> "in ")
 
 declareGeometryLayout :: Text -> Text -> Int -> ExprM ()
 declareGeometryLayout inputPrimitive outputPrimitive maxVertices =
@@ -1063,7 +1073,7 @@ fwidth = fun1f "fwidth"
 
 ---------------------------------
 fromV :: Foldable t => (a -> S x b) -> Text -> t a -> S x (t b)
-fromV f s v = S $ do
+fromV f s v = S $ tellAssignment (STypeDyn s) $ do
     params <- mapM (unS . f) $ toList v
     return $ s <> "(" <> LT.intercalate "," params <> ")"
 
