@@ -69,6 +69,7 @@ library
       Graphics.GPipe.Optimizer.DFG
       Graphics.GPipe.Optimizer.FunctionGenerator
       Graphics.GPipe.Optimizer.GLSL
+      Graphics.GPipe.Optimizer.Liveness
       Graphics.GPipe.Optimizer.StructuralEquality
       Graphics.GPipe.Optimizer
   other-modules:
@@ -88,6 +89,7 @@ library
     , graphviz                      >= 2999.10 && < 2999.21
     , lens                          >= 4.15.2 && < 6
     , linear                        >= 1.18 && < 1.22
+    , scientific                    >= 0.3.1 && < 0.4
     , text                          >= 0.10 && < 1.3
     , transformers                  >= 0.5.2 && < 0.6
     , unordered-containers          >= 0.2 && < 0.3
@@ -100,6 +102,7 @@ test-suite testsuite
   main-is:          testsuite.hs
   other-modules:
       Graphics.GPipe.ExprSpec
+      Graphics.GPipe.Optimizer.DeinlineSpec
   ghc-options:
       -Wall
       -rtsopts
@@ -109,6 +112,8 @@ test-suite testsuite
   build-depends:
       base < 5
     , GPipe-Core
+    , attoparsec
+    , bytestring
     , hspec
     , lens
     , text

@@ -10,10 +10,10 @@ import           Graphics.GPipe.Optimizer.GLSL
 
 newtype ConstExprs = ConstExprs S.IntSet
 
-collectConstExprs :: [Stmt] -> ConstExprs
-collectConstExprs = ConstExprs . foldr add S.empty
+collectConstExprs :: [StmtAnnot a] -> ConstExprs
+collectConstExprs = ConstExprs . foldr (add . unAnnot) S.empty
   where
-    add :: Stmt -> S.IntSet -> S.IntSet
+    add :: Stmt a -> S.IntSet -> S.IntSet
     add (AssignStmt (Name NsT (NameId n)) e) s
       | isConstExpr (ConstExprs s) e = S.insert n s
     add _ s = s

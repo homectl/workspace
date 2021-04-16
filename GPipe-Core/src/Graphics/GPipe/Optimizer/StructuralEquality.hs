@@ -5,24 +5,27 @@ import           Graphics.GPipe.Optimizer.ConstExpr (ConstExprs, isConstExpr)
 import           Graphics.GPipe.Optimizer.GLSL
 
 
-eqStmts :: ConstExprs -> [(Stmt, Stmt)] -> Bool
-eqStmts ce = all (uncurry (eqStmt ce))
+eqStmtAnnots :: ConstExprs -> [(StmtAnnot a, StmtAnnot a)] -> Bool
+eqStmtAnnots ce = all (uncurry (eqStmtAnnot ce))
+
+eqStmtAnnot :: ConstExprs -> StmtAnnot a -> StmtAnnot a -> Bool
+eqStmtAnnot ce (SA _ a) (SA _ b) = eqStmt ce a b
 
 
-eqStmt :: ConstExprs -> Stmt -> Stmt -> Bool
+eqStmt :: ConstExprs -> Stmt a -> Stmt a -> Bool
 eqStmt ce (AssignStmt _ ea) (AssignStmt _ eb) =
   -- We consider constant expressions to be equal, since we can just pass that
   -- constant into the function as an argument. Most of the time, it's small
   -- things like 1.0 or (-1.0) (possibly in a t-var, hence the ConstExprs set).
-  isConstExpr ce ea && isConstExpr ce eb
-  || eqExpr ea eb
+  isConstExpr ce ea && isConstExpr ce eb ||
+  eqExpr ea eb
 eqStmt _ (DeclStmt da) (DeclStmt db) =
   eqLocalDecl da db
 eqStmt _ (EmitStmt ea) (EmitStmt eb) =
   eqEmit ea eb
 eqStmt ce (IfStmt _ ta ea) (IfStmt _ tb eb) =
-  eqStmts ce (zip ta tb) &&
-  eqStmts ce (zip ea eb)
+  eqStmtAnnots ce (zip ta tb) &&
+  eqStmtAnnots ce (zip ea eb)
 eqStmt _ _ _ = False
 
 
@@ -53,11 +56,14 @@ eqExprAtom (VecIndexExpr _ ia) (VecIndexExpr _ ib)       = ia == ib
 eqExprAtom (MatIndexExpr _ ia ja) (MatIndexExpr _ ib jb) = ia == ib && ja == jb
 eqExprAtom _ _                                           = False
 
-
 -- | All variable names are equal.
 --
 --   We used to ignore temporary names only, considering all other names as
---   globals and a fixed part of the code.
+--   globals and a fixed part of the code. This check is quite expensive and it
+--   turns out that most of the time the global variables *are* the same. If
+--   they are not, we'll need to pass them as arguments to our new function, but
+--   this is rare enough so it won't increase the average function parameter
+--   list length too much.
 eqName :: Name -> Name -> Bool
 -- eqName (Name NsT _) (Name NsT _)   = True
 -- eqName (Name nsa na) (Name nsb nb) = nsa == nsb && na == nb

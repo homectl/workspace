@@ -7,8 +7,10 @@ import           Control.Applicative              ((<|>))
 import           Data.Attoparsec.ByteString.Char8 (IResult (Partial), Parser,
                                                    char, decimal, endOfInput,
                                                    many1, option, parse,
-                                                   parseOnly, rational, sepBy1)
+                                                   parseOnly, rational,
+                                                   scientific, sepBy1)
 import           Data.List                        (intersperse)
+import qualified Data.Scientific                  as Sci
 import qualified Data.Text.Encoding               as T
 import qualified Data.Text.Lazy                   as LT
 import qualified Data.Text.Lazy.Builder           as LTB
@@ -16,22 +18,22 @@ import qualified Data.Text.Lazy.Builder.Int       as LTB
 import qualified Data.Text.Lazy.Builder.RealFloat as LTB
 
 
-parseShader :: LT.Text -> Either String GLSL
+parseShader :: Annot a => LT.Text -> Either String (GLSL a)
 parseShader = parseOnly parseGLSL . T.encodeUtf8 . LT.toStrict
 
-printShader :: GLSL -> LT.Text
+printShader :: Annot a => GLSL a -> LT.Text
 printShader = LTB.toLazyText . ppGLSL
 
 
-data GLSL = GLSL Version [TopDecl]
+data GLSL a = GLSL Version [TopDecl a]
   deriving (Show)
 
-parseGLSL :: Parser GLSL
+parseGLSL :: Annot a => Parser (GLSL a)
 parseGLSL = GLSL
   <$> parseVersion
   <*> ("\n" >> many1 parseTopDecl >>= (endOfInput >>) . pure)
 
-ppGLSL :: GLSL -> LTB.Builder
+ppGLSL :: Annot a => GLSL a -> LTB.Builder
 ppGLSL (GLSL v decls) =
   ppVersion v
   <> "\n" <> ppL ppTopDecl decls
@@ -45,13 +47,13 @@ parseVersion = Version <$> ("#version " >> decimal)
 ppVersion :: Version -> LTB.Builder
 ppVersion (Version v) = "#version " <> LTB.decimal v
 
-data TopDecl
+data TopDecl a
   = LayoutDecl LayoutSpec GlobalDecl
   | GlobalDecl GlobalDecl
-  | ProcDecl ProcName [ParamDecl] [Stmt]
+  | ProcDecl ProcName [ParamDecl] [StmtAnnot a]
   deriving (Show)
 
-parseTopDecl :: Parser TopDecl
+parseTopDecl :: Annot a => Parser (TopDecl a)
 parseTopDecl = layoutDecl <|> globalDecl <|> procDecl
   where
     layoutDecl = LayoutDecl
@@ -64,16 +66,16 @@ parseTopDecl = layoutDecl <|> globalDecl <|> procDecl
     procDecl = ProcDecl
       <$> ("void " >> parseProcName)
       <*> ("() " >> pure [])
-      -- <*> ("{\n" >> many1 parseStmt)
-      <*> ("{\n" >> many1 parseStmt >>= ("}\n" >>) . pure)
+      -- <*> ("{\n" >> many1 parseStmtAnnot)
+      <*> ("{\n" >> many1 parseStmtAnnot >>= ("}\n" >>) . pure)
 
-ppTopDecl :: TopDecl -> LTB.Builder
+ppTopDecl :: Annot a => TopDecl a -> LTB.Builder
 ppTopDecl (LayoutDecl e d) = "layout(" <> ppLayoutSpec e <> ") " <> ppGlobalDecl d
 ppTopDecl (GlobalDecl d) = ppGlobalDecl d
 ppTopDecl (ProcDecl n a b) =
   "void " <> ppProcName n
   <> "(" <> ppS "," ppParamDecl a <> ") {\n"
-  <> ppL ppStmt b
+  <> ppL ppStmtAnnot b
   <> "}\n"
 
 data ProcName
@@ -135,22 +137,22 @@ ppParamKind PkOut   = "out"
 ppParamKind PkInout = "inout"
 
 data LocalDecl
-  = LDecl Type Name (Maybe Expr)
+  = LDecl Type NameId (Maybe Expr)
   deriving (Show)
 
 parseLocalDecl :: Parser LocalDecl
 parseLocalDecl = LDecl
   <$> parseType
-  <*> (" " >> parseName)
+  <*> (" t" >> parseNameId)
   <*> (option Nothing (" = " >> Just <$> parseExpr) >>= (";\n" >>) . pure)
 
 ppLocalDecl :: LocalDecl -> LTB.Builder
 ppLocalDecl (LDecl t n Nothing) =
   ppType t
-  <> " " <> ppName n <> ";\n"
+  <> " t" <> ppNameId n <> ";\n"
 ppLocalDecl (LDecl t n (Just e)) =
   ppType t
-  <> " " <> ppName n
+  <> " t" <> ppNameId n
   <> " = " <> ppExpr e <> ";\n"
 
 data GlobalDecl
@@ -396,8 +398,7 @@ data ExprAtom
 
 parseExprAtom :: Parser ExprAtom
 parseExprAtom =
-  LitFloatExpr NoCast <$> rational
-  <|> LitIntExpr NoCast <$> decimal
+  litNumber <$> scientific
   <|> LitIntExpr Cast <$> ("int(" >> decimal >>= (")" >>) . pure)
   <|> LitFloatExpr Cast <$> ("float(" >> rational >>= (")" >>) . pure)
   <|> UniformExpr <$> (char 'u' >> parseNameId) <*> (".u" >> parseNameId)
@@ -405,6 +406,13 @@ parseExprAtom =
   <|> MatIndexExpr <$> parseName <*> ("[" >> parseVecIndex) <*> ("][" >> parseVecIndex >>= ("]" >>) . pure)
   <|> VecIndexExpr <$> parseName <*> ("[" >> parseVecIndex >>= ("]" >>) . pure)
   <|> IdentifierExpr <$> parseName
+  where
+    litNumber s =
+      let e = Sci.base10Exponent s
+          c = Sci.coefficient s
+      in if e >= 0
+          then LitIntExpr NoCast (fromInteger (c * 10 ^ e))
+          else LitFloatExpr NoCast (Sci.toRealFloat s)
 
 ppExprAtom :: ExprAtom -> LTB.Builder
 ppExprAtom (LitIntExpr Cast i)     = "int(" <> LTB.decimal i <> ")"
@@ -505,31 +513,43 @@ ppUnaryOp :: UnaryOp -> LTB.Builder
 ppUnaryOp UOpMinus = "-"
 ppUnaryOp UOpNot   = "!"
 
-data Stmt
+data StmtAnnot a = SA
+  { annot   :: a
+  , unAnnot :: Stmt a
+  }
+  deriving (Show)
+
+parseStmtAnnot :: Annot a => Parser (StmtAnnot a)
+parseStmtAnnot = SA <$> parseAnnot <*> parseStmt
+
+ppStmtAnnot :: Annot a => StmtAnnot a -> LTB.Builder
+ppStmtAnnot (SA a s) = ppAnnot a <> ppStmt s
+
+data Stmt a
   = AssignStmt Name Expr
   | DeclStmt LocalDecl
   | EmitStmt Emit
-  | IfStmt NameId [Stmt] [Stmt]
+  | IfStmt NameId [StmtAnnot a] [StmtAnnot a]
   deriving (Show)
 
-parseStmt :: Parser Stmt
+parseStmt :: Annot a => Parser (Stmt a)
 parseStmt =
   IfStmt <$> ("if(t" >> parseNameId >>= ("){\n" >>) . pure)
-         <*> many1 parseStmt
-         <*> ("} else {\n" >> many1 parseStmt >>= ("}\n" >>) . pure)
+         <*> many1 parseStmtAnnot
+         <*> ("} else {\n" >> many1 parseStmtAnnot >>= ("}\n" >>) . pure)
   <|> AssignStmt <$> parseName <*> (" = " >> parseExpr >>= (";\n" >>) . pure)
   <|> DeclStmt <$> parseLocalDecl
   <|> EmitStmt <$> parseEmit
 
-ppStmt :: Stmt -> LTB.Builder
+ppStmt :: Annot a => Stmt a -> LTB.Builder
 ppStmt (AssignStmt n e) = ppName n <> " = " <> ppExpr e <> ";\n"
 ppStmt (DeclStmt d) = ppLocalDecl d
 ppStmt (EmitStmt e) = ppEmit e
 ppStmt (IfStmt c t e) =
   "if(t" <> ppNameId c <> "){\n"
-  <> ppL ppStmt t
+  <> ppL ppStmtAnnot t
   <> "} else {\n"
-  <> ppL ppStmt e
+  <> ppL ppStmtAnnot e
   <> "}\n"
 
 data Emit
@@ -551,6 +571,14 @@ ppL printer = mconcat . map printer
 
 ppS :: LTB.Builder -> (a -> LTB.Builder) -> [a] -> LTB.Builder
 ppS sep printer = mconcat . intersperse sep . map printer
+
+class Annot a where
+  parseAnnot :: Parser a
+  ppAnnot :: a -> LTB.Builder
+
+instance Annot () where
+  parseAnnot = pure ()
+  ppAnnot = const mempty
 
 ----------------------------------
 

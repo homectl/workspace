@@ -46,41 +46,41 @@ defaultConfig = Config
   }
 
 
-pass :: Config -> GLSL -> GLSL
+pass :: Annot a => Config -> GLSL a -> GLSL a
 pass config (GLSL v d) = GLSL v (map (diTopDecl config) d)
 
-diTopDecl :: Config -> TopDecl -> TopDecl
+diTopDecl :: Annot a => Config -> TopDecl a -> TopDecl a
 diTopDecl config (ProcDecl fn params body) =
-  let ce = collectConstExprs body in
-  ProcDecl fn params $ diStmts config ce body
+  ProcDecl fn params $ diStmts config body
 diTopDecl _ d = d
 
 
-diStmts :: Config -> ConstExprs -> [Stmt] -> [Stmt]
-diStmts config ce ss =
+diStmts :: Annot a => Config -> [StmtAnnot a] -> [StmtAnnot a]
+diStmts config ss =
+  let ce = collectConstExprs ss in
   case findBody config ce ss of
     Nothing -> ss
     Just body ->
-      let _newProc = pp ppTopDecl (FunctionGenerator.makeFunction body) in
+      let newProc = pp ppTopDecl (FunctionGenerator.makeFunction body) in
       trace (
         "found one! length = " <> show (length body)
-        -- <> "\n" <> ppl ppStmt body <> "\n\n"
-        -- <> newProc
+        <> "\n" <> ppl ppStmtAnnot body <> "\n\n"
+        <> newProc
       ) $ deleteBody ce body ss
 
 
 -- | Remove all occurrences of 'body' from 'ss'.
-deleteBody :: ConstExprs -> [Stmt] -> [Stmt] -> [Stmt]
+deleteBody :: ConstExprs -> [StmtAnnot a] -> [StmtAnnot a] -> [StmtAnnot a]
 deleteBody ce body = go []
   where
     go acc [] = reverse acc
     go acc (s:ss) =
-      if StructuralEquality.eqStmts ce (zip body ss)
+      if StructuralEquality.eqStmtAnnots ce (zip body ss)
         then go (s:acc) (drop (length body) ss)
         else go (s:acc) ss
 
 
-findBody :: Config -> ConstExprs -> [Stmt] -> Maybe [Stmt]
+findBody :: Config -> ConstExprs -> [StmtAnnot a] -> Maybe [StmtAnnot a]
 findBody _ _ [] = Nothing
 findBody Config{..} _ (_:ss) | length ss < windowSize = Nothing
 findBody config@Config{..} ce (_:ss) =
@@ -89,18 +89,11 @@ findBody config@Config{..} ce (_:ss) =
     window = take windowSize ss
 
     -- We'll iterate over all possible sub-programs from the current position.
-    -- We drop the window size, which means we may miss opportunties within the
-    -- window, which matters more if the window is very large, so running the
-    -- algorithm with a smaller window size and more passes generally works
-    -- better.
-    tails =
-      drop windowSize
-      . List.tails
-      $ ss
+    tails = List.tails ss
 
     -- We want to find similar statements and filter out the empty sub-program
     -- since the empty list is trivially equal to another empty list.
-    isSimilar l = not (null l) && StructuralEquality.eqStmts ce l
+    isSimilar l = not (null l) && StructuralEquality.eqStmtAnnots ce l
 
     -- Try to find a similar set of statements to the window somewhere in the
     -- lookahead range.
@@ -146,6 +139,6 @@ transpose :: [[a]] -> [[a]]
 transpose = getZipList . traverse ZipList
 
 -- | Check for each statement whether it's structurally equal to the first one.
-allEqual :: ConstExprs -> [Stmt] -> Bool
+allEqual :: ConstExprs -> [StmtAnnot a] -> Bool
 allEqual _ []      = True
-allEqual ce (x:xs) = all (StructuralEquality.eqStmt ce x) xs
+allEqual ce (x:xs) = all (StructuralEquality.eqStmtAnnot ce x) xs

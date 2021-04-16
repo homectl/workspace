@@ -84,16 +84,16 @@ data DFGNode
 
 type DFGState = StateT DFG Identity
 
-genDFG :: GLSL -> DFG
+genDFG :: GLSL a -> DFG
 genDFG prog = execState (dfgGLSL prog) emptyDFG
 
-dfgGLSL :: GLSL -> DFGState ()
+dfgGLSL :: GLSL a -> DFGState ()
 dfgGLSL (GLSL _ decls) = mapM_ dfgTopDecl decls
 
-dfgTopDecl :: TopDecl -> DFGState ()
+dfgTopDecl :: TopDecl a -> DFGState ()
 dfgTopDecl (LayoutDecl _ d)     = dfgGlobalDecl d
 dfgTopDecl (GlobalDecl d)       = dfgGlobalDecl d
-dfgTopDecl (ProcDecl _ _ stmts) = mapM_ dfgStmt stmts
+dfgTopDecl (ProcDecl _ _ stmts) = mapM_ dfgStmtAnnot stmts
 
 dfgGlobalDecl :: GlobalDecl -> DFGState ()
 dfgGlobalDecl (GDecl _ (TyStruct _ ms) (Name NsU n)) =
@@ -104,7 +104,7 @@ dfgGlobalDecl (GDecl _ _ (Name ns n)) =
 dfgStructMember :: NameId -> (Type, NameId) -> DFGState ()
 dfgStructMember n (_, m) = void $ addNode NsU (toUniformId (n, m))
 
-dfgStmt :: Stmt -> DFGState ()
+dfgStmt :: Stmt a -> DFGState ()
 dfgStmt (DeclStmt d)     = dfgLocalDecl d
 dfgStmt (AssignStmt n e) = do
   targetId <- nodeForName n
@@ -114,13 +114,16 @@ dfgStmt (AssignStmt n e) = do
 dfgStmt (IfStmt c t e) = do
   ifCond <- Just <$> nodeFor NsT c
   modify' $ \dfg -> dfg{ifCond}
-  mapM_ dfgStmt (t ++ e)
+  mapM_ dfgStmtAnnot (t ++ e)
   modify' $ \dfg -> dfg{ifCond=Nothing}
 dfgStmt _                = return ()
 
+dfgStmtAnnot :: StmtAnnot a -> DFGState ()
+dfgStmtAnnot (SA _ s) = dfgStmt s
+
 dfgLocalDecl :: LocalDecl -> DFGState ()
-dfgLocalDecl (LDecl _ (Name ns n) e) = do
-  nodeId <- addNode ns n
+dfgLocalDecl (LDecl _ n e) = do
+  nodeId <- addNode NsT n
   maybe (return ()) (`dfgExpr` nodeId) e
 
 dfgExpr :: Expr -> Node -> DFGState ()
