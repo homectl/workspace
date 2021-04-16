@@ -120,7 +120,7 @@ spec = do
                 c = a ==* b
                 result = norm $ ifThenElse' c a b
             res <- wrap result
-            -- golden $ finalSource res
+            -- golden $ finalSourcge res
             finalSource res `shouldBe` LT.unlines
                 [ "#version 450"
                 , "void main() {"

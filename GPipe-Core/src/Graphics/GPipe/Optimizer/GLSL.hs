@@ -34,7 +34,7 @@ parseGLSL = GLSL
 ppGLSL :: GLSL -> LTB.Builder
 ppGLSL (GLSL v decls) =
   ppVersion v
-  <> "\n" <> (mconcat . map ppTopDecl $ decls)
+  <> "\n" <> ppL ppTopDecl decls
 
 newtype Version = Version Int
   deriving (Show)
@@ -48,11 +48,11 @@ ppVersion (Version v) = "#version " <> LTB.decimal v
 data TopDecl
   = LayoutDecl LayoutSpec GlobalDecl
   | GlobalDecl GlobalDecl
-  | FunDecl Type FunName [ParamDecl] [Stmt]
+  | ProcDecl ProcName [ParamDecl] [Stmt]
   deriving (Show)
 
 parseTopDecl :: Parser TopDecl
-parseTopDecl = layoutDecl <|> globalDecl <|> funDecl
+parseTopDecl = layoutDecl <|> globalDecl <|> procDecl
   where
     layoutDecl = LayoutDecl
       <$> ("layout(" >> parseLayoutSpec)
@@ -61,9 +61,8 @@ parseTopDecl = layoutDecl <|> globalDecl <|> funDecl
     globalDecl = GlobalDecl
       <$> parseGlobalDecl
 
-    funDecl = FunDecl
-      <$> ("void " >> return TyVoid)
-      <*> parseFunName
+    procDecl = ProcDecl
+      <$> ("void " >> parseProcName)
       <*> ("() " >> pure [])
       -- <*> ("{\n" >> many1 parseStmt)
       <*> ("{\n" >> many1 parseStmt >>= ("}\n" >>) . pure)
@@ -71,12 +70,25 @@ parseTopDecl = layoutDecl <|> globalDecl <|> funDecl
 ppTopDecl :: TopDecl -> LTB.Builder
 ppTopDecl (LayoutDecl e d) = "layout(" <> ppLayoutSpec e <> ") " <> ppGlobalDecl d
 ppTopDecl (GlobalDecl d) = ppGlobalDecl d
-ppTopDecl (FunDecl t n a b) =
-  ppType t
-  <> " " <> ppFunName n
-  <> "(" <> (mconcat . intersperse "," . map ppParamDecl $ a) <> ") {\n"
-  <> (mconcat . map ppStmt $ b)
+ppTopDecl (ProcDecl n a b) =
+  "void " <> ppProcName n
+  <> "(" <> ppS "," ppParamDecl a <> ") {\n"
+  <> ppL ppStmt b
   <> "}\n"
+
+data ProcName
+  = ProcMain
+  | ProcName NameId
+  deriving (Show)
+
+parseProcName :: Parser ProcName
+parseProcName =
+  ("main" >> pure ProcMain)
+  <|> ("p" >> ProcName <$> parseNameId)
+
+ppProcName :: ProcName -> LTB.Builder
+ppProcName ProcMain     = "main"
+ppProcName (ProcName n) = "p" <> ppNameId n
 
 data LayoutSpec
   = LayoutStd140
@@ -175,8 +187,7 @@ ppGDeclKind GkOut     = "out"
 ppGDeclKind GkUniform = "uniform"
 
 data Type
-  = TyVoid
-  | TyBool
+  = TyBool
   | TyFloat
   | TySampler2D
   | TyVec Int
@@ -203,7 +214,6 @@ parseType =
       <*> (" u" >> parseNameId >>= (";\n" >>) . pure)
 
 ppType :: Type -> LTB.Builder
-ppType TyVoid = "void"
 ppType TyBool = "bool"
 ppType TyFloat = "float"
 ppType TySampler2D = "sampler2D"
@@ -211,7 +221,7 @@ ppType (TyVec n) = "vec" <> LTB.decimal n
 ppType (TyMat n m) = "mat" <> LTB.decimal n <> "x" <> LTB.decimal m
 ppType (TyStruct n ms) =
   "uBlock" <> ppNameId n
-  <> " {\n" <> mconcat (map ppStructMember ms) <> "}"
+  <> " {\n" <> ppL ppStructMember ms <> "}"
   where ppStructMember (t, n) = ppType t <> " u" <> ppNameId n <> ";\n"
 
 newtype NameId = NameId Int
@@ -255,12 +265,12 @@ parseNamespace =
   <|> (char 's' >> pure NsS)
 
 ppNamespace :: Namespace -> LTB.Builder
-ppNamespace NsT      = "t"
-ppNamespace NsS      = "s"
-ppNamespace NsU      = "u"
-ppNamespace NsVF     = "vf"
-ppNamespace NsIn     = "in"
-ppNamespace NsOut    = "out"
+ppNamespace NsT   = "t"
+ppNamespace NsS   = "s"
+ppNamespace NsU   = "u"
+ppNamespace NsVF  = "vf"
+ppNamespace NsIn  = "in"
+ppNamespace NsOut = "out"
 
 data FunName
   = PrimMain
@@ -440,7 +450,7 @@ ppExpr :: Expr -> LTB.Builder
 ppExpr (AtomExpr e) = ppExprAtom e
 ppExpr (UnaryExpr o e) = "(" <> ppUnaryOp o <> ppExprAtom e <> ")"
 ppExpr (BinaryExpr l o r) = "(" <> ppExprAtom l <> ppBinaryOp o <> ppExprAtom r <> ")"
-ppExpr (FunCallExpr n args) = ppFunName n <> "(" <> (mconcat . intersperse "," . map ppExprAtom $ args) <> ")"
+ppExpr (FunCallExpr n args) = ppFunName n <> "(" <> ppS "," ppExprAtom args <> ")"
 ppExpr (TextureExpr t x y) = "texture(" <> ppExprAtom t <> ",vec2(" <> ppExprAtom x <> "," <> ppExprAtom y <> "))"
 
 data BinaryOp
@@ -517,9 +527,9 @@ ppStmt (DeclStmt d) = ppLocalDecl d
 ppStmt (EmitStmt e) = ppEmit e
 ppStmt (IfStmt c t e) =
   "if(t" <> ppNameId c <> "){\n"
-  <> (mconcat . map ppStmt $ t)
+  <> ppL ppStmt t
   <> "} else {\n"
-  <> (mconcat . map ppStmt $ e)
+  <> ppL ppStmt e
   <> "}\n"
 
 data Emit
@@ -535,6 +545,12 @@ parseEmit =
 ppEmit :: Emit -> LTB.Builder
 ppEmit (EmitPosition e) = "gl_Position = " <> ppExpr e <> ";\n"
 ppEmit EmitFragDepth    = "gl_FragDepth = gl_FragCoord[2];\n"
+
+ppL :: (a -> LTB.Builder) -> [a] -> LTB.Builder
+ppL printer = mconcat . map printer
+
+ppS :: LTB.Builder -> (a -> LTB.Builder) -> [a] -> LTB.Builder
+ppS sep printer = mconcat . intersperse sep . map printer
 
 ----------------------------------
 
@@ -559,4 +575,4 @@ pp :: (a -> LTB.Builder) -> a -> String
 pp printer = LT.unpack . LTB.toLazyText . printer
 
 ppl :: (a -> LTB.Builder) -> [a] -> String
-ppl printer = LT.unpack . LTB.toLazyText . mconcat . map printer
+ppl printer = LT.unpack . LTB.toLazyText . ppL printer

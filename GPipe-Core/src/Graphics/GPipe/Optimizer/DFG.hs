@@ -91,9 +91,9 @@ dfgGLSL :: GLSL -> DFGState ()
 dfgGLSL (GLSL _ decls) = mapM_ dfgTopDecl decls
 
 dfgTopDecl :: TopDecl -> DFGState ()
-dfgTopDecl (LayoutDecl _ d)      = dfgGlobalDecl d
-dfgTopDecl (GlobalDecl d)        = dfgGlobalDecl d
-dfgTopDecl (FunDecl _ _ _ stmts) = mapM_ dfgStmt stmts
+dfgTopDecl (LayoutDecl _ d)     = dfgGlobalDecl d
+dfgTopDecl (GlobalDecl d)       = dfgGlobalDecl d
+dfgTopDecl (ProcDecl _ _ stmts) = mapM_ dfgStmt stmts
 
 dfgGlobalDecl :: GlobalDecl -> DFGState ()
 dfgGlobalDecl (GDecl _ (TyStruct _ ms) (Name NsU n)) =

@@ -65,9 +65,10 @@ library
       Graphics.GPipe.Internal.Uniform
       Graphics.GPipe.Internal.Orphans
       Graphics.GPipe.Optimizer.ConstExpr
+      Graphics.GPipe.Optimizer.Deinline
       Graphics.GPipe.Optimizer.DFG
+      Graphics.GPipe.Optimizer.FunctionGenerator
       Graphics.GPipe.Optimizer.GLSL
-      Graphics.GPipe.Optimizer.PeepHole
       Graphics.GPipe.Optimizer.StructuralEquality
       Graphics.GPipe.Optimizer
   other-modules:
@@ -164,3 +165,4 @@ executable optshader
       base < 5
     , GPipe-Core
     , text
+    , time
