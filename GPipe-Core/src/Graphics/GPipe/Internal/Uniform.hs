@@ -19,11 +19,13 @@ import           Control.Category                 (Category)
 import           Control.Monad.Trans.Class        (lift)
 import           Control.Monad.Trans.Reader       (Reader, ask, runReader)
 import           Control.Monad.Trans.Writer       (WriterT (runWriterT), tell)
+import           Data.IORef                       (readIORef)
+import           Data.Int                         (Int32)
 import qualified Data.IntMap                      as Map
 import           Data.IntMap.Lazy                 (insert)
 import           Data.Text.Lazy                   (Text)
-import qualified Data.Text.Lazy                   as LT
 import           Data.Word                        (Word32)
+import           Graphics.GL.Core45
 import           Graphics.GPipe.Internal.Buffer   (B (..), B2 (..), B3 (..),
                                                    B4 (..), BInput (..),
                                                    Buffer (..), BufferFormat,
@@ -39,10 +41,6 @@ import           Graphics.GPipe.Internal.Expr     (ExprM, GlobDeclM, S (S),
 import           Graphics.GPipe.Internal.Shader   (Shader (..), ShaderM,
                                                    askUniformAlignment,
                                                    getNewName, modifyRenderIO)
-
-import           Data.IORef                       (readIORef)
-import           Data.Int                         (Int32)
-import           Graphics.GL.Core45
 import           Linear.Plucker                   (Plucker (..))
 import           Linear.Quaternion                (Quaternion (..))
 import           Linear.V0                        (V0 (..))

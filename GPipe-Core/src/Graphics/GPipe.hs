@@ -9,10 +9,12 @@
 -- Portability :  Portable
 --
 -- |
--- A typesafe API based on the conceptual model of OpenGl, but without the imperative state machine.
--- GPipe aims to be as close to raw OpenGl performance as possible, without compromising type safety or functional style.
--- Includes an embedded domain specific language for GLSL shaders which provides type safety even when crossing into that domain.
--- Uses the OpenGl 3.3 core profile under the hood.
+-- A typesafe API based on the conceptual model of OpenGL, but without the
+-- imperative state machine. GPipe aims to be as close to raw OpenGL performance
+-- as possible, without compromising type safety or functional style. Includes
+-- an embedded domain specific language for GLSL shaders which provides type
+-- safety even when crossing into that domain. Uses the OpenGL 4.5 core profile
+-- under the hood.
 --
 -- To learn GPipe, start with the <https://github.com/tobbebex/GPipe-Core#readme readme>
 -- at the <https://github.com/tobbebex/GPipe-Core source repository>.

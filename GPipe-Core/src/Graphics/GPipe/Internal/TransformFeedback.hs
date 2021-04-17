@@ -10,7 +10,16 @@
 {-# OPTIONS_GHC -Wno-unused-foralls #-}
 module Graphics.GPipe.Internal.TransformFeedback where
 
+import           Control.Monad.Trans.State               (evalState)
+import           Data.IORef                              (readIORef, writeIORef)
+import           Data.IntMap.Lazy                        (insert)
 import qualified Data.Text.Lazy                          as LT
+import           Foreign.C.String                        (newCString)
+import           Foreign.Marshal                         (alloca, free,
+                                                          withArray)
+import           Foreign.Storable                        (Storable (peek))
+import           Graphics.GL.Core45
+import           Graphics.GL.Types                       (GLuint)
 import           Graphics.GPipe.Internal.Buffer          (Buffer (bufName, bufTransformFeedback))
 import           Graphics.GPipe.Internal.Compiler        (Drawcall (Drawcall),
                                                           RenderIOState (transformFeedbackToRenderIO))
@@ -30,17 +39,6 @@ import           Graphics.GPipe.Internal.PrimitiveStream (PrimitiveStreamData (P
 import           Graphics.GPipe.Internal.Shader          (Shader (..), ShaderM,
                                                           modifyRenderIO,
                                                           tellDrawcall)
-
-import           Graphics.GL.Core45
-import           Graphics.GL.Types                       (GLuint)
-
-import           Control.Monad.Trans.State               (evalState)
-import           Data.IORef                              (readIORef, writeIORef)
-import           Data.IntMap.Lazy                        (insert)
-import           Foreign.C.String                        (newCString)
-import           Foreign.Marshal                         (alloca, free,
-                                                          withArray)
-import           Foreign.Storable                        (Storable (peek))
 
 drawNothing :: forall p a s c ds os f. (PrimitiveTopology p, VertexInput a, GeometryExplosive (VertexFormat a))
     => Window os c ds

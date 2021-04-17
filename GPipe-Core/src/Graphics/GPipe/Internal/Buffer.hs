@@ -23,17 +23,6 @@ module Graphics.GPipe.Internal.Buffer
     bufSize, bufName, bufElementSize, bufferLength, bufBElement, bufTransformFeedback, bufferWriteInternal, makeBuffer, getUniformAlignment, UniformAlignment
 ) where
 
-import           Graphics.GPipe.Internal.Context   (ContextHandler, ContextT,
-                                                    addContextFinalizer,
-                                                    addVAOBufferFinalizer,
-                                                    liftNonWinContextAsyncIO,
-                                                    liftNonWinContextIO)
-
-import           Foreign.Marshal.Alloc             (alloca)
-import           Foreign.Marshal.Utils             (with)
-import           Graphics.GL.Core45
-import           Graphics.GL.Types                 (GLenum, GLuint)
-
 import           Control.Arrow                     (Arrow (arr, first),
                                                     Kleisli (..), returnA)
 import           Control.Category                  (Category (..))
@@ -47,9 +36,18 @@ import           Control.Monad.Trans.Writer.Strict (WriterT (runWriterT), tell)
 import           Data.IORef                        (IORef, newIORef, readIORef)
 import           Data.Int                          (Int16, Int32, Int8)
 import           Data.Word                         (Word16, Word32, Word8)
+import           Foreign.Marshal.Alloc             (alloca)
+import           Foreign.Marshal.Utils             (with)
 import           Foreign.Ptr                       (Ptr, castPtr, minusPtr,
                                                     nullPtr, plusPtr)
 import           Foreign.Storable                  (Storable (peek, peekElemOff, poke, sizeOf))
+import           Graphics.GL.Core45
+import           Graphics.GL.Types                 (GLenum, GLuint)
+import           Graphics.GPipe.Internal.Context   (ContextHandler, ContextT,
+                                                    addContextFinalizer,
+                                                    addVAOBufferFinalizer,
+                                                    liftNonWinContextAsyncIO,
+                                                    liftNonWinContextIO)
 import           Linear                            (Quaternion (..), V0 (..),
                                                     V1 (..), V2 (..), V3 (..),
                                                     V4 (..))

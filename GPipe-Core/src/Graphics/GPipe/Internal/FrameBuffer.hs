@@ -54,7 +54,6 @@ import           Graphics.GPipe.Internal.Format          (ColorRenderable (clear
                                                           StencilRenderable)
 import           Graphics.GPipe.Internal.FragmentStream  (FragmentStream (..),
                                                           FragmentStreamData (..))
-import           Graphics.GPipe.Optimizer       (optimizeShader)
 import           Graphics.GPipe.Internal.PrimitiveStream (PrimitiveStreamData (PrimitiveStreamData))
 import           Graphics.GPipe.Internal.Shader          (Shader (..), ShaderM,
                                                           tellDrawcall)
@@ -63,6 +62,7 @@ import           Graphics.GPipe.Internal.Texture         (ComparisonFunction,
                                                           getImageBinding,
                                                           getImageFBOKey,
                                                           imageEquals)
+import           Graphics.GPipe.Optimizer                (optimizeShader)
 import           Linear.V4                               (V4 (..))
 import qualified System.Environment                      as Env
 
@@ -105,29 +105,40 @@ drawColor sf c = DrawColors $ do
     where
         cf = undefined :: c
 
--- | Draw all fragments in a 'FragmentStream' using the provided function that passes each fragment value into a 'DrawColors' monad. The first argument is a function
---   that retrieves a 'Blending' setting from the shader environment, which will be used for all 'drawColor' actions in the 'DrawColors' monad where 'UseBlending' is 'True'.
---   (OpenGl 3.3 unfortunately doesn't support having different blending settings for different color targets.)
+-- | Draw all fragments in a 'FragmentStream' using the provided function that
+--   passes each fragment value into a 'DrawColors' monad. The first argument is
+--   a function that retrieves a 'Blending' setting from the shader environment,
+--   which will be used for all 'drawColor' actions in the 'DrawColors' monad
+--   where 'UseBlending' is 'True'. (OpenGL 3.3 unfortunately doesn't support
+--   having different blending settings for different color targets.)
+--
+--   TODO: we're using OpenGL 4.5 now. Is this still true?
 draw :: forall a os f s. (s -> Blending)
     -> FragmentStream a
     -> (a -> DrawColors os s ())
     -> Shader os s ()
 
--- | Like 'draw', but performs a depth test on each fragment first. The 'DrawColors' monad is then only run for fragments where the depth test passes.
+-- | Like 'draw', but performs a depth test on each fragment first. The
+--   'DrawColors' monad is then only run for fragments where the depth test
+--   passes.
 drawDepth :: forall a os f s d. DepthRenderable d
     => (s -> (Blending, Image (Format d), DepthOption))
     -> FragmentStream (a, FragDepth)
     -> (a -> DrawColors os s ())
     -> Shader os s ()
 
--- | Like 'draw', but performs a stencil test on each fragment first. The 'DrawColors' monad is then only run for fragments where the stencil test passes.
+-- | Like 'draw', but performs a stencil test on each fragment first. The
+--   'DrawColors' monad is then only run for fragments where the stencil test
+--   passes.
 drawStencil :: forall a os f s st. StencilRenderable st
     => (s -> (Blending, Image (Format st), StencilOptions))
     -> FragmentStream a
     -> (a -> DrawColors os s ())
     -> Shader os s ()
 
--- | Like 'draw', but performs a stencil test and a depth test (in that order) on each fragment first. The 'DrawColors' monad is then only run for fragments where the stencil and depth test passes.
+-- | Like 'draw', but performs a stencil test and a depth test (in that order)
+--   on each fragment first. The 'DrawColors' monad is then only run for
+--   fragments where the stencil and depth test passes.
 drawDepthStencil :: forall a os f s d st. (DepthRenderable d, StencilRenderable st)
     => (s -> (Blending, Image (Format d), Image (Format st), DepthStencilOption))
     -> FragmentStream (a, FragDepth)
@@ -191,32 +202,41 @@ drawWindowColor :: forall os s c ds. ContextColorFormat c
     => (s -> (Window os c ds, ContextColorOption c))
     -> FragmentStream (FragColor c) -> Shader os s ()
 
--- | Perform a depth test for each fragment from a 'FragmentStream' in the window. This doesn't draw any color values and only affects the depth buffer.
+-- | Perform a depth test for each fragment from a 'FragmentStream' in the
+--   window. This doesn't draw any color values and only affects the depth
+--   buffer.
 drawWindowDepth :: forall os s c ds. DepthRenderable ds
     => (s -> (Window os c ds, DepthOption))
     -> FragmentStream FragDepth -> Shader os s ()
 
--- | Perform a depth test for each fragment from a 'FragmentStream' and write a color value from each fragment that passes the test into the window.
+-- | Perform a depth test for each fragment from a 'FragmentStream' and write a
+--   color value from each fragment that passes the test into the window.
 drawWindowColorDepth :: forall os s c ds. (ContextColorFormat c, DepthRenderable ds)
     => (s -> (Window os c ds, ContextColorOption c, DepthOption))
     -> FragmentStream (FragColor c, FragDepth) -> Shader os s ()
 
--- | Perform a stencil test for each fragment from a 'FragmentStream' in the window. This doesn't draw any color values and only affects the stencil buffer.
+-- | Perform a stencil test for each fragment from a 'FragmentStream' in the
+--   window. This doesn't draw any color values and only affects the stencil buffer.
 drawWindowStencil :: forall os s c ds. StencilRenderable ds
     => (s -> (Window os c ds, StencilOptions))
     -> FragmentStream () -> Shader os s ()
 
--- | Perform a stencil test for each fragment from a 'FragmentStream' and write a color value from each fragment that passes the test into the window.
+-- | Perform a stencil test for each fragment from a 'FragmentStream' and write
+--   a color value from each fragment that passes the test into the window.
 drawWindowColorStencil :: forall os s c ds. (ContextColorFormat c, StencilRenderable ds)
     => (s -> (Window os c ds, ContextColorOption c, StencilOptions))
     -> FragmentStream (FragColor c) -> Shader os s ()
 
--- | Perform a stencil test and depth test (in that order) for each fragment from a 'FragmentStream' in the window. This doesnt draw any color values and only affects the depth and stencil buffer.
+-- | Perform a stencil test and depth test (in that order) for each fragment
+--   from a 'FragmentStream' in the window. This doesnt draw any color values
+--   and only affects the depth and stencil buffer.
 drawWindowDepthStencil :: forall os s c ds. (DepthRenderable ds, StencilRenderable ds)
     => (s -> (Window os c ds, DepthStencilOption))
     -> FragmentStream FragDepth -> Shader os s ()
 
--- | Perform a stencil test and depth test (in that order) for each fragment from a 'FragmentStream' and write a color value from each fragment that passes the tests into the window.
+-- | Perform a stencil test and depth test (in that order) for each fragment
+--   from a 'FragmentStream' and write a color value from each fragment that
+--   passes the tests into the window.
 drawWindowColorDepthStencil :: forall os s c ds. (ContextColorFormat c, DepthRenderable ds, StencilRenderable ds)
     => (s -> (Window os c ds, ContextColorOption c, DepthStencilOption))
     -> FragmentStream (FragColor c, FragDepth) -> Shader os s ()

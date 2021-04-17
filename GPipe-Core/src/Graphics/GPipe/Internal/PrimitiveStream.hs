@@ -6,9 +6,9 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TupleSections              #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeSynonymInstances       #-}
-{-# LANGUAGE TupleSections              #-}
 {-# OPTIONS_GHC -Wno-unused-foralls #-}
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 {-# OPTIONS_GHC -Wno-unused-matches #-}
@@ -16,16 +16,36 @@
 {-# OPTIONS_GHC -Wno-type-defaults #-}
 module Graphics.GPipe.Internal.PrimitiveStream where
 
+#if __GLASGOW_HASKELL__ < 804
+import           Data.Semigroup                         (Semigroup (..))
+#endif
+
 import           Control.Arrow                          (Arrow (arr, first),
                                                          Kleisli (Kleisli),
                                                          returnA)
+-- This import is only needed for the unused uniform alternate implementation.
+import           Control.Category                       (Category (..))
+import           Control.Monad                          (void, when)
 import           Control.Monad.Trans.Class              (MonadTrans (lift))
 import           Control.Monad.Trans.Reader             (Reader, ask, runReader)
 import           Control.Monad.Trans.State.Strict       (State,
                                                          StateT (runStateT),
                                                          execState, get, modify,
                                                          put)
+import           Data.IORef                             (readIORef)
+import           Data.Int                               (Int16, Int32, Int8)
+import qualified Data.IntMap                            as Map
+import           Data.IntMap.Lazy                       (insert)
+import           Data.Maybe                             (fromMaybe)
 import           Data.Text.Lazy                         (Text)
+import           Data.Word                              (Word16, Word32, Word8)
+import           Foreign.Marshal                        (alloca)
+import           Foreign.Marshal.Utils                  (fromBool)
+import           Foreign.Ptr                            (Ptr, castPtr,
+                                                         intPtrToPtr, plusPtr)
+import           Foreign.Storable                       (Storable (peek, poke, sizeOf))
+import           Graphics.GL.Core45
+import           Graphics.GL.Types                      (GLuint)
 import           Graphics.GPipe.Internal.Buffer         (B (..), B2 (..),
                                                          B3 (..), B4 (..),
                                                          Buffer (bufTransformFeedback),
@@ -48,29 +68,8 @@ import           Graphics.GPipe.Internal.Shader         (Shader (..), ShaderM,
                                                          askUniformAlignment,
                                                          getNewName,
                                                          modifyRenderIO)
-import           Prelude                                hiding (id, length, (.))
--- This import is only needed for the unused uniform alternate implementation.
-import           Control.Category                       (Category (..))
-import           Control.Monad                          (void, when)
 import           Graphics.GPipe.Internal.Uniform        (OffsetToSType,
                                                          buildUDecl)
-#if __GLASGOW_HASKELL__ < 804
-import           Data.Semigroup                         (Semigroup (..))
-#endif
-import           Data.Int                               (Int16, Int32, Int8)
-import qualified Data.IntMap                            as Map
-import           Data.IntMap.Lazy                       (insert)
-import           Data.Word                              (Word16, Word32, Word8)
-import           Foreign.Marshal                        (alloca)
-import           Foreign.Ptr                            (Ptr, castPtr,
-                                                         intPtrToPtr, plusPtr)
-import           Foreign.Storable                       (Storable (peek, poke, sizeOf))
-
-import           Data.IORef                             (readIORef)
-import           Data.Maybe                             (fromMaybe)
-import           Foreign.Marshal.Utils                  (fromBool)
-import           Graphics.GL.Core45
-import           Graphics.GL.Types                      (GLuint)
 import           Linear.Affine                          (Point (..))
 import           Linear.Plucker                         (Plucker (..))
 import           Linear.Quaternion                      (Quaternion (..))
@@ -79,6 +78,7 @@ import           Linear.V1                              (V1 (..))
 import           Linear.V2                              (V2 (..))
 import           Linear.V3                              (V3 (..))
 import           Linear.V4                              (V4 (..))
+import           Prelude                                hiding (id, length, (.))
 
 -- Originally named DrawCallName and later in the code as PrimN. I've sticked
 -- with the latter, because it's more logical.

@@ -5,6 +5,7 @@
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 module Graphics.GPipe.Internal.Compiler where
 
+import           Control.Exception                (throwIO)
 import           Control.Monad                    (forM_, void, when)
 import           Control.Monad.Exception          (MonadException)
 import           Control.Monad.IO.Class           (MonadIO (..))
@@ -12,20 +13,17 @@ import           Control.Monad.Trans.Class        (MonadTrans (lift))
 import           Control.Monad.Trans.Except       (throwE)
 import           Control.Monad.Trans.Reader       (ask)
 import           Control.Monad.Trans.State.Strict (evalState, get, put)
+import           Data.Either                      (partitionEithers)
+import           Data.IORef                       (IORef, mkWeakIORef, newIORef,
+                                                   readIORef)
 import           Data.IntMap                      ((!))
 import qualified Data.IntMap                      as Map
 import qualified Data.IntSet                      as Set
+import           Data.List                        (zip5)
 import           Data.Maybe                       (fromJust, isJust, isNothing)
 import qualified Data.Text.Foreign                as T
 import           Data.Text.Lazy                   (Text)
 import qualified Data.Text.Lazy                   as T
-import           Graphics.GPipe.Internal.Context
-
-import           Control.Exception                (throwIO)
-import           Data.Either                      (partitionEithers)
-import           Data.IORef                       (IORef, mkWeakIORef, newIORef,
-                                                   readIORef)
-import           Data.List                        (zip5)
 import           Data.Word                        (Word32)
 import           Foreign.C.String                 (peekCString, withCString)
 import           Foreign.Marshal.Alloc            (alloca)
@@ -35,6 +33,7 @@ import           Foreign.Ptr                      (nullPtr)
 import           Foreign.Storable                 (peek)
 import           Graphics.GL.Core45
 import           Graphics.GL.Types                (GLuint)
+import           Graphics.GPipe.Internal.Context
 
 -- public
 type WinId = Int

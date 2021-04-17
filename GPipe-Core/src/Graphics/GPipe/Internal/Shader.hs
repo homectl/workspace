@@ -27,7 +27,6 @@ module Graphics.GPipe.Internal.Shader (
     silenceShader
 ) where
 
-
 import           Control.Applicative              (Alternative, (<|>))
 import           Control.Monad                    (MonadPlus, forM)
 import           Control.Monad.Exception          (MonadException)

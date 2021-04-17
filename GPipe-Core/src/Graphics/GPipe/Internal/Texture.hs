@@ -11,9 +11,29 @@
 {-# OPTIONS_GHC -Wno-unused-foralls #-}
 module Graphics.GPipe.Internal.Texture where
 
+import           Control.Exception                            (throwIO)
+import           Control.Monad                                (foldM, forM_,
+                                                               void, when)
+import           Control.Monad.Exception                      (MonadAsyncException,
+                                                               bracket)
 import           Control.Monad.IO.Class                       (MonadIO, liftIO)
+import           Control.Monad.Trans.Class                    (lift)
+import           Data.IORef                                   (IORef, newIORef,
+                                                               readIORef)
 import           Data.IntMap.Lazy                             (insert)
 import           Data.Text.Lazy                               (Text)
+import           Foreign.Marshal.Alloc                        (alloca,
+                                                               allocaBytes,
+                                                               free,
+                                                               mallocBytes)
+import           Foreign.Marshal.Utils                        (with)
+import           Foreign.Ptr                                  (minusPtr,
+                                                               nullPtr, plusPtr,
+                                                               wordPtrToPtr)
+import           Foreign.Storable                             (Storable (peek))
+import           Graphics.GL.Core45
+import           Graphics.GL.Ext.EXT.TextureFilterAnisotropic
+import           Graphics.GL.Types                            (GLenum, GLuint)
 import           Graphics.GPipe.Internal.Buffer               (Buffer (bufElementSize, bufName, bufferLength),
                                                                BufferColor,
                                                                BufferFormat (..),
@@ -49,28 +69,6 @@ import           Graphics.GPipe.Internal.Shader               (Shader (..),
                                                                ShaderM,
                                                                getNewName,
                                                                modifyRenderIO)
-
-import           Graphics.GL.Core45
-import           Graphics.GL.Ext.EXT.TextureFilterAnisotropic
-import           Graphics.GL.Types                            (GLenum, GLuint)
-
-import           Control.Exception                            (throwIO)
-import           Control.Monad                                (foldM, forM_,
-                                                               void, when)
-import           Control.Monad.Exception                      (MonadAsyncException,
-                                                               bracket)
-import           Control.Monad.Trans.Class                    (lift)
-import           Data.IORef                                   (IORef, newIORef,
-                                                               readIORef)
-import           Foreign.Marshal.Alloc                        (alloca,
-                                                               allocaBytes,
-                                                               free,
-                                                               mallocBytes)
-import           Foreign.Marshal.Utils                        (with)
-import           Foreign.Ptr                                  (minusPtr,
-                                                               nullPtr, plusPtr,
-                                                               wordPtrToPtr)
-import           Foreign.Storable                             (Storable (peek))
 import           Linear.V2                                    (V2 (..))
 import           Linear.V3                                    (V3 (..))
 import           Linear.V4                                    (V4 (..))

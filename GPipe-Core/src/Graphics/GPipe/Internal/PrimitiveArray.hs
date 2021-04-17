@@ -9,20 +9,19 @@
 {-# OPTIONS_GHC -Wno-unused-foralls #-}
 module Graphics.GPipe.Internal.PrimitiveArray where
 
+#if __GLASGOW_HASKELL__ < 804
+import           Data.Semigroup
+#endif
+
+import           Data.IORef                     (IORef)
 import           Data.Text.Lazy                 (Text)
+import           Data.Word                      (Word16, Word32, Word8)
+import           Graphics.GL.Core45
+import           Graphics.GL.Types              (GLuint)
 import           Graphics.GPipe.Internal.Buffer (B, BInput (..), BPacked,
                                                  Buffer (bufBElement, bufName, bufferLength),
                                                  BufferFormat (getGlType))
 import           Graphics.GPipe.Internal.Shader (Render (Render))
-#if __GLASGOW_HASKELL__ < 804
-import           Data.Semigroup
-#endif
-import           Data.IORef                     (IORef)
-
-import           Data.Word                      (Word16, Word32, Word8)
-
-import           Graphics.GL.Core45
-import           Graphics.GL.Types              (GLuint)
 
 -- | A vertex array is the basic building block for a primitive array. It is created from the contents of a 'Buffer', but unlike a 'Buffer',
 --   it may be truncated, zipped with other vertex arrays, and even morphed into arrays of a different type with the provided 'Functor' instance.

@@ -12,6 +12,10 @@
 {-# OPTIONS_GHC -Wno-unused-do-bind #-}
 module Graphics.GPipe.Internal.GeometryStream where
 
+#if __GLASGOW_HASKELL__ < 804
+import           Data.Semigroup                          (Semigroup (..))
+#endif
+
 import           Control.Arrow                           (Arrow (arr, first),
                                                           Kleisli (Kleisli),
                                                           returnA)
@@ -19,12 +23,12 @@ import           Control.Category                        (Category (..))
 import qualified Control.Monad.Trans.Class               as T (lift)
 import           Control.Monad.Trans.State.Lazy          (State, evalState, get,
                                                           put)
-#if __GLASGOW_HASKELL__ < 804
-import           Data.Semigroup                          (Semigroup (..))
-#endif
-import           Prelude                                 hiding (id, length,
-                                                          (.))
-
+import           Data.Boolean                            (Boolean (true),
+                                                          EqB ((==*)),
+                                                          IfB (ifB))
+import           Data.IntMap.Lazy                        (insert)
+import           Data.Text.Lazy                          (Text)
+import           Graphics.GL.Core45
 import           Graphics.GPipe.Internal.Compiler        (RenderIOState (rasterizationNameToRenderIO, transformFeedbackToRenderIO))
 import           Graphics.GPipe.Internal.Expr            (ExprM,
                                                           GGenerativeGeometry,
@@ -61,14 +65,6 @@ import           Graphics.GPipe.Internal.PrimitiveStream (PointSize,
 import           Graphics.GPipe.Internal.Shader          (Shader (..),
                                                           getNewName,
                                                           modifyRenderIO)
-
-import           Graphics.GL.Core45
-
-import           Data.Boolean                            (Boolean (true),
-                                                          EqB ((==*)),
-                                                          IfB (ifB))
-import           Data.IntMap.Lazy                        (insert)
-import           Data.Text.Lazy                          (Text)
 import           Linear.Affine                           (Point (..))
 import           Linear.Plucker                          (Plucker (..))
 import           Linear.Quaternion                       (Quaternion (..))
@@ -77,6 +73,8 @@ import           Linear.V1                               (V1 (..))
 import           Linear.V2                               (V2 (..))
 import           Linear.V3                               (V3 (..))
 import           Linear.V4                               (V4 (..))
+import           Prelude                                 hiding (id, length,
+                                                          (.))
 
 ------------------------------------------------------------------------------------------------------------------------------------
 
@@ -371,12 +369,14 @@ class FragmentInput a => GeometryExplosive a where
     declareGeometry :: a -> State Int (GlobDeclM ())
     enumerateVaryings :: a -> State Int [Text]
 
+defaultExploseGeometry :: (t -> S x a) -> t -> Int -> ExprM Int
 defaultExploseGeometry f x n = do
     let name = "vgf" <> tshow n
     x' <- unS (f x)
     tellAssignment' name x'
     return (n + 1)
 
+defaultDeclareGeometry :: SType -> a -> State Int (GlobDeclM ())
 defaultDeclareGeometry t x = do
     n <- get
     put (n + 1)
@@ -386,6 +386,7 @@ defaultDeclareGeometry t x = do
         tellGlobal $ stypeName t
         tellGlobalLn $ " " <> name
 
+defaultEnumerateVaryings :: a -> State Int [Text]
 defaultEnumerateVaryings x = do
     n <- get
     put (n + 1)

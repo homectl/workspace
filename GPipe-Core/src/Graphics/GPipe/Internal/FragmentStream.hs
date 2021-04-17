@@ -7,7 +7,12 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeSynonymInstances       #-}
+{-# OPTIONS_GHC -Wno-unused-foralls #-}
 module Graphics.GPipe.Internal.FragmentStream where
+
+#if __GLASGOW_HASKELL__ < 804
+import           Data.Semigroup                          (Semigroup (..))
+#endif
 
 import           Control.Arrow                           (Arrow (arr, first),
                                                           Kleisli (Kleisli),
@@ -15,7 +20,13 @@ import           Control.Arrow                           (Arrow (arr, first),
 import           Control.Category                        (Category)
 import           Control.Monad.Trans.State.Lazy          (State, evalState, get,
                                                           put)
+import           Data.Boolean                            (Boolean (true, (&&*)),
+                                                          EqB ((==*)),
+                                                          IfB (ifB))
+import           Data.IntMap.Lazy                        (insert)
+import           Data.Maybe                              (isJust)
 import           Data.Text.Lazy                          (Text)
+import           Graphics.GL.Core45
 import           Graphics.GPipe.Internal.Compiler        (RenderIOState (rasterizationNameToRenderIO))
 import           Graphics.GPipe.Internal.Expr
 import           Graphics.GPipe.Internal.PrimitiveStream (PrimitiveStream (..),
@@ -23,13 +34,6 @@ import           Graphics.GPipe.Internal.PrimitiveStream (PrimitiveStream (..),
 import           Graphics.GPipe.Internal.Shader          (Shader (..),
                                                           getNewName,
                                                           modifyRenderIO)
-#if __GLASGOW_HASKELL__ < 804
-import           Data.Semigroup                          (Semigroup (..))
-#endif
-import           Data.Boolean                            (Boolean (true, (&&*)),
-                                                          EqB ((==*)),
-                                                          IfB (ifB))
-import           Data.IntMap.Lazy                        (insert)
 import           Linear.Affine                           (Point (..))
 import           Linear.Plucker                          (Plucker (..))
 import           Linear.Quaternion                       (Quaternion (..))
@@ -38,9 +42,6 @@ import           Linear.V1                               (V1 (..))
 import           Linear.V2                               (V2 (..))
 import           Linear.V3                               (V3 (..))
 import           Linear.V4                               (V4 (..))
-
-import           Data.Maybe                              (isJust)
-import           Graphics.GL.Core45
 
 type VPos = V4 VFloat
 
