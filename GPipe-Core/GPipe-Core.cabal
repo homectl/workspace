@@ -47,6 +47,7 @@ library
       Graphics.GPipe.Orphans
       -- Internal modules, exported for tests and power users, but don't have
       -- a stable API and are not necessarily safe to use.
+      Graphics.GPipe.Debugger.Eval
       Graphics.GPipe.Internal.Buffer
       Graphics.GPipe.Internal.Compiler
       Graphics.GPipe.Internal.Context
@@ -99,6 +100,7 @@ test-suite testsuite
   type: exitcode-stdio-1.0
   main-is:          testsuite.hs
   other-modules:
+      Graphics.GPipe.Debugger.EvalSpec
       Graphics.GPipe.ExprSpec
       Graphics.GPipe.Optimizer.DeinlineSpec
       Graphics.GPipe.Optimizer.GLSLSpec

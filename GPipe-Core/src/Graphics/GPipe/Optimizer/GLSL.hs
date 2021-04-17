@@ -542,7 +542,7 @@ data Stmt a
 instance Applicative Stmt where
   -- Arbitrary decision because "pure" doesn't really make sense.
   pure _ = EmitStmt EmitFragDepth
-  
+
   liftA2 f (IfStmt n t1 e1) (IfStmt _ t2 e2) = IfStmt n
     ((zipWith . liftA2) f t1 t2)
     ((zipWith . liftA2) f e1 e2)
