@@ -103,6 +103,8 @@ test-suite testsuite
   other-modules:
       Graphics.GPipe.ExprSpec
       Graphics.GPipe.Optimizer.DeinlineSpec
+      Graphics.GPipe.Optimizer.GLSLSpec
+      Test.GLSL
   ghc-options:
       -Wall
       -rtsopts

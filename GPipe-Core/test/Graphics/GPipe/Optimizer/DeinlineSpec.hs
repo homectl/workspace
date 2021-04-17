@@ -1,17 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Graphics.GPipe.Optimizer.DeinlineSpec where
 
-import           Test.Hspec                        (Expectation, Spec, describe,
-                                                    it, shouldBe)
+import           Test.Hspec                        (Spec, describe, it)
 
-import           Data.Attoparsec.ByteString.Char8  (Parser, many1, parseOnly)
-import qualified Data.ByteString.Char8             as BS
-import           Data.String                       (fromString)
-import qualified Data.Text.Lazy                    as LT
-import qualified Data.Text.Lazy.Builder            as LTB
 import           Graphics.GPipe.Optimizer.Deinline (Config (..), defaultConfig,
                                                     diStmts)
-import qualified Graphics.GPipe.Optimizer.GLSL     as GLSL
+import           Test.GLSL                         (Transform,
+                                                    shouldNotTransform,
+                                                    shouldTransformTo, with)
 
 
 -- | Test config has smaller window size so we don't need to write as many
@@ -19,35 +15,20 @@ import qualified Graphics.GPipe.Optimizer.GLSL     as GLSL
 testConfig :: Config
 testConfig = defaultConfig{windowSize=3}
 
-shouldDeinlineTo :: [BS.ByteString] -> [LT.Text] -> Expectation
-shouldDeinlineTo code expected = do
-    let Right glsl = parseOnly (many1 parseStmtAnnot) $ BS.unlines code
-        res = diStmts testConfig glsl
-    map (chomp . LTB.toLazyText . GLSL.ppStmtAnnot) res `shouldBe` expected
-  where
-    chomp text = LT.take (LT.length text - 1) text
-
-    parseStmtAnnot :: Parser (GLSL.StmtAnnot ())
-    parseStmtAnnot = GLSL.parseStmtAnnot
-
-
-shouldBeLeftAlone :: [String] -> Expectation
-shouldBeLeftAlone a =
-    map fromString a
-    `shouldDeinlineTo`
-    map fromString a
+testDI :: Transform () ()
+testDI = diStmts testConfig
 
 
 spec :: Spec
 spec = do
     describe "diStmts" $ do
         it "should leave non-repetitive code alone" $
-            shouldBeLeftAlone
+            shouldNotTransform $
             [ "float t1 = 0;"
             , "float t2 = 0.0;"
             , "float t3 = (t2+1.1);"
             , "float t4 = (t3+vf1);"
-            ]
+            ] `with` testDI
 
         it "should remove repeated code" $
             [ "float t1 = 0;"
@@ -66,8 +47,8 @@ spec = do
             , "float t14 = (t13-vf1);" -- end of same code
             , "float t15 = cos(t14);" -- different code
             , "float t16 = tan(t15);" -- also different
-            ]
-            `shouldDeinlineTo`
+            ] `with` testDI
+            `shouldTransformTo`
             [ "float t1 = 0;"
             , "float t2 = 0.0;"
             , "float t8 = (t2+1.1);" -- different code

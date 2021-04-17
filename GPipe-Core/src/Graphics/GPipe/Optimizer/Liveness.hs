@@ -13,7 +13,7 @@ empty = Liveness S.empty
 
 instance Annot Liveness where
   parseAnnot = pure empty
-  ppAnnot (Liveness ls) = "// " <> LTB.fromString (show $ S.toList ls) <> "\n"
+  ppAnnot = Just . LTB.fromString . show . S.toList . unLiveness
 
 
 computeLiveness :: GLSL a -> GLSL Liveness

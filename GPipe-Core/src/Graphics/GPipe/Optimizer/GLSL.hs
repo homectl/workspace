@@ -1,9 +1,11 @@
+{-# LANGUAGE DeriveFunctor     #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StrictData        #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 module Graphics.GPipe.Optimizer.GLSL where
 
-import           Control.Applicative              ((<|>))
+import           Control.Applicative              (Applicative (..), (<|>))
 import           Data.Attoparsec.ByteString.Char8 (IResult (Partial), Parser,
                                                    char, decimal, endOfInput,
                                                    many1, option, parse,
@@ -26,7 +28,7 @@ printShader = LTB.toLazyText . ppGLSL
 
 
 data GLSL a = GLSL Version [TopDecl a]
-  deriving (Show)
+  deriving (Show, Functor, Foldable, Traversable)
 
 parseGLSL :: Annot a => Parser (GLSL a)
 parseGLSL = GLSL
@@ -45,13 +47,13 @@ parseVersion :: Parser Version
 parseVersion = Version <$> ("#version " >> decimal)
 
 ppVersion :: Version -> LTB.Builder
-ppVersion (Version v) = "#version " <> LTB.decimal v
+ppVersion (Version v) = "#version " <> ppInt v
 
 data TopDecl a
   = LayoutDecl LayoutSpec GlobalDecl
   | GlobalDecl GlobalDecl
   | ProcDecl ProcName [ParamDecl] [StmtAnnot a]
-  deriving (Show)
+  deriving (Show, Functor, Foldable, Traversable)
 
 parseTopDecl :: Annot a => Parser (TopDecl a)
 parseTopDecl = layoutDecl <|> globalDecl <|> procDecl
@@ -104,7 +106,7 @@ parseLayoutSpec =
 
 ppLayoutSpec :: LayoutSpec -> LTB.Builder
 ppLayoutSpec LayoutStd140       = "std140"
-ppLayoutSpec (LayoutLocation l) = "location = " <> LTB.decimal l
+ppLayoutSpec (LayoutLocation l) = "location = " <> ppInt l
 
 data ParamDecl
   = Param ParamKind LocalDecl
@@ -219,8 +221,8 @@ ppType :: Type -> LTB.Builder
 ppType TyBool = "bool"
 ppType TyFloat = "float"
 ppType TySampler2D = "sampler2D"
-ppType (TyVec n) = "vec" <> LTB.decimal n
-ppType (TyMat n m) = "mat" <> LTB.decimal n <> "x" <> LTB.decimal m
+ppType (TyVec n) = "vec" <> ppInt n
+ppType (TyMat n m) = "mat" <> ppInt n <> "x" <> ppInt m
 ppType (TyStruct n ms) =
   "uBlock" <> ppNameId n
   <> " {\n" <> ppL ppStructMember ms <> "}"
@@ -234,7 +236,7 @@ parseNameId = NameId
   <$> decimal
 
 ppNameId :: NameId -> LTB.Builder
-ppNameId (NameId n) = LTB.decimal n
+ppNameId (NameId n) = ppInt n
 
 data Name
   = Name Namespace NameId
@@ -415,10 +417,10 @@ parseExprAtom =
           else LitFloatExpr NoCast (Sci.toRealFloat s)
 
 ppExprAtom :: ExprAtom -> LTB.Builder
-ppExprAtom (LitIntExpr Cast i)     = "int(" <> LTB.decimal i <> ")"
-ppExprAtom (LitIntExpr NoCast i)   = LTB.decimal i
-ppExprAtom (LitFloatExpr Cast n)   = "float(" <> LTB.realFloat n <> ")"
-ppExprAtom (LitFloatExpr NoCast r) = LTB.realFloat r
+ppExprAtom (LitIntExpr Cast i)     = "int(" <> ppInt i <> ")"
+ppExprAtom (LitIntExpr NoCast i)   = ppInt i
+ppExprAtom (LitFloatExpr Cast n)   = "float(" <> ppFloat n <> ")"
+ppExprAtom (LitFloatExpr NoCast r) = ppFloat r
 ppExprAtom (IdentifierExpr n)      = ppName n
 ppExprAtom (UniformExpr n m)       = "u" <> ppNameId n <> ".u" <> ppNameId m
 ppExprAtom (SwizzleExpr n m)       = "t" <> ppNameId n <> "." <> ppSwizzle m
@@ -517,20 +519,36 @@ data StmtAnnot a = SA
   { annot   :: a
   , unAnnot :: Stmt a
   }
-  deriving (Show)
+  deriving (Show, Functor, Foldable, Traversable)
+
+instance Applicative StmtAnnot where
+  pure a = SA a (pure a)
+  liftA2 f a b = SA (f (annot a) (annot b)) $ liftA2 f (unAnnot a) (unAnnot b)
 
 parseStmtAnnot :: Annot a => Parser (StmtAnnot a)
 parseStmtAnnot = SA <$> parseAnnot <*> parseStmt
 
 ppStmtAnnot :: Annot a => StmtAnnot a -> LTB.Builder
-ppStmtAnnot (SA a s) = ppAnnot a <> ppStmt s
+ppStmtAnnot (SA a s) =
+  maybe "" (\ltb -> "// " <> ltb <> "\n") (ppAnnot a) <> ppStmt s
 
 data Stmt a
   = AssignStmt Name Expr
   | DeclStmt LocalDecl
   | EmitStmt Emit
   | IfStmt NameId [StmtAnnot a] [StmtAnnot a]
-  deriving (Show)
+  deriving (Show, Functor, Foldable, Traversable)
+
+instance Applicative Stmt where
+  -- Arbitrary decision because "pure" doesn't really make sense.
+  pure _ = EmitStmt EmitFragDepth
+  liftA2 f (IfStmt n t1 e1) (IfStmt _ t2 e2) =
+    IfStmt n ((zipWith . liftA2) f t1 t2) ((zipWith . liftA2) f e1 e2)
+  liftA2 _ (AssignStmt n e) _ = AssignStmt n e
+  liftA2 _ (DeclStmt d) _ = DeclStmt d
+  liftA2 _ (EmitStmt e) _ = EmitStmt e
+  liftA2 _ (IfStmt n _ _) _ = IfStmt n [] []
+
 
 parseStmt :: Annot a => Parser (Stmt a)
 parseStmt =
@@ -566,6 +584,12 @@ ppEmit :: Emit -> LTB.Builder
 ppEmit (EmitPosition e) = "gl_Position = " <> ppExpr e <> ";\n"
 ppEmit EmitFragDepth    = "gl_FragDepth = gl_FragCoord[2];\n"
 
+ppInt :: Int -> LTB.Builder
+ppInt = LTB.decimal
+
+ppFloat :: Float -> LTB.Builder
+ppFloat = LTB.realFloat
+
 ppL :: (a -> LTB.Builder) -> [a] -> LTB.Builder
 ppL printer = mconcat . map printer
 
@@ -574,11 +598,18 @@ ppS sep printer = mconcat . intersperse sep . map printer
 
 class Annot a where
   parseAnnot :: Parser a
-  ppAnnot :: a -> LTB.Builder
+  ppAnnot :: a -> Maybe LTB.Builder
 
 instance Annot () where
   parseAnnot = pure ()
-  ppAnnot = const mempty
+  ppAnnot = const Nothing
+
+instance (Annot a, Annot b) => Annot (a, b) where
+  parseAnnot = error "not implemented"
+  ppAnnot (a, b) = do
+    ppA <- ppAnnot a
+    ppB <- ppAnnot b
+    return $ "(" <> ppA <> ", " <> ppB <> ")"
 
 ----------------------------------
 

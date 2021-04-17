@@ -13,12 +13,15 @@ import qualified System.Environment            as Env
 main :: IO ()
 main = Env.getArgs >>= mapM_ process
 
+parseShader :: LT.Text -> Either String (GLSL.GLSL ())
+parseShader = GLSL.parseShader
+
 process :: FilePath -> IO ()
 process inFile = do
   putStrLn "Loading file..."
   inText <- IO.readFile inFile
   putStrLn "Parsing file..."
-  case GLSL.parseShader inText of
+  case parseShader inText of
     Left err -> fail err
     Right ok -> do
       putStrLn "Generating data flow graph (opt.dot)..."
