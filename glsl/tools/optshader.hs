@@ -1,14 +1,14 @@
 module Main (main) where
 
-import qualified Data.Text.Lazy                as LT
-import qualified Data.Text.Lazy.IO             as IO
-import           Data.Time.Clock               as Time (diffUTCTime,
-                                                        getCurrentTime,
-                                                        nominalDiffTimeToSeconds)
-import qualified Language.GLSL.Optimizer      as Opt
-import qualified Language.GLSL.Optimizer.DFG  as DFG
-import qualified Language.GLSL.Types as GLSL
-import qualified System.Environment            as Env
+import qualified Data.Text.Lazy              as LT
+import qualified Data.Text.Lazy.IO           as IO
+import           Data.Time.Clock             as Time (diffUTCTime,
+                                                      getCurrentTime,
+                                                      nominalDiffTimeToSeconds)
+import qualified Language.GLSL.Optimizer     as Opt
+import qualified Language.GLSL.Optimizer.DFG as DFG
+import qualified Language.GLSL.Types         as GLSL
+import qualified System.Environment          as Env
 
 main :: IO ()
 main = Env.getArgs >>= mapM_ process

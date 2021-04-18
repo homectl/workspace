@@ -67,7 +67,7 @@ eqNameExpr :: NameExpr -> NameExpr -> Bool
 eqNameExpr (UniformExpr na ma) (UniformExpr nb mb) = na == nb && ma == mb
 -- eqName (Name NsT _) (Name NsT _)   = True
 -- eqName (Name nsa na) (Name nsb nb) = nsa == nsb && na == nb
-eqNameExpr _ _ = True
+eqNameExpr _ _                                     = True
 
 eqLocalDecl :: LocalDecl -> LocalDecl -> Bool
 eqLocalDecl (LDecl tya _ ea) (LDecl tyb _ eb) =

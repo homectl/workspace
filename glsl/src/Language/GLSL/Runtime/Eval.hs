@@ -6,7 +6,7 @@
 {-# LANGUAGE RecordWildCards            #-}
 {-# LANGUAGE StrictData                 #-}
 {-# LANGUAGE ViewPatterns               #-}
-module Graphics.GPipe.Debugger.Eval where
+module Language.GLSL.Runtime.Eval where
 
 import           Control.Lens                     ((^.))
 import           Control.Monad                    (foldM, foldM_)
@@ -15,19 +15,19 @@ import qualified Data.IntMap                      as M
 import qualified Data.Text.Lazy                   as LT
 import qualified Data.Text.Lazy.IO                as IO
 import qualified Debug.Trace                      as Trace
-import qualified Graphics.GPipe.Debugger.PrimFuns as PrimFuns
-import           Graphics.GPipe.Debugger.Value    (Eval, EvalResult (..),
+import           Language.GLSL.Decls              (addDecl, addDeclN, addDeclNE,
+                                                   emptyDecls, getDeclNE,
+                                                   toUniformId)
+import qualified Language.GLSL.Runtime.PrimFuns   as PrimFuns
+import           Language.GLSL.Runtime.Value      (Eval, EvalResult (..),
                                                    EvalState (..), Proc (..),
                                                    Value (..), defaultValue,
                                                    evalBinaryOp, evalCoerce,
                                                    evalUnaryOp, isNaNValue,
                                                    roundValue)
-import           Linear            (R1 (..), R2 (..), R3 (..),
-                                                   R4 (..))
-import           Language.GLSL.Decls   (addDecl, addDeclN, addDeclNE,
-                                                   emptyDecls, getDeclNE,
-                                                   toUniformId)
 import           Language.GLSL.Types
+import           Linear                           (R1 (..), R2 (..), R3 (..),
+                                                   R4 (..))
 
 
 traceAssignments :: Bool

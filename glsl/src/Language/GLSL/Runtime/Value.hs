@@ -1,12 +1,12 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE StrictData                 #-}
-module Graphics.GPipe.Debugger.Value where
+module Language.GLSL.Runtime.Value where
 
 import           Control.Monad.Trans.State.Strict (StateT)
 import qualified Data.IntMap                      as M
-import           Graphics.GPipe.Linear            (M44, V2, V3, V4, (!*), (!*!))
-import           Language.GLSL.Decls   (Decls)
+import           Language.GLSL.Decls              (Decls)
 import           Language.GLSL.Types
+import           Linear                           (M44, V2, V3, V4, (!*!), (!*))
 
 data Proc
   = Proc [ParamDecl] [StmtAnnot ()]

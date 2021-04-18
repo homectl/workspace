@@ -1,11 +1,13 @@
-module Graphics.GPipe.Debugger.PrimFuns where
+module Language.GLSL.Runtime.PrimFuns where
 
-import           Control.Monad                 ((>=>))
-import           Data.Fixed                    (mod')
-import           Graphics.GPipe.Debugger.Value
-import           Graphics.GPipe.Expr           (fract', smoothstep, step)
-import           Graphics.GPipe.Linear
-import           Language.GLSL.Types
+import           Control.Monad               ((>=>))
+import           Language.GLSL.Runtime.Math  (floor, fract, mod, smoothstep,
+                                              step)
+import           Language.GLSL.Runtime.Value (Eval, Value (..), evalCoerce)
+import           Language.GLSL.Types         (FunName (..), Type (..), pp,
+                                              ppFunName)
+import           Linear
+import           Prelude                     hiding (floor, mod)
 
 flt :: Value -> Eval Float
 flt = evalCoerce TyFloat >=> convert
@@ -57,9 +59,9 @@ eval PrimSin    [a] = FloatValue      . sin    <$> flt a
 eval PrimAsin   [a] = FloatValue      . asin   <$> flt a
 eval PrimCos    [a] = FloatValue      . cos    <$> flt a
 eval PrimAbs    [a] = FloatValue      . abs    <$> flt a
-eval PrimFloor  [a] = IntValue        . floor  <$> flt a
-eval PrimFract  [a] = FloatValue      . fract' <$> flt a
-eval PrimMod  [a,b] = fmap FloatValue $ mod'   <$> flt a <*> flt b
+eval PrimFloor  [a] = FloatValue      . floor  <$> flt a
+eval PrimFract  [a] = FloatValue      . fract  <$> flt a
+eval PrimMod  [a,b] = fmap FloatValue $ mod    <$> flt a <*> flt b
 eval PrimAtan [a,b] = fmap FloatValue $ atan2  <$> flt a <*> flt b
 
 eval PrimSmoothstep [a,b,c] = fmap FloatValue $ smoothstep <$> flt a <*> flt b <*> flt c

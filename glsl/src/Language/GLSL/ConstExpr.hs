@@ -4,7 +4,7 @@ module Language.GLSL.ConstExpr
   , isConstExpr
   ) where
 
-import qualified Data.IntSet                   as S
+import qualified Data.IntSet         as S
 import           Language.GLSL.Types
 
 

@@ -2,15 +2,15 @@
 {-# LANGUAGE StrictData        #-}
 module Language.GLSL.Optimizer where
 
-import           Control.Monad                     (when)
-import           Data.Attoparsec.ByteString.Char8  (Parser)
-import qualified Data.Text.Lazy                    as LT
-import qualified Data.Text.Lazy.IO                 as IO
+import           Control.Monad                    (when)
+import           Data.Attoparsec.ByteString.Char8 (Parser)
+import qualified Data.Text.Lazy                   as LT
+import qualified Data.Text.Lazy.IO                as IO
 import qualified Language.GLSL.Optimizer.Deinline as Deinline
-import           Language.GLSL.Types     (Annot, GLSL, parseGLSL,
-                                                    parseShader, parseTest,
-                                                    printShader)
 import qualified Language.GLSL.Optimizer.Liveness as Liveness
+import           Language.GLSL.Types              (Annot, GLSL, parseGLSL,
+                                                   parseShader, parseTest,
+                                                   printShader)
 
 
 optimizeShader :: LT.Text -> Either String LT.Text

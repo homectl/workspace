@@ -1,17 +1,17 @@
 {-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
-module Graphics.GPipe.Debugger.EvalSpec where
+module Language.GLSL.Runtime.EvalSpec where
 
 import           Test.Hspec                      (Spec, describe, it, shouldBe)
 import           Test.Hspec.QuickCheck           (prop)
 
 import qualified Data.Text.Lazy                  as LT
 import qualified Graphics.GPipe.Debugger.Compile as Compile
-import qualified Graphics.GPipe.Debugger.Eval    as Eval
-import           Graphics.GPipe.Debugger.Value   (Value (..))
 import           Graphics.GPipe.Expr             (FFloat)
 import           Graphics.GPipe.Linear           (V3 (..), V4 (..), identity,
                                                   norm, signorm, (!*))
+import qualified Language.GLSL.Runtime.Eval      as Eval
+import           Language.GLSL.Runtime.Value     (Value (..))
 
 compile :: FFloat -> IO LT.Text
 compile = Compile.compile

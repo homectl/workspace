@@ -58,7 +58,7 @@ import           Graphics.GPipe.Internal.Context  (ContextHandler, ContextT,
 
     Shader (with a majuscule) = "GPipeShader" => [(OpenGL program made of OpenGL shaders, condition)]
 
-    When a Shader is compiled, it means that it is translated into OpenGl shader
+    When a Shader is compiled, it means that it is translated into OpenGL shader
     sources (with a context) which are compiled then linked in programs when
     wrapped into a rendering action which select the appropriate shader at
     runtime.
