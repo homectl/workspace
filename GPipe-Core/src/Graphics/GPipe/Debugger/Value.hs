@@ -4,7 +4,7 @@ module Graphics.GPipe.Debugger.Value where
 
 import           Control.Monad.Trans.State.Strict (StateT)
 import qualified Data.IntMap                      as M
-import           Graphics.GPipe.Linear            (M44, V2, V3, V4, (!*))
+import           Graphics.GPipe.Linear            (M44, V2, V3, V4, (!*), (!*!))
 import           Graphics.GPipe.Optimizer.Decls   (Decls)
 import           Graphics.GPipe.Optimizer.GLSL
 
@@ -83,6 +83,7 @@ evalBinaryOp (IntValue l) BOpMinus (IntValue r)     = IntValue (l - r)
 evalBinaryOp (IntValue l) BOpMul (IntValue r)       = IntValue (l * r)
 
 evalBinaryOp (Vec4Value l) BOpMul (Mat4x4Value r)   = Vec4Value (r !* l)
+evalBinaryOp (Mat4x4Value l) BOpMul (Mat4x4Value r) = Mat4x4Value (r !*! l)
 
 evalBinaryOp l@FloatValue{} o (IntValue r) = evalBinaryOp l o (FloatValue $ fromIntegral r)
 evalBinaryOp (IntValue l) o r@FloatValue{} = evalBinaryOp (FloatValue $ fromIntegral l) o r
