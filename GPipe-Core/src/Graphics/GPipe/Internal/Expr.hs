@@ -40,6 +40,7 @@ import           Data.Text.Lazy                    (Text)
 import qualified Data.Text.Lazy                    as LT
 import qualified Data.Text.Lazy.Builder            as LTB
 import           Data.Word                         (Word16, Word32, Word8)
+import           Graphics.GPipe.Internal.IDs       (SamplerId, UniformId)
 import           Linear.Affine                     (distanceA)
 import           Linear.Conjugate                  (Conjugate, TrivialConjugate)
 import           Linear.Matrix                     ((!*!), (!*), (*!))
@@ -104,8 +105,8 @@ emptyExprState :: ExprState
 emptyExprState = ExprState emptyShaderInputs 0 mempty
 
 data ShaderInputs = ShaderInputs
-    {   shaderUsedUniformBlocks :: !(Map.IntMap Int (GlobDeclM ()))
-    ,   shaderUsedSamplers :: !(Map.IntMap Int (GlobDeclM ()))
+    {   shaderUsedUniformBlocks :: !(Map.IntMap UniformId (GlobDeclM ()))
+    ,   shaderUsedSamplers :: !(Map.IntMap SamplerId (GlobDeclM ()))
     ,   shaderUsedInput :: !(Map.IntMap Int -- (For vertex shaders, the value is always undefined and the int is the parameter name, for later shader stages it uses some name local to the transition instead)
         (   GlobDeclM () -- Input declarations for the current shader
         ,   (   ExprM () -- Output assignement required in the previous shader (obviously undefined for the first shader - see comment below.)
@@ -120,8 +121,8 @@ emptyShaderInputs = ShaderInputs Map.empty Map.empty Map.empty Nothing
 
 data ExprResult = ExprResult
     { finalSource :: !Text          -- ^ Shader source produced.
-    , unis        :: ![Int]         -- ^ Uniforms used in this shader.
-    , samps       :: ![Int]         -- ^ Samplers used in this shader.
+    , unis        :: ![UniformId]   -- ^ Uniforms used in this shader.
+    , samps       :: ![SamplerId]   -- ^ Samplers used in this shader.
     , inps        :: [Int]          -- ^ Inputs used in this shader (only varying or uniforms too?).
                                     --   Lazy, because it's not used for fragment and geometry shaders.
     , prevDecls   :: GlobDeclM ()   -- ^ Output declarations required in the previous shader (how it differs from the inputs used?).
@@ -189,8 +190,8 @@ data ShaderStageInput = ShaderStageInput
 
 data ShaderStageOutput = ShaderStageOutput
     {   source               :: !Text           -- ^ The shader GLSL source to be compiled.
-    ,   uniforms             :: ![Int]          -- ^ The uniforms used in this shader.
-    ,   samplers             :: ![Int]          -- ^ The samplers used in this shader.
+    ,   uniforms             :: ![UniformId]    -- ^ The uniforms used in this shader.
+    ,   samplers             :: ![SamplerId]    -- ^ The samplers used in this shader.
     ,   inputs               :: ![Int]          -- ^ The input variables used in this shader.
     ,   previousDeclarations :: !(GlobDeclM ()) -- ^ The output declations to include in the previous shader to provide the needed input variables.
     ,   prevExpression       :: !(ExprM ())     -- ^ The expression to evaluate in order to produce the previous shader.
@@ -360,7 +361,7 @@ declareGeometryLayout inputPrimitive outputPrimitive maxVertices =
             tellGlobalLn $ "layout(" <> inputPrimitive <> ") in"
             tellGlobalLn $ "layout(" <> outputPrimitive <> ", max_vertices = " <> tshow maxVertices <> ") out"
 
-useUniform :: GlobDeclM () -> Int -> Int -> ExprM Text
+useUniform :: GlobDeclM () -> UniformId -> Int -> ExprM Text
 useUniform decls blockI offset = do
     T.lift $ modify $ \(ExprState s nvar body) ->
         ExprState s{ shaderUsedUniformBlocks =
@@ -378,7 +379,7 @@ useUniform decls blockI offset = do
             tellGlobal "} u"
             tellGlobalLn blockStr
 
-useSampler :: Text -> Text -> Int -> ExprM Text
+useSampler :: Text -> Text -> SamplerId -> ExprM Text
 useSampler prefix str name = do
     T.lift $ modify $ \(ExprState s nvar body) -> ExprState s{ shaderUsedSamplers = Map.insert name gDeclSampler $ shaderUsedSamplers s } nvar body
     return $ "s" <> tshow name

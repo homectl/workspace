@@ -1,5 +1,8 @@
+{-# LANGUAGE NamedFieldPuns  #-}
 {-# LANGUAGE PatternGuards   #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ViewPatterns    #-}
 {-# OPTIONS_GHC -Wno-unused-matches #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
@@ -34,7 +37,12 @@ import           Foreign.Storable                 (peek)
 import           Graphics.GL.Core45
 import           Graphics.GL.Types                (GLuint)
 import           Graphics.GPipe.Internal.Context
-import           Graphics.GPipe.Internal.IDs      (WinId)
+import           Graphics.GPipe.Internal.IDs      (SamplerId, UniformId, WinId)
+
+-- | A compiled shader is just a function that takes an environment and returns
+-- a 'Render' action It could have been called 'CompiledDrawcall' or 'Renderer'
+-- because it is the same thing.
+type CompiledShader os s = s -> Render os ()
 
 {-
 A Drawcall is an OpenGL shader program with its context. Drawcalls are produced
@@ -62,9 +70,9 @@ data Drawcall s = Drawcall
         -- Inputs.
     ,   usedInputs :: [Int]
         -- Uniforms and texture units used in each shader.
-    ,   usedVUniforms :: [Int],   usedVSamplers :: [Int]
-    ,   usedGUniforms :: [Int],   usedGSamplers :: [Int]
-    ,   usedFUniforms :: [Int],   usedFSamplers :: [Int]
+    ,   usedVUniforms :: [UniformId],   usedVSamplers :: [SamplerId]
+    ,   usedGUniforms :: [UniformId],   usedGSamplers :: [SamplerId]
+    ,   usedFUniforms :: [UniformId],   usedFSamplers :: [SamplerId]
         -- The size of the uniform buffer for the primitive stream (see USize in PrimitiveStream data).
     ,   primStrUBufferSize :: Int
     }
@@ -98,18 +106,17 @@ using a State monad.
 -}
 -- public
 data RenderIOState s = RenderIOState
-    {   -- Uniform buffer objects bindings. TODO Return buffer name here when we
+    {   uniformNameToRenderIO :: Map.IntMap UniformId (s -> Binding -> IO ())
+        -- ^ Uniform buffer objects bindings. TODO Return buffer name here when we
         -- start writing to buffers during rendering (transform feedback, buffer
         -- textures) -> Ok, but uniform only?
-        uniformNameToRenderIO :: Map.IntMap Int (s -> Binding -> IO ())
-        -- Texture units bindings. IO returns texturename for validating that it
+    ,   samplerNameToRenderIO :: Map.IntMap SamplerId (s -> Binding -> IO Int)
+        -- ^ Texture units bindings. IO returns texturename for validating that it
         -- isnt used as render target
-    ,   samplerNameToRenderIO :: Map.IntMap Int (s -> Binding -> IO Int)
-        -- Final rasterization operations (mostly setting the viewport).
     ,   rasterizationNameToRenderIO :: Map.IntMap Int (s -> IO ())
-        -- Final vertex processiong stage.
+        -- ^ Final rasterization operations (mostly setting the viewport).
     ,   transformFeedbackToRenderIO :: Map.IntMap Int (s -> GLuint -> IO ())
-        -- VAO bindings.
+        -- ^ Final vertex processiong stage.
     ,   inputArrayToRenderIO :: Map.IntMap Int (s ->
         [   (   [Binding] -- inputs (drawcall's usedInputs)
             ,   GLuint -- primitive stream uniforms buffer
@@ -121,6 +128,7 @@ data RenderIOState s = RenderIOState
             ,   IO () -- To draw with it.
             )
         ])
+        -- ^ VAO bindings.
     }
 
 -- public
@@ -140,7 +148,7 @@ mapRenderIOState f (RenderIOState a' b' c' d' e') (RenderIOState a b c d e) =
 compileDrawcalls :: (Monad m, MonadIO m, MonadException m, ContextHandler ctx)
     => [IO (Drawcall s)] -- The proto drawcalls to generate and compile.
     -> RenderIOState s -- Interactions between the drawcalls and the environment 's'.
-    -> ContextT ctx os m (s -> Render os ()) -- The compiled drawcall (OpenGL program shader actually) as a function on an environment.
+    -> ContextT ctx os m (CompiledShader os s) -- The compiled drawcall (OpenGL program shader actually) as a function on an environment.
 compileDrawcalls protoDrawcalls state = do
 
     (drawcalls, limitErrors) <- liftNonWinContextIO $ safeGenerateDrawcalls protoDrawcalls
@@ -165,39 +173,54 @@ compileDrawcalls protoDrawcalls state = do
             -- Raise an error.
             liftIO $ throwIO $ GPipeException $ concat allErrors
 
+data CompileInput s = CompileInput
+    { drawcall :: Drawcall s  -- A drawcall with:
+    , unis     :: [UniformId] -- its uniform buffers used,
+    , samps    :: [SamplerId] -- its textures units used,
+    , ubinds   :: [UniformId] -- its allocated uniforms,
+    , sbinds   :: [SamplerId] -- its allocated texture units.
+    }
+
+mkCompInput :: (Drawcall s, [UniformId], [SamplerId], [UniformId], [SamplerId]) -> CompileInput s
+mkCompInput (drawcall, unis, samps, ubinds, sbinds) = CompileInput{..}
+
+data GpuLimits = GpuLimits
+    { maxUnis      :: UniformId
+    , maxSamplers  :: SamplerId
+    , maxVUnis     :: UniformId
+    , maxVSamplers :: SamplerId
+    , maxGUnis     :: UniformId
+    , maxGSamplers :: SamplerId
+    , maxFUnis     :: UniformId
+    , maxFSamplers :: SamplerId
+    }
+
+getLimits :: IO GpuLimits
+getLimits = GpuLimits
+    <$> getLimit GL_MAX_COMBINED_UNIFORM_BLOCKS
+    <*> getLimit GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS
+    <*> getLimit GL_MAX_VERTEX_UNIFORM_BLOCKS
+    <*> getLimit GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS
+    <*> getLimit GL_MAX_GEOMETRY_UNIFORM_BLOCKS
+    <*> getLimit GL_MAX_GEOMETRY_TEXTURE_IMAGE_UNITS
+    <*> getLimit GL_MAX_FRAGMENT_UNIFORM_BLOCKS
+    <*> getLimit GL_MAX_TEXTURE_IMAGE_UNITS
+  where
+    getLimit kind = fromIntegral <$> alloca (\ptr -> glGetIntegerv kind ptr >> peek ptr)
+
 {- Generate the drawcalls (a single one each time in fact) and check their
 inputs don't exceed some OpenGL limits.
 -}
 -- private
 safeGenerateDrawcalls :: [IO (Drawcall s)] -- The proto drawcalls to generate.
-    ->  IO (
-        [   (   Drawcall s -- A generated drawcall.
-            ,   [Int] -- Its uniform buffers used.
-            ,   [Int] -- Its textures units used.
-            ,   [Int] -- Its allocated uniforms.
-            ,   [Int] -- Its allocated texture units.
-            )
-        ]
+    ->  IO
+        ( [CompileInput s]
         , [String] -- The raised errors regarding exceeded limits.
         )
 safeGenerateDrawcalls protoDrawcalls = do
 
     -- Retrieve some limits from OpenGL.
-    [   maxGUnis, maxGSamplers,
-        maxVUnis, maxVSamplers,
-        maxFUnis, maxFSamplers,
-        maxUnis, maxSamplers ]
-        <- liftIO $
-            mapM (\t -> fromIntegral <$> alloca (\ ptr -> glGetIntegerv t ptr >> peek ptr))
-                [ GL_MAX_GEOMETRY_UNIFORM_BLOCKS
-                , GL_MAX_GEOMETRY_TEXTURE_IMAGE_UNITS
-                , GL_MAX_VERTEX_UNIFORM_BLOCKS
-                , GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS
-                , GL_MAX_FRAGMENT_UNIFORM_BLOCKS
-                , GL_MAX_TEXTURE_IMAGE_UNITS
-                , GL_MAX_COMBINED_UNIFORM_BLOCKS
-                , GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS
-                ]
+    GpuLimits{..} <- getLimits
 
     -- Build the drawcalls.
     drawcalls <- liftIO $ sequence protoDrawcalls -- IO only for SNMap
@@ -216,38 +239,36 @@ safeGenerateDrawcalls protoDrawcalls = do
         sampsPerDrawcall = zipWith orderedUnion (zipWith orderedUnion gSampsPerDrawcall vSampsPerDrawcall) fSampsPerDrawcall
 
         -- Produce an error message for each limit exceeded by at least one of the drawcalls.
+        limitError kind target (fromIntegral -> maxCnt) elts =
+            let err = "Too many " <> kind <> " used in a single " <> target in
+            [err | any (\xs -> length xs >= maxCnt) elts]
         limitErrors = concat
-            [ ["Too many uniform blocks used in a single geometry shader\n" | any (\ xs -> length xs >= maxGUnis) gUnisPerDrawcall]
-            , ["Too many textures used in a single geometry shader\n" | any (\ xs -> length xs >= maxGSamplers) gSampsPerDrawcall]
-            , ["Too many uniform blocks used in a single vertex shader\n" | any (\ xs -> length xs >= maxVUnis) vUnisPerDrawcall]
-            , ["Too many textures used in a single vertex shader\n" | any (\ xs -> length xs >= maxVSamplers) vSampsPerDrawcall]
-            , ["Too many uniform blocks used in a single fragment shader\n" | any (\ xs -> length xs >= maxFUnis) fUnisPerDrawcall]
-            , ["Too many textures used in a single fragment shader\n" | any (\ xs -> length xs >= maxFSamplers) fSampsPerDrawcall]
-            , ["Too many uniform blocks used in a single shader program\n" | any (\ xs -> length xs >= maxUnis) unisPerDrawcall]
-            , ["Too many textures used in a single shader program\n" | any (\ xs -> length xs >= maxSamplers) sampsPerDrawcall]
+            [ limitError "uniform blocks" "shader program" maxUnis unisPerDrawcall
+            , limitError "textures" "shader program" maxSamplers sampsPerDrawcall
+            , limitError "uniform blocks" "vertex shader" maxVUnis vUnisPerDrawcall
+            , limitError "textures" "vertex shader" maxVSamplers vSampsPerDrawcall
+            , limitError "uniform blocks" "geometry shader" maxGUnis gUnisPerDrawcall
+            , limitError "textures" "geometry shader" maxGSamplers gSampsPerDrawcall
+            , limitError "uniform blocks" "fragment shader" maxFUnis fUnisPerDrawcall
+            , limitError "textures" "fragment shader" maxFSamplers fSampsPerDrawcall
             ]
 
         allocatedUniforms = allocateConsecutiveIndexes maxUnis unisPerDrawcall
         allocatedSamplers = allocateConsecutiveIndexes maxSamplers sampsPerDrawcall
 
-    return (zip5 drawcalls unisPerDrawcall sampsPerDrawcall allocatedUniforms allocatedSamplers, limitErrors)
+    return (map mkCompInput $ zip5 drawcalls unisPerDrawcall sampsPerDrawcall allocatedUniforms allocatedSamplers, limitErrors)
 
 -- private
 innerCompile :: RenderIOState s -- Interactions between the drawcall and the environment 's'.
-    ->  ( Drawcall s -- A drawcall with:
-        , [Int] -- its uniform buffers used,
-        , [Int] -- its textures units used,
-        , [Int] -- its allocated uniforms,
-        , [Int] -- its allocated texture units.
-        )
+    ->  CompileInput s
     ->  IO
         ( Either
-            String -- A failure in case the program cannot be compiled in linked.
+            String -- A failure in case the program cannot be compiled or linked.
             ( (IORef GLuint, IO ()) -- The program name and its destructor.
-            , s -> Render os () -- The program's renderer as a function on a render (OpenGL) state. Upper stage called this a 'CompiledShader'.
+            , CompiledShader os s -- The program's renderer as a function on a render (OpenGL) state. Upper stage called this a 'CompiledShader'.
             )
         )
-innerCompile state (drawcall, unis, samps, ubinds, sbinds) = do
+innerCompile state ci@CompileInput{drawcall, unis, samps, ubinds, sbinds} = do
     let vsource = vertexSource drawcall
         ogsource = optionalGeometrySource drawcall
         ofsource = optionalFragmentSource drawcall
@@ -322,28 +343,20 @@ innerCompile state (drawcall, unis, samps, ubinds, sbinds) = do
         Left err -> return $ Left err
         -- Right: the program wrapped in a Render monad.
         Right pName -> Right <$> case (feedbackBuffer drawcall, rasterizationName drawcall) of
-            (Nothing, Just rastN) -> createRenderer state (drawcall, unis, ubinds, samps, sbinds) pName rastN
-            (Just getTransformFeedbackName, Just geoN) -> createFeedbackRenderer state (drawcall, unis, ubinds, samps, sbinds) pName getTransformFeedbackName geoN
+            (Nothing, Just rastN) -> createRenderer state ci pName rastN
+            (Just getTransformFeedbackName, Just geoN) -> createFeedbackRenderer state ci pName getTransformFeedbackName geoN
             _ -> error "No rasterization nor feedback!"
 
 -- private
 createRenderer :: RenderIOState s -- Interactions between the drawcall and the environment 's'.
-    ->  ( Drawcall s -- A drawcall with:
-        , [Int] -- its uniform buffers used,
-        , [Int] -- its textures units used,
-        , [Int] -- its allocated uniforms,
-        , [Int] -- its allocated texture units.
-        )
+    ->  CompileInput s
     ->  GLuint -- pName
     ->  Int
     ->  IO  ( (IORef GLuint, IO ()) -- The program name and its destructor.
-            , s -> Render os () -- The program's renderer as a function on a render (OpenGL) state.
+            , CompiledShader os s -- The program's renderer as a function on a render (OpenGL) state.
             )
-createRenderer state (drawcall, unis, ubinds, samps, sbinds) pName rastN = do
-    let fboSetup = drawcallFbo drawcall
-        primN = primitiveName drawcall
-        inputs = usedInputs drawcall
-        pstrUSize = primStrUBufferSize drawcall
+createRenderer state ci@CompileInput{drawcall, unis, ubinds, samps, sbinds} pName rastN = do
+    let pstrUSize = primStrUBufferSize drawcall
 
     let pstrUSize' = if 0 `elem` unis then pstrUSize else 0
     pstrUBuf <- createUniformBuffer pstrUSize' -- Create uniform buffer for primiveStream uniforms
@@ -362,85 +375,9 @@ createRenderer state (drawcall, unis, ubinds, samps, sbinds) pName rastN = do
         uNameToRenderIOMap' = addPrimitiveStreamUniform pstrUBuf pstrUSize' uNameToRenderIOMap
 
     -- Drawing with the program.
-    let renderer = \x -> Render $ do
-            rs <- lift $ lift get
-            renv <- lift ask
-            let (mFboKeyIO, blendIO) = fboSetup x
-
-            let inwin windowId m = do
-                    case Map.lookup windowId (perWindowRenderState rs) of
-                        Nothing -> return () -- Window deleted
-                        Just (ws, doAsync) -> do
-                            lift $ lift $ put (rs { renderLastUsedWin = windowId })
-                            mErr <- liftIO $ asSync doAsync $ do
-                                pName' <- readIORef pNameRef -- Cant use pName, need to touch pNameRef
-                                glUseProgram pName'
-                                True <- bind uNameToRenderIOMap' (zip unis ubinds) x (const $ return True)
-                                isOk <- bind (samplerNameToRenderIO state) (zip samps sbinds) x (return . not . (`Set.member` renderWriteTextures rs))
-                                (rasterizationNameToRenderIO state ! rastN) x
-                                blendIO
-                                mErr2 <- m
-                                let mErr = if isOk
-                                        then Nothing
-                                        else Just $ "Running shader that samples from texture that currently has an image borrowed from it."
-                                            ++ "Try run this shader from a separate render call where no images from the same texture are drawn to or cleared.\n"
-                                return $ mErr <> mErr2
-                            forM_ mErr throwE
-
-            -- Bind the framebuffer.
-            windowId <- case mFboKeyIO of
-                Left wid -> do -- Bind correct context
-                    inwin wid $ do
-                        glBindFramebuffer GL_DRAW_FRAMEBUFFER 0
-                        return Nothing
-                    return wid
-                Right (fboKeyIO, fboIO) -> do
-                    -- Off-screen draw call, continue with last context
-                    -- (something wrong here?)
-                    (cwid, cd, doAsync) <- unRender getLastRenderWin
-                    inwin cwid $ do
-                        fbokey <- fboKeyIO
-                        mfbo <- getFBO cd fbokey
-                        case mfbo of
-                            Just fbo -> do
-                                fbo' <- readIORef fbo
-                                glBindFramebuffer GL_DRAW_FRAMEBUFFER fbo'
-                                return Nothing
-                            Nothing -> do
-                                fbo' <- alloca $ \ ptr -> glGenFramebuffers 1 ptr >> peek ptr
-                                fbo <- newIORef fbo'
-                                void $ mkWeakIORef fbo (doAsync $ with fbo' $ glDeleteFramebuffers 1)
-                                setFBO cd fbokey fbo
-                                glBindFramebuffer GL_DRAW_FRAMEBUFFER fbo'
-                                glEnable GL_FRAMEBUFFER_SRGB
-                                fboIO
-                                let numColors = length $ fboColors fbokey
-                                withArray [GL_COLOR_ATTACHMENT0 .. (GL_COLOR_ATTACHMENT0 + fromIntegral numColors - 1)] $
-                                    glDrawBuffers (fromIntegral numColors)
-                                getFboError
-                    return cwid
-
-            -- Draw each vertex array.
-            forM_ (map ($ (inputs, pstrUBuf, pstrUSize)) ((inputArrayToRenderIO state ! primN) x)) $ \ ((keyIO, vaoIO), drawIO) -> do
-                case Map.lookup windowId (perWindowRenderState rs) of
-                    Nothing -> return () -- Window deleted
-                    Just (ws, doAsync) ->
-                        liftIO $ do
-                            let cd = windowContextData ws
-                            key <- keyIO
-                            mvao <- getVAO cd key
-                            case mvao of
-                                Just vao -> do
-                                    vao' <- readIORef vao
-                                    glBindVertexArray vao'
-                                Nothing -> do
-                                    vao' <- alloca $ \ ptr -> glGenVertexArrays 1 ptr >> peek ptr
-                                    vao <- newIORef vao'
-                                    void $ mkWeakIORef vao (doAsync $ with vao' $ glDeleteVertexArrays 1)
-                                    setVAO cd key vao
-                                    glBindVertexArray vao'
-                                    vaoIO
-                            drawIO
+    let renderer = createDrawRenderer
+            state ci pNameRef rastN uNameToRenderIOMap'
+            pstrUBuf pstrUSize
 
     let deleter = do
             glDeleteProgram pName
@@ -448,21 +385,109 @@ createRenderer state (drawcall, unis, ubinds, samps, sbinds) pName rastN = do
 
     return ((pNameRef, deleter), renderer)
 
+createDrawRenderer
+    :: RenderIOState s
+    -> CompileInput s
+    -> IORef GLuint
+    -> Int
+    -> Map.IntMap UniformId (s -> Binding -> IO b)
+    -> GLuint
+    -> Int
+    -> CompiledShader os s
+createDrawRenderer state CompileInput{drawcall, unis, ubinds, samps, sbinds} pNameRef rastN uNameToRenderIOMap' pstrUBuf pstrUSize x = Render $ do
+    let fboSetup = drawcallFbo drawcall
+        primN = primitiveName drawcall
+        inputs = usedInputs drawcall
+
+    rs <- lift $ lift get
+    renv <- lift ask
+    let (mFboKeyIO, blendIO) = fboSetup x
+
+    let inwin windowId m = do
+            case Map.lookup windowId (perWindowRenderState rs) of
+                Nothing -> return () -- Window deleted
+                Just (ws, doAsync) -> do
+                    lift $ lift $ put (rs { renderLastUsedWin = windowId })
+                    mErr <- liftIO $ asSync doAsync $ do
+                        pName' <- readIORef pNameRef -- Cant use pName, need to touch pNameRef
+                        glUseProgram pName'
+                        True <- bind uNameToRenderIOMap' (zip unis ubinds) x (const $ return True)
+                        isOk <- bind (samplerNameToRenderIO state) (zip samps sbinds) x (return . not . (`Set.member` renderWriteTextures rs))
+                        (rasterizationNameToRenderIO state ! rastN) x
+                        blendIO
+                        mErr2 <- m
+                        let mErr = if isOk
+                                then Nothing
+                                else Just $ "Running shader that samples from texture that currently has an image borrowed from it."
+                                    ++ "Try run this shader from a separate render call where no images from the same texture are drawn to or cleared.\n"
+                        return $ mErr <> mErr2
+                    forM_ mErr throwE
+
+    -- Bind the framebuffer.
+    windowId <- case mFboKeyIO of
+        Left wid -> do -- Bind correct context
+            inwin wid $ do
+                glBindFramebuffer GL_DRAW_FRAMEBUFFER 0
+                return Nothing
+            return wid
+        Right (fboKeyIO, fboIO) -> do
+            -- Off-screen draw call, continue with last context
+            -- (something wrong here?)
+            (cwid, cd, doAsync) <- unRender getLastRenderWin
+            inwin cwid $ do
+                fbokey <- fboKeyIO
+                mfbo <- getFBO cd fbokey
+                case mfbo of
+                    Just fbo -> do
+                        fbo' <- readIORef fbo
+                        glBindFramebuffer GL_DRAW_FRAMEBUFFER fbo'
+                        return Nothing
+                    Nothing -> do
+                        fbo' <- alloca $ \ ptr -> glGenFramebuffers 1 ptr >> peek ptr
+                        fbo <- newIORef fbo'
+                        void $ mkWeakIORef fbo (doAsync $ with fbo' $ glDeleteFramebuffers 1)
+                        setFBO cd fbokey fbo
+                        glBindFramebuffer GL_DRAW_FRAMEBUFFER fbo'
+                        glEnable GL_FRAMEBUFFER_SRGB
+                        fboIO
+                        let numColors = length $ fboColors fbokey
+                        withArray [GL_COLOR_ATTACHMENT0 .. (GL_COLOR_ATTACHMENT0 + fromIntegral numColors - 1)] $
+                            glDrawBuffers (fromIntegral numColors)
+                        getFboError
+            return cwid
+
+    -- Draw each vertex array.
+    forM_ (map ($ (inputs, pstrUBuf, pstrUSize)) ((inputArrayToRenderIO state ! primN) x)) $ \ ((keyIO, vaoIO), drawIO) -> do
+        case Map.lookup windowId (perWindowRenderState rs) of
+            Nothing -> return () -- Window deleted
+            Just (ws, doAsync) ->
+                liftIO $ do
+                    let cd = windowContextData ws
+                    key <- keyIO
+                    mvao <- getVAO cd key
+                    case mvao of
+                        Just vao -> do
+                            vao' <- readIORef vao
+                            glBindVertexArray vao'
+                        Nothing -> do
+                            vao' <- alloca $ \ ptr -> glGenVertexArrays 1 ptr >> peek ptr
+                            vao <- newIORef vao'
+                            void $ mkWeakIORef vao (doAsync $ with vao' $ glDeleteVertexArrays 1)
+                            setVAO cd key vao
+                            glBindVertexArray vao'
+                            vaoIO
+                    drawIO
+
 -- private
 createFeedbackRenderer :: RenderIOState s -- Interactions between the drawcall and the environment 's'.
-    ->  ( Drawcall s -- A drawcall with:
-        , [Int] -- its uniform buffers used,
-        , [Int] -- its textures units used,
-        , [Int] -- its allocated uniforms,
-        , [Int] -- its allocated texture units.
-        )
+    ->  CompileInput s
     ->  GLuint -- program name
     ->  (s -> IO (GLuint, GLuint, GLuint, GLuint)) -- transform feedback stuff
     ->  Int
     ->  IO  ( (IORef GLuint, IO ()) -- The program name and its destructor.
-            , s -> Render os () -- The program's renderer as a function on a render (OpenGL) state.
+            , CompiledShader os s -- The program's renderer as a function on a render (OpenGL) state.
             )
-createFeedbackRenderer state (drawcall, unis, ubinds, samps, sbinds) pName getTransformFeedbackName geoN = do
+createFeedbackRenderer state CompileInput{drawcall, unis, ubinds, samps, sbinds} pName getTransformFeedbackName geoN = do
     let fboSetup = drawcallFbo drawcall
         primN = primitiveName drawcall
         inputs = usedInputs drawcall
@@ -590,19 +615,20 @@ createUniformBuffer uSize = do
     return bname
 
 -- private
-addPrimitiveStreamUniform :: Word32 -> Int -> Map.IntMap Int (s -> Binding -> IO ()) -> Map.IntMap Int (s -> Binding -> IO ())
+addPrimitiveStreamUniform :: Word32 -> Int -> Map.IntMap UniformId (s -> Binding -> IO ()) -> Map.IntMap UniformId (s -> Binding -> IO ())
 addPrimitiveStreamUniform _ 0 = id
-addPrimitiveStreamUniform bname uSize = Map.insert 0 $ \_ bind -> glBindBufferRange GL_UNIFORM_BUFFER (fromIntegral bind) bname 0 (fromIntegral uSize)
+addPrimitiveStreamUniform bname uSize =
+    Map.insert 0 $ \_ bind -> glBindBufferRange GL_UNIFORM_BUFFER (fromIntegral bind) bname 0 (fromIntegral uSize)
 
 -- private
-bind :: Map.IntMap Int (s -> Binding -> IO x)
-    -> [(Int, Int)]
+bind :: Integral a => Map.IntMap a (s -> Binding -> IO x)
+    -> [(a, a)]
     -> s
     -> (x -> IO Bool) -- Used to assert we may use textures bound as render targets
     -> IO Bool
 bind iom ((n,b):xs) s a = do
     ok1 <- bind iom xs s a
-    ok2 <- (iom ! n) s b >>= a
+    ok2 <- (iom ! n) s (fromIntegral b) >>= a
     return $ ok1 && ok2
 bind _ [] _ _ = return True
 
@@ -643,13 +669,13 @@ matter, we are just mapping a tree of values to another without caring about
 the traversed structure.
 -}
 -- private
-allocateConsecutiveIndexes :: Int -> [[Int]] -> [[Int]]
+allocateConsecutiveIndexes :: Integral a => a -> [[a]] -> [[a]]
 allocateConsecutiveIndexes mx values = evalState (mapM (mapM allocateIndex) values) Map.empty where
     allocateIndex n = do
         mapping <- get
         case Map.lookup n mapping of
             Nothing -> do
-                let m = Map.size mapping
+                let m = fromIntegral $ Map.size mapping
                 if m < mx
                     then do
                         put $ Map.insert n m mapping

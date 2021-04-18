@@ -65,6 +65,7 @@ import           Graphics.GPipe.Internal.Format               (ColorRenderable,
                                                                Format,
                                                                TextureFormat (..),
                                                                getGlInternalFormat)
+import           Graphics.GPipe.Internal.IDs                  (SamplerId (..))
 import           Graphics.GPipe.Internal.Shader               (Shader (..),
                                                                ShaderM,
                                                                getNewName,
@@ -86,6 +87,9 @@ type MaxLevels = Int
 type Size1 = Int
 type Size2 = V2 Int
 type Size3 = V3 Int
+
+getNewSamplerId :: ShaderM s SamplerId
+getNewSamplerId = SamplerId <$> getNewName
 
 newTexture1D :: forall ctx w os f c m. (ContextHandler ctx, ColorSampleable c, MonadIO m) => Format c -> Size1 -> MaxLevels -> ContextT ctx os m (Texture1D os (Format c))
 newTexture1DArray :: forall ctx w os f c m. (ContextHandler ctx, ColorSampleable c, MonadIO m) => Format c -> Size2 -> MaxLevels -> ContextT ctx os m (Texture1DArray os (Format c))
@@ -829,7 +833,7 @@ newSampler2DArrayShadow :: forall os s d. DepthRenderable d => (s -> (Texture2DA
 newSamplerCubeShadow :: forall os s d. DepthRenderable d => (s -> (TextureCube os (Format d), SamplerFilter d, ComparisonFunction)) -> Shader os s (SamplerCube Shadow)
 
 newSampler1D sf = Shader $ do
-                   sampId <- getNewName
+                   sampId <- getNewSamplerId
                    doForSampler sampId $ \s bind -> let (Texture1D tn _ _, filt, (ex, ec)) = sf s
                                                     in  do n <- useTex tn GL_TEXTURE_1D bind
                                                            setNoShadowMode GL_TEXTURE_1D
@@ -838,7 +842,7 @@ newSampler1D sf = Shader $ do
                                                            return n
                    return $ Sampler1D sampId False (samplerPrefix (undefined :: c))
 newSampler1DArray sf = Shader $ do
-                   sampId <- getNewName
+                   sampId <- getNewSamplerId
                    doForSampler sampId $ \s bind -> let (Texture1DArray tn _ _, filt, (ex, ec)) = sf s
                                                     in  do n <- useTex tn GL_TEXTURE_1D_ARRAY bind
                                                            setNoShadowMode GL_TEXTURE_1D_ARRAY
@@ -847,7 +851,7 @@ newSampler1DArray sf = Shader $ do
                                                            return n
                    return $ Sampler1DArray sampId False (samplerPrefix (undefined :: c))
 newSampler2D sf = Shader $ do
-                   sampId <- getNewName
+                   sampId <- getNewSamplerId
                    doForSampler sampId $ \s bind -> let (Texture2D tn _ _, filt, (V2 ex ey, ec)) = sf s
                                                     in  do n <- useTex tn GL_TEXTURE_2D bind
                                                            setNoShadowMode GL_TEXTURE_2D
@@ -856,7 +860,7 @@ newSampler2D sf = Shader $ do
                                                            return n
                    return $ Sampler2D sampId False (samplerPrefix (undefined :: c))
 newSampler2DArray sf = Shader $ do
-                   sampId <- getNewName
+                   sampId <- getNewSamplerId
                    doForSampler sampId $ \s bind -> let (Texture2DArray tn _ _, filt, (V2 ex ey, ec)) = sf s
                                                     in  do n <- useTex tn GL_TEXTURE_2D_ARRAY bind
                                                            setNoShadowMode GL_TEXTURE_2D_ARRAY
@@ -865,7 +869,7 @@ newSampler2DArray sf = Shader $ do
                                                            return n
                    return $ Sampler2DArray sampId False (samplerPrefix (undefined :: c))
 newSampler3D sf = Shader $ do
-                   sampId <- getNewName
+                   sampId <- getNewSamplerId
                    doForSampler sampId $ \s bind -> let (Texture3D tn _ _, filt, (V3 ex ey ez, ec)) = sf s
                                                     in  do n <- useTex tn GL_TEXTURE_3D bind
                                                            setNoShadowMode GL_TEXTURE_3D
@@ -874,7 +878,7 @@ newSampler3D sf = Shader $ do
                                                            return n
                    return $ Sampler3D sampId False (samplerPrefix (undefined :: c))
 newSamplerCube sf = Shader $ do
-                   sampId <- getNewName
+                   sampId <- getNewSamplerId
                    doForSampler sampId $ \s bind -> let (TextureCube tn _ _, filt) = sf s
                                                     in  do n <- useTex tn GL_TEXTURE_CUBE_MAP bind
                                                            setNoShadowMode GL_TEXTURE_CUBE_MAP
@@ -884,7 +888,7 @@ newSamplerCube sf = Shader $ do
 
 
 newSampler1DShadow sf = Shader $ do
-                   sampId <- getNewName
+                   sampId <- getNewSamplerId
                    doForSampler sampId $ \s bind -> let (Texture1D tn _ _, filt, (ex, ec), cf) = sf s
                                                     in  do n <- useTex tn GL_TEXTURE_1D bind
                                                            setShadowFunc GL_TEXTURE_1D cf
@@ -893,7 +897,7 @@ newSampler1DShadow sf = Shader $ do
                                                            return n
                    return $ Sampler1D sampId True ""
 newSampler1DArrayShadow sf = Shader $ do
-                   sampId <- getNewName
+                   sampId <- getNewSamplerId
                    doForSampler sampId $ \s bind -> let (Texture1DArray tn _ _, filt, (ex, ec), cf) = sf s
                                                     in  do n <- useTex tn GL_TEXTURE_1D_ARRAY bind
                                                            setShadowFunc GL_TEXTURE_1D_ARRAY cf
@@ -902,7 +906,7 @@ newSampler1DArrayShadow sf = Shader $ do
                                                            return n
                    return $ Sampler1DArray sampId True ""
 newSampler2DShadow sf = Shader $ do
-                   sampId <- getNewName
+                   sampId <- getNewSamplerId
                    doForSampler sampId $ \s bind -> let (Texture2D tn _ _, filt, (V2 ex ey, ec), cf) = sf s
                                                     in  do n <- useTex tn GL_TEXTURE_2D bind
                                                            setShadowFunc GL_TEXTURE_2D cf
@@ -911,7 +915,7 @@ newSampler2DShadow sf = Shader $ do
                                                            return n
                    return $ Sampler2D sampId True ""
 newSampler2DArrayShadow sf = Shader $ do
-                   sampId <- getNewName
+                   sampId <- getNewSamplerId
                    doForSampler sampId $ \s bind -> let (Texture2DArray tn _ _, filt, (V2 ex ey, ec), cf) = sf s
                                                     in  do n <- useTex tn GL_TEXTURE_2D_ARRAY bind
                                                            setShadowFunc GL_TEXTURE_2D_ARRAY cf
@@ -920,7 +924,7 @@ newSampler2DArrayShadow sf = Shader $ do
                                                            return n
                    return $ Sampler2DArray sampId True ""
 newSamplerCubeShadow sf = Shader $ do
-                   sampId <- getNewName
+                   sampId <- getNewSamplerId
                    doForSampler sampId $ \s bind -> let (TextureCube tn _ _, filt, cf) = sf s
                                                     in  do n <- useTex tn GL_TEXTURE_CUBE_MAP bind
                                                            setShadowFunc GL_TEXTURE_CUBE_MAP cf
@@ -971,17 +975,17 @@ setSamplerFilter' t magf minf lodf a = do
 
 
 
-doForSampler :: Int -> (s -> Binding -> IO Int) -> ShaderM s ()
+doForSampler :: SamplerId -> (s -> Binding -> IO Int) -> ShaderM s ()
 doForSampler n io = modifyRenderIO (\s -> s { samplerNameToRenderIO = insert n io (samplerNameToRenderIO s) } )
 
 -- | Used instead of 'Format' for shadow samplers. These samplers have specialized sampler values, see 'sample1DShadow' and friends.
 data Shadow
-data Sampler1D f = Sampler1D Int Bool Text
-data Sampler1DArray f = Sampler1DArray Int Bool Text
-data Sampler2D f = Sampler2D Int Bool Text
-data Sampler2DArray f = Sampler2DArray Int Bool Text
-data Sampler3D f = Sampler3D Int Bool Text
-data SamplerCube f = SamplerCube Int Bool Text
+data Sampler1D f = Sampler1D SamplerId Bool Text
+data Sampler1DArray f = Sampler1DArray SamplerId Bool Text
+data Sampler2D f = Sampler2D SamplerId Bool Text
+data Sampler2DArray f = Sampler2DArray SamplerId Bool Text
+data Sampler3D f = Sampler3D SamplerId Bool Text
+data SamplerCube f = SamplerCube SamplerId Bool Text
 
 -- | A GADT to specify where the level of detail and/or partial derivates should be taken from. Some values of this GADT are restricted to
 --   only 'FragmentStream's.
@@ -1079,22 +1083,22 @@ samplerCubeSize (SamplerCube sampId shadow prefix) = (\(V2 x _) -> x) . vec2S (S
 addShadowPrefix :: Bool -> Text -> Text
 addShadowPrefix shadow = if shadow then (<> "Shadow") else id
 
-getTextureSize :: Text -> Int -> Text -> S c Int -> ExprM Text
+getTextureSize :: Text -> SamplerId -> Text -> S c Int -> ExprM Text
 getTextureSize prefix sampId sName l = do s <- useSampler prefix sName sampId
                                           l' <- unS l
                                           return $ "textureSize(" <> s <> "," <> l' <> ")"
 
-sample :: e -> Text -> Text -> Text -> Int -> SampleLod lcoord x -> SampleProj x -> Maybe off -> coord -> (coord -> ExprM Text) -> (lcoord -> ExprM Text) -> (off -> Text) -> (coord -> S x Float -> ExprM Text) -> V4 (S x e)
+sample :: e -> Text -> Text -> Text -> SamplerId -> SampleLod lcoord x -> SampleProj x -> Maybe off -> coord -> (coord -> ExprM Text) -> (lcoord -> ExprM Text) -> (off -> Text) -> (coord -> S x Float -> ExprM Text) -> V4 (S x e)
 sample _ prefix sDynType sName sampId lod proj off coord vToS lvToS ivToS pvToS =
     vec4S (STypeDyn sDynType) $ do s <- useSampler prefix sName sampId
                                    sampleFunc s proj lod off coord vToS lvToS ivToS pvToS
 
-sampleShadow :: Text -> Int -> SampleLod lcoord x -> SampleProj x -> Maybe off -> coord -> (coord -> ExprM Text) -> (lcoord -> ExprM Text) -> (off -> Text) -> (coord -> S x Float -> ExprM Text) -> S x Float
+sampleShadow :: Text -> SamplerId -> SampleLod lcoord x -> SampleProj x -> Maybe off -> coord -> (coord -> ExprM Text) -> (lcoord -> ExprM Text) -> (off -> Text) -> (coord -> S x Float -> ExprM Text) -> S x Float
 sampleShadow sName sampId lod proj off coord vToS lvToS civToS pvToS =
     scalarS STypeFloat $ do s <- useSampler "" (sName <> "Shadow") sampId
                             sampleFunc s proj lod off coord vToS lvToS civToS pvToS
 
-fetch :: e -> Text -> Text -> Text -> Int -> S x Int -> Maybe off -> coord -> (coord -> ExprM Text) -> (off -> Text) -> V4 (S x e)
+fetch :: e -> Text -> Text -> Text -> SamplerId -> S x Int -> Maybe off -> coord -> (coord -> ExprM Text) -> (off -> Text) -> V4 (S x e)
 fetch _ prefix sDynType sName sampId lod off coord ivToS civToS =
     vec4S (STypeDyn sDynType) $ do s <- useSampler prefix sName sampId
                                    fetchFunc s off coord lod ivToS civToS

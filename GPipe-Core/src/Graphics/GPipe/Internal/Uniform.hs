@@ -38,6 +38,7 @@ import           Graphics.GPipe.Internal.Expr     (ExprM, GlobDeclM, S (S),
                                                    tellGlobalLn, tshow,
                                                    useUniform, vec2S'', vec3S'',
                                                    vec4S'')
+import           Graphics.GPipe.Internal.IDs      (UniformId (..))
 import           Graphics.GPipe.Internal.Shader   (Shader (..), ShaderM,
                                                    askUniformAlignment,
                                                    getNewName, modifyRenderIO)
@@ -67,7 +68,7 @@ class BufferFormat a => UniformInput a where
 getUniform :: forall os s b x. (UniformInput b) => (s -> (Buffer os (Uniform b), Int)) -> Shader os s (UniformFormat b x)
 getUniform sf = Shader $ do
     uniAl <- askUniformAlignment
-    blockId <- getNewName
+    blockId <- UniformId <$> getNewName
     let (u, offToStype) = shaderGen (useUniform (buildUDecl offToStype) blockId)
         sampleBuffer = makeBuffer undefined undefined uniAl :: Buffer os (Uniform b)
         shaderGen :: (Int -> ExprM Text) -> (UniformFormat b x, OffsetToSType) -- Int is name of uniform block
@@ -85,7 +86,7 @@ getUniform sf = Shader $ do
         ToUniform (Kleisli shaderGenF) = toUniform :: ToUniform x b (UniformFormat b x)
         fromBUnifom (Uniform b) = b
 
-        doForUniform :: Int -> (s -> Binding -> IO()) -> ShaderM s ()
+        doForUniform :: UniformId -> (s -> Binding -> IO()) -> ShaderM s ()
         doForUniform n io = modifyRenderIO (\s -> s { uniformNameToRenderIO = insert n io (uniformNameToRenderIO s) } )
 
 buildUDecl :: OffsetToSType -> GlobDeclM ()

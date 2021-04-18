@@ -44,7 +44,8 @@ import           Data.Maybe                       (fromJust, isJust, isNothing)
 import           Data.Monoid                      (All (..))
 import           Graphics.GPipe.Internal.Buffer   (UniformAlignment,
                                                    getUniformAlignment)
-import           Graphics.GPipe.Internal.Compiler (Drawcall, RenderIOState,
+import           Graphics.GPipe.Internal.Compiler (CompiledShader, Drawcall,
+                                                   RenderIOState,
                                                    compileDrawcalls,
                                                    mapDrawcall,
                                                    mapRenderIOState,
@@ -163,11 +164,6 @@ silenceShader (Shader (ShaderM m)) = Shader $ ShaderM $ do
 --   maximum loop count.
 guard' :: (s -> Bool) -> Shader os s ()
 guard' f = Shader $ ShaderM $ lift $ tell (mempty, All . f)
-
--- | A compiled shader is just a function that takes an environment and returns
--- a 'Render' action It could have been called 'CompiledDrawcall' or 'Renderer'
--- because it is the same thing.
-type CompiledShader os s = s -> Render os ()
 
 -- | Compiles a shader into a 'CompiledShader'. This action will usually take a
 -- second or more, so put it during a loading sequence or something.
