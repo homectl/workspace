@@ -34,9 +34,7 @@ import           Foreign.Storable                 (peek)
 import           Graphics.GL.Core45
 import           Graphics.GL.Types                (GLuint)
 import           Graphics.GPipe.Internal.Context
-
--- public
-type WinId = Int
+import           Graphics.GPipe.Internal.IDs      (WinId)
 
 {-
 A Drawcall is an OpenGL shader program with its context. Drawcalls are produced

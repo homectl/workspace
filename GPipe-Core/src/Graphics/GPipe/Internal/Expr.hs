@@ -32,7 +32,7 @@ import           Data.Boolean                      (Boolean (..), BooleanOf,
                                                     OrdB (..), maxB, minB)
 import           Data.Foldable                     (Foldable (toList))
 import           Data.Int                          (Int16, Int32, Int8)
-import qualified Data.IntMap.Polymorphic.Lazy                  as Map
+import qualified Data.IntMap.Polymorphic.Lazy      as Map
 import           Data.Maybe                        (fromJust, isJust)
 import           Data.SNMap                        (SNMapReaderT, memoizeM,
                                                     runSNMapReaderT, scopedM)
@@ -188,7 +188,7 @@ data ShaderStageInput = ShaderStageInput
     }
 
 data ShaderStageOutput = ShaderStageOutput
-    {   source               :: !Text         -- ^ The shader GLSL source to be compiled.
+    {   source               :: !Text           -- ^ The shader GLSL source to be compiled.
     ,   uniforms             :: ![Int]          -- ^ The uniforms used in this shader.
     ,   samplers             :: ![Int]          -- ^ The samplers used in this shader.
     ,   inputs               :: ![Int]          -- ^ The input variables used in this shader.
@@ -362,7 +362,11 @@ declareGeometryLayout inputPrimitive outputPrimitive maxVertices =
 
 useUniform :: GlobDeclM () -> Int -> Int -> ExprM Text
 useUniform decls blockI offset = do
-    T.lift $ modify $ \(ExprState s nvar body) -> ExprState s{ shaderUsedUniformBlocks = Map.insert blockI gDeclUniformBlock $ shaderUsedUniformBlocks s } nvar body
+    T.lift $ modify $ \(ExprState s nvar body) ->
+        ExprState s{ shaderUsedUniformBlocks =
+                Map.insert blockI gDeclUniformBlock $ shaderUsedUniformBlocks s }
+            nvar
+            body
     return $ "u" <> tshow blockI <> "." <> "u" <> tshow offset -- "u8.u4"
     where
         gDeclUniformBlock = do

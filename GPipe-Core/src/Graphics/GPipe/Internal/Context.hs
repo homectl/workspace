@@ -66,7 +66,9 @@ import           Graphics.GL.Core45
 import           Graphics.GL.Types                (GLint, GLuint)
 import           Graphics.GPipe.Internal.Format   (WindowBits, WindowFormat,
                                                    windowBits)
+import           Graphics.GPipe.Internal.IDs      (WinId (..))
 import           Linear.V2                        (V2 (..))
+
 
 -- | Class implementing a window handler that can create openGL contexts, such as GLFW or GLUT
 class ContextHandler ctx where
@@ -124,9 +126,9 @@ data ContextEnv ctx = ContextEnv {
   }
 
 data ContextState ctx = ContextState {
-    nextName       :: Name,
+    nextName       :: WinId,
     perWindowState :: PerWindowState ctx,
-    lastUsedWin    :: Name -- -1 is no window. 0 is the hidden window. 1.. are visible windows
+    lastUsedWin    :: WinId -- -1 is no window. 0 is the hidden window. 1.. are visible windows
   }
 
 -- | A monad in which shaders are run.
@@ -140,15 +142,15 @@ data RenderEnv = RenderEnv {
 data RenderState = RenderState {
     perWindowRenderState :: PerWindowRenderState,
     renderWriteTextures  :: Set.IntSet,
-    renderLastUsedWin    :: Name
+    renderLastUsedWin    :: WinId
   }
 
 type Name = Int
 
 type ContextDoAsync = IO () -> IO ()
 
-type PerWindowState ctx = IMap.IntMap Int (WindowState, ContextWindow ctx) -- -1 is no window. 0 is the hidden window. 1.. are visible windows
-type PerWindowRenderState = IMap.IntMap Int (WindowState, ContextDoAsync)
+type PerWindowState ctx = IMap.IntMap WinId (WindowState, ContextWindow ctx) -- -1 is no window. 0 is the hidden window. 1.. are visible windows
+type PerWindowRenderState = IMap.IntMap WinId (WindowState, ContextDoAsync)
 newtype WindowState = WindowState
     { windowContextData :: ContextData
     }
@@ -192,7 +194,7 @@ runContextT chp (ContextT m) = do
      )
      (\ctx -> evalStateT (runReaderT m (ContextEnv ctx cds)) (ContextState 1 IMap.empty (-1)))
 
-newtype Window os c ds = Window { getWinName :: Name }
+newtype Window os c ds = Window { getWinName :: WinId }
 
 instance Eq (Window os c ds) where
   (Window a) == (Window b) = a == b
@@ -279,7 +281,7 @@ addContextFinalizer k m = ContextT $ do
   liftIO $ void $ mkWeakIORef k $ contextDoAsync ctx Nothing m
 
 
-getLastRenderWin :: Render os (Name, ContextData, ContextDoAsync)
+getLastRenderWin :: Render os (WinId, ContextData, ContextDoAsync)
 getLastRenderWin = Render $ do
   rs <- lift $ lift get
   let cwid = renderLastUsedWin rs -- There is always a window available since render calls getLastContextWin

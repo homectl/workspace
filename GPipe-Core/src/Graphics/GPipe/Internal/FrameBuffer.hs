@@ -29,7 +29,7 @@ import           Foreign.Storable                        (peek)
 import           Graphics.GL.Core45
 import           Graphics.GL.Types                       (GLenum, GLuint)
 import           Graphics.GPipe.Internal.Compiler        (Drawcall (Drawcall),
-                                                          WinId, getFboError)
+                                                          getFboError)
 import           Graphics.GPipe.Internal.Context         (FBOKey,
                                                           FBOKeys (FBOKeys),
                                                           Render (Render),
@@ -54,6 +54,7 @@ import           Graphics.GPipe.Internal.Format          (ColorRenderable (clear
                                                           StencilRenderable)
 import           Graphics.GPipe.Internal.FragmentStream  (FragmentStream (..),
                                                           FragmentStreamData (..))
+import           Graphics.GPipe.Internal.IDs             (WinId)
 import           Graphics.GPipe.Internal.PrimitiveStream (PrimitiveStreamData (PrimitiveStreamData))
 import           Graphics.GPipe.Internal.Shader          (Shader (..), ShaderM,
                                                           tellDrawcall)
