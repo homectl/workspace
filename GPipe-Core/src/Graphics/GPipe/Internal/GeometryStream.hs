@@ -26,7 +26,7 @@ import           Control.Monad.Trans.State.Lazy          (State, evalState, get,
 import           Data.Boolean                            (Boolean (true),
                                                           EqB ((==*)),
                                                           IfB (ifB))
-import           Data.IntMap.Lazy                        (insert)
+import           Data.IntMap.Polymorphic.Lazy            (insert)
 import           Data.Text.Lazy                          (Text)
 import           Graphics.GL.Core45
 import           Graphics.GPipe.Internal.Compiler        (RenderIOState (rasterizationNameToRenderIO, transformFeedbackToRenderIO))

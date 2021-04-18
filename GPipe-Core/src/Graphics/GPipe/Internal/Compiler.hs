@@ -16,8 +16,8 @@ import           Control.Monad.Trans.State.Strict (evalState, get, put)
 import           Data.Either                      (partitionEithers)
 import           Data.IORef                       (IORef, mkWeakIORef, newIORef,
                                                    readIORef)
-import           Data.IntMap                      ((!))
-import qualified Data.IntMap                      as Map
+import           Data.IntMap.Polymorphic          ((!))
+import qualified Data.IntMap.Polymorphic          as Map
 import qualified Data.IntSet                      as Set
 import           Data.List                        (zip5)
 import           Data.Maybe                       (fromJust, isJust, isNothing)
@@ -103,16 +103,16 @@ data RenderIOState s = RenderIOState
     {   -- Uniform buffer objects bindings. TODO Return buffer name here when we
         -- start writing to buffers during rendering (transform feedback, buffer
         -- textures) -> Ok, but uniform only?
-        uniformNameToRenderIO :: Map.IntMap (s -> Binding -> IO ())
+        uniformNameToRenderIO :: Map.IntMap Int (s -> Binding -> IO ())
         -- Texture units bindings. IO returns texturename for validating that it
         -- isnt used as render target
-    ,   samplerNameToRenderIO :: Map.IntMap (s -> Binding -> IO Int)
+    ,   samplerNameToRenderIO :: Map.IntMap Int (s -> Binding -> IO Int)
         -- Final rasterization operations (mostly setting the viewport).
-    ,   rasterizationNameToRenderIO :: Map.IntMap (s -> IO ())
+    ,   rasterizationNameToRenderIO :: Map.IntMap Int (s -> IO ())
         -- Final vertex processiong stage.
-    ,   transformFeedbackToRenderIO :: Map.IntMap (s -> GLuint -> IO ())
+    ,   transformFeedbackToRenderIO :: Map.IntMap Int (s -> GLuint -> IO ())
         -- VAO bindings.
-    ,   inputArrayToRenderIO :: Map.IntMap (s ->
+    ,   inputArrayToRenderIO :: Map.IntMap Int (s ->
         [   (   [Binding] -- inputs (drawcall's usedInputs)
             ,   GLuint -- primitive stream uniforms buffer
             ,   Int -- primitive stream uniforms buffer size
@@ -592,12 +592,12 @@ createUniformBuffer uSize = do
     return bname
 
 -- private
-addPrimitiveStreamUniform :: Word32 -> Int -> Map.IntMap (s -> Binding -> IO ()) -> Map.IntMap (s -> Binding -> IO ())
+addPrimitiveStreamUniform :: Word32 -> Int -> Map.IntMap Int (s -> Binding -> IO ()) -> Map.IntMap Int (s -> Binding -> IO ())
 addPrimitiveStreamUniform _ 0 = id
 addPrimitiveStreamUniform bname uSize = Map.insert 0 $ \_ bind -> glBindBufferRange GL_UNIFORM_BUFFER (fromIntegral bind) bname 0 (fromIntegral uSize)
 
 -- private
-bind :: Map.IntMap (s -> Binding -> IO x)
+bind :: Map.IntMap Int (s -> Binding -> IO x)
     -> [(Int, Int)]
     -> s
     -> (x -> IO Bool) -- Used to assert we may use textures bound as render targets

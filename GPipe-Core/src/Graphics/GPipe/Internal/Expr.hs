@@ -32,7 +32,7 @@ import           Data.Boolean                      (Boolean (..), BooleanOf,
                                                     OrdB (..), maxB, minB)
 import           Data.Foldable                     (Foldable (toList))
 import           Data.Int                          (Int16, Int32, Int8)
-import qualified Data.IntMap.Lazy                  as Map
+import qualified Data.IntMap.Polymorphic.Lazy                  as Map
 import           Data.Maybe                        (fromJust, isJust)
 import           Data.SNMap                        (SNMapReaderT, memoizeM,
                                                     runSNMapReaderT, scopedM)
@@ -104,9 +104,9 @@ emptyExprState :: ExprState
 emptyExprState = ExprState emptyShaderInputs 0 mempty
 
 data ShaderInputs = ShaderInputs
-    {   shaderUsedUniformBlocks :: !(Map.IntMap (GlobDeclM ()))
-    ,   shaderUsedSamplers :: !(Map.IntMap (GlobDeclM ()))
-    ,   shaderUsedInput :: !(Map.IntMap -- (For vertex shaders, the value is always undefined and the int is the parameter name, for later shader stages it uses some name local to the transition instead)
+    {   shaderUsedUniformBlocks :: !(Map.IntMap Int (GlobDeclM ()))
+    ,   shaderUsedSamplers :: !(Map.IntMap Int (GlobDeclM ()))
+    ,   shaderUsedInput :: !(Map.IntMap Int -- (For vertex shaders, the value is always undefined and the int is the parameter name, for later shader stages it uses some name local to the transition instead)
         (   GlobDeclM () -- Input declarations for the current shader
         ,   (   ExprM () -- Output assignement required in the previous shader (obviously undefined for the first shader - see comment below.)
             ,   GlobDeclM () -- Output declaration required in the previous shader.

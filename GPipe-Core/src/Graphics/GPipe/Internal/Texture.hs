@@ -20,7 +20,7 @@ import           Control.Monad.IO.Class                       (MonadIO, liftIO)
 import           Control.Monad.Trans.Class                    (lift)
 import           Data.IORef                                   (IORef, newIORef,
                                                                readIORef)
-import           Data.IntMap.Lazy                             (insert)
+import           Data.IntMap.Polymorphic.Lazy                 (insert)
 import           Data.Text.Lazy                               (Text)
 import           Foreign.Marshal.Alloc                        (alloca,
                                                                allocaBytes,

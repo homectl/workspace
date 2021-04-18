@@ -12,7 +12,7 @@ module Graphics.GPipe.Internal.TransformFeedback where
 
 import           Control.Monad.Trans.State               (evalState)
 import           Data.IORef                              (readIORef, writeIORef)
-import           Data.IntMap.Lazy                        (insert)
+import           Data.IntMap.Polymorphic.Lazy            (insert)
 import qualified Data.Text.Lazy                          as LT
 import           Foreign.C.String                        (newCString)
 import           Foreign.Marshal                         (alloca, free,

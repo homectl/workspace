@@ -79,6 +79,10 @@ library
       Graphics.GPipe.Optimizer
   other-modules:
       -- Data structures, not useful for users of the library.
+      Data.IntMap.Polymorphic
+      Data.IntMap.Polymorphic.Lazy
+      Data.IntMap.Polymorphic.Strict
+      Data.IntMap.Polymorphic.Type
       Data.SNMap
   ghc-options:
       -Wall

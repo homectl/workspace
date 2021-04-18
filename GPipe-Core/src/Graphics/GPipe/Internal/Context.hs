@@ -56,8 +56,8 @@ import           Control.Monad.Trans.State.Strict (StateT (runStateT),
                                                    modify, put)
 import           Data.IORef                       (IORef, mkWeakIORef,
                                                    readIORef)
-import           Data.IntMap                      ((!))
-import qualified Data.IntMap.Strict               as IMap
+import           Data.IntMap.Polymorphic          ((!))
+import qualified Data.IntMap.Polymorphic.Strict   as IMap
 import qualified Data.IntSet                      as Set
 import qualified Data.Map.Strict                  as Map
 import           Data.Maybe                       (maybeToList)
@@ -147,8 +147,8 @@ type Name = Int
 
 type ContextDoAsync = IO () -> IO ()
 
-type PerWindowState ctx = IMap.IntMap (WindowState, ContextWindow ctx) -- -1 is no window. 0 is the hidden window. 1.. are visible windows
-type PerWindowRenderState = IMap.IntMap (WindowState, ContextDoAsync)
+type PerWindowState ctx = IMap.IntMap Int (WindowState, ContextWindow ctx) -- -1 is no window. 0 is the hidden window. 1.. are visible windows
+type PerWindowRenderState = IMap.IntMap Int (WindowState, ContextDoAsync)
 newtype WindowState = WindowState
     { windowContextData :: ContextData
     }

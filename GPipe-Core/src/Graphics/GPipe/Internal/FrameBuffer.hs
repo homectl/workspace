@@ -17,7 +17,7 @@ import           Control.Monad.Trans.Writer.Lazy         (Writer, execWriter,
                                                           tell)
 import           Data.IORef                              (mkWeakIORef, newIORef,
                                                           readIORef)
-import qualified Data.IntMap                             as IMap
+import qualified Data.IntMap.Polymorphic                 as IMap
 import           Data.Text.Lazy                          (Text)
 import qualified Data.Text.Lazy                          as LT
 import qualified Data.Text.Lazy.IO                       as LT
