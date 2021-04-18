@@ -94,11 +94,10 @@ dfgExpr (BinaryExpr l _ r) declNode   = mapM_ (`dfgExprAtom` declNode) [l, r]
 dfgExprAtom :: ExprAtom -> Node -> DFGState ()
 dfgExprAtom LitIntExpr{} _                = return ()
 dfgExprAtom LitFloatExpr{} _              = return ()
-dfgExprAtom (IdentifierExpr n) declNode   = nodeForName n >>= addEdge declNode
-dfgExprAtom (UniformExpr n m)  declNode   = nodeForUniform n m >>= addEdge declNode
+dfgExprAtom (IdentifierExpr n) declNode   = nodeForNameExpr n >>= addEdge declNode
 dfgExprAtom (SwizzleExpr n _)  declNode   = nodeFor NsT n >>= addEdge declNode
-dfgExprAtom (VecIndexExpr n _) declNode   = nodeForName n >>= addEdge declNode
-dfgExprAtom (MatIndexExpr n _ _) declNode = nodeForName n >>= addEdge declNode
+dfgExprAtom (VecIndexExpr n _) declNode   = nodeForNameExpr n >>= addEdge declNode
+dfgExprAtom (MatIndexExpr n _ _) declNode = nodeForNameExpr n >>= addEdge declNode
 
 
 nodeForUniform :: NameId -> NameId -> DFGState Node
@@ -108,6 +107,10 @@ nodeForUniform n m = do
   case getDecl NsU i decls of
     Nothing -> error $ "no node for " <> showUniformId i
     Just ok -> return ok
+
+nodeForNameExpr :: NameExpr -> DFGState Node
+nodeForNameExpr (NameExpr n)      = nodeForName n
+nodeForNameExpr (UniformExpr n m) = nodeForUniform n m
 
 nodeForName :: Name -> DFGState Node
 nodeForName (Name ns n) = nodeFor ns n

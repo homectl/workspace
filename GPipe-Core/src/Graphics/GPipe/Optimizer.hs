@@ -34,8 +34,8 @@ main = do
   -- inText <- IO.readFile "../large-shaders/lambdacnc.frag"
   -- inText <- IO.readFile "../large-shaders/lambdacnc.vert"
   -- inText <- IO.readFile "../large-shaders/lambdaray.frag"
-  inText <- IO.readFile "../large-shaders/xax.frag"
-  -- inText <- IO.readFile "../large-shaders/xax.vert"
+  -- inText <- IO.readFile "../large-shaders/xax.frag"
+  inText <- IO.readFile "../large-shaders/xax.vert"
   -- inText <- IO.readFile "../large-shaders/small.vert"
   when False $ parseTest (parseGLSL :: Parser (GLSL ())) inText
   putStrLn "Parsing shader source..."

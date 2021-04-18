@@ -31,7 +31,7 @@ isConstExpr _ TextureExpr{}         = False
 
 
 isConstExprAtom :: ConstExprs -> ExprAtom -> Bool
-isConstExprAtom (ConstExprs ce) (IdentifierExpr (Name NsT (NameId n))) =
+isConstExprAtom (ConstExprs ce) (IdentifierExpr (NameExpr (Name NsT (NameId n)))) =
   S.member n ce
 
 isConstExprAtom _ LitIntExpr{}   = True

@@ -383,6 +383,20 @@ ppVecIndex Y = "1"
 ppVecIndex Z = "2"
 ppVecIndex W = "3"
 
+data NameExpr
+  = NameExpr Name
+  | UniformExpr NameId NameId
+  deriving (Show)
+
+parseNameExpr :: Parser NameExpr
+parseNameExpr =
+  UniformExpr <$> (char 'u' >> parseNameId) <*> (".u" >> parseNameId)
+  <|> NameExpr <$> parseName
+
+ppNameExpr :: NameExpr -> LTB.Builder
+ppNameExpr (NameExpr n) = ppName n
+ppNameExpr (UniformExpr n m) = "u" <> ppNameId n <> ".u" <> ppNameId m
+
 data Cast
   = Cast
   | NoCast
@@ -391,11 +405,10 @@ data Cast
 data ExprAtom
   = LitIntExpr Cast Int
   | LitFloatExpr Cast Float
-  | IdentifierExpr Name
-  | UniformExpr NameId NameId
+  | IdentifierExpr NameExpr
   | SwizzleExpr NameId Swizzle
-  | VecIndexExpr Name Swizzle
-  | MatIndexExpr Name Swizzle Swizzle
+  | VecIndexExpr NameExpr Swizzle
+  | MatIndexExpr NameExpr Swizzle Swizzle
   deriving (Show)
 
 parseExprAtom :: Parser ExprAtom
@@ -403,11 +416,10 @@ parseExprAtom =
   litNumber <$> scientific
   <|> LitIntExpr Cast <$> ("int(" >> decimal >>= (")" >>) . pure)
   <|> LitFloatExpr Cast <$> ("float(" >> rational >>= (")" >>) . pure)
-  <|> UniformExpr <$> (char 'u' >> parseNameId) <*> (".u" >> parseNameId)
   <|> SwizzleExpr <$> (char 't' >> parseNameId) <*> (char '.' >> parseSwizzle)
-  <|> MatIndexExpr <$> parseName <*> ("[" >> parseVecIndex) <*> ("][" >> parseVecIndex >>= ("]" >>) . pure)
-  <|> VecIndexExpr <$> parseName <*> ("[" >> parseVecIndex >>= ("]" >>) . pure)
-  <|> IdentifierExpr <$> parseName
+  <|> MatIndexExpr <$> parseNameExpr <*> ("[" >> parseVecIndex) <*> ("][" >> parseVecIndex >>= ("]" >>) . pure)
+  <|> VecIndexExpr <$> parseNameExpr <*> ("[" >> parseVecIndex >>= ("]" >>) . pure)
+  <|> IdentifierExpr <$> parseNameExpr
   where
     litNumber s =
       let e = Sci.base10Exponent s
@@ -421,11 +433,10 @@ ppExprAtom (LitIntExpr Cast i)     = "int(" <> ppInt i <> ")"
 ppExprAtom (LitIntExpr NoCast i)   = ppInt i
 ppExprAtom (LitFloatExpr Cast n)   = "float(" <> ppFloat n <> ")"
 ppExprAtom (LitFloatExpr NoCast r) = ppFloat r
-ppExprAtom (IdentifierExpr n)      = ppName n
-ppExprAtom (UniformExpr n m)       = "u" <> ppNameId n <> ".u" <> ppNameId m
+ppExprAtom (IdentifierExpr n)      = ppNameExpr n
 ppExprAtom (SwizzleExpr n m)       = "t" <> ppNameId n <> "." <> ppSwizzle m
-ppExprAtom (VecIndexExpr n i)      = ppName n <> "[" <> ppVecIndex i <> "]"
-ppExprAtom (MatIndexExpr n i j)    = ppName n <> "[" <> ppVecIndex i <> "]" <> "[" <> ppVecIndex j <> "]"
+ppExprAtom (VecIndexExpr n i)      = ppNameExpr n <> "[" <> ppVecIndex i <> "]"
+ppExprAtom (MatIndexExpr n i j)    = ppNameExpr n <> "[" <> ppVecIndex i <> "]" <> "[" <> ppVecIndex j <> "]"
 
 data Expr
   = UnaryExpr UnaryOp ExprAtom

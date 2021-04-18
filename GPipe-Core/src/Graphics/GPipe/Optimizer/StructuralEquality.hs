@@ -49,8 +49,7 @@ eqExprAtom (LitIntExpr _ _) (LitIntExpr _ _)             = True
 eqExprAtom (LitIntExpr _ _) (LitFloatExpr _ _)           = True
 eqExprAtom (LitFloatExpr _ _) (LitFloatExpr _ _)         = True
 eqExprAtom (LitFloatExpr _ _) (LitIntExpr _ _)           = True
-eqExprAtom (IdentifierExpr a) (IdentifierExpr b)         = eqName a b
-eqExprAtom (UniformExpr na ma) (UniformExpr nb mb)       = na == nb && ma == mb
+eqExprAtom (IdentifierExpr a) (IdentifierExpr b)         = eqNameExpr a b
 eqExprAtom (SwizzleExpr _ a) (SwizzleExpr _ b)           = a == b
 eqExprAtom (VecIndexExpr _ ia) (VecIndexExpr _ ib)       = ia == ib
 eqExprAtom (MatIndexExpr _ ia ja) (MatIndexExpr _ ib jb) = ia == ib && ja == jb
@@ -64,10 +63,11 @@ eqExprAtom _ _                                           = False
 --   they are not, we'll need to pass them as arguments to our new function, but
 --   this is rare enough so it won't increase the average function parameter
 --   list length too much.
-eqName :: Name -> Name -> Bool
+eqNameExpr :: NameExpr -> NameExpr -> Bool
+eqNameExpr (UniformExpr na ma) (UniformExpr nb mb) = na == nb && ma == mb
 -- eqName (Name NsT _) (Name NsT _)   = True
 -- eqName (Name nsa na) (Name nsb nb) = nsa == nsb && na == nb
-eqName _ _ = True
+eqNameExpr _ _ = True
 
 eqLocalDecl :: LocalDecl -> LocalDecl -> Bool
 eqLocalDecl (LDecl tya _ ea) (LDecl tyb _ eb) =

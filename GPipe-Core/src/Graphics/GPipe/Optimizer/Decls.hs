@@ -3,8 +3,8 @@
 module Graphics.GPipe.Optimizer.Decls where
 
 import qualified Data.IntMap.Strict            as M
-import           Graphics.GPipe.Optimizer.GLSL (Name (..), NameId (..),
-                                                Namespace (..))
+import           Graphics.GPipe.Optimizer.GLSL (Name (..), NameExpr (..),
+                                                NameId (..), Namespace (..))
 
 
 data Decls a = Decls
@@ -30,6 +30,10 @@ addDecl NsOut (NameId n) v decls@Decls{..} = decls{declsOut = M.insert n v decls
 addDeclN :: Name -> a -> Decls a -> Decls a
 addDeclN (Name ns n) = addDecl ns n
 
+addDeclNE :: NameExpr -> a -> Decls a -> Decls a
+addDeclNE (NameExpr n)      = addDeclN n
+addDeclNE (UniformExpr n m) = addDecl NsU (toUniformId (n, m))
+
 getDecls :: Namespace -> Decls a -> M.IntMap a
 getDecls NsT Decls{..}   = declsT
 getDecls NsS Decls{..}   = declsS
@@ -43,6 +47,10 @@ getDecl ns (NameId n) decls = M.lookup n (getDecls ns decls)
 
 getDeclN :: Name -> Decls a -> Maybe a
 getDeclN (Name ns n) = getDecl ns n
+
+getDeclNE :: NameExpr -> Decls a -> Maybe a
+getDeclNE (NameExpr n)      = getDeclN n
+getDeclNE (UniformExpr n m) = getDecl NsU (toUniformId (n, m))
 
 toUniformId :: (NameId, NameId) -> NameId
 toUniformId (NameId n, NameId m) = NameId $ n * 1000 + m

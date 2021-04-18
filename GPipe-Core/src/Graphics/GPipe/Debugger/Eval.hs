@@ -24,8 +24,8 @@ import           Graphics.GPipe.Debugger.Value    (Eval, EvalResult (..),
                                                    roundValue)
 import           Graphics.GPipe.Linear            (R1 (..), R2 (..), R3 (..),
                                                    R4 (..))
-import           Graphics.GPipe.Optimizer.Decls   (addDecl, addDeclN,
-                                                   emptyDecls, getDeclN,
+import           Graphics.GPipe.Optimizer.Decls   (addDecl, addDeclN, addDeclNE,
+                                                   emptyDecls, getDeclNE,
                                                    toUniformId)
 import           Graphics.GPipe.Optimizer.GLSL
 
@@ -58,7 +58,7 @@ evalGLSL (GLSL _ d) = do
   mapM_ discoverTopDecl d
   evalMain
   -- maybe (FloatValue 0) id . gl_Position <$> get
-  roundValue <$> getValue emptyLocals (Name NsOut (NameId 0))
+  roundValue <$> getValue emptyLocals (NameExpr (Name NsOut (NameId 0)))
 
 discoverTopDecl :: TopDecl () -> Eval ()
 discoverTopDecl (LayoutDecl _ d) = discoverGlobalDecl d
@@ -105,11 +105,11 @@ evalStmtAnnot lst (SA () s) = evalStmt lst s
 evalStmt :: LocalState -> Stmt () -> Eval LocalState
 evalStmt lst (AssignStmt n e) = do
   v <- evalExpr lst e
-  setValue lst n v
+  setValue lst (NameExpr n) v
 evalStmt lst (DeclStmt d) = evalLocalDecl lst d
 evalStmt lst (EmitStmt e) = evalEmit lst e
 evalStmt lst (IfStmt cond thens elses) = do
-  BoolValue v <- getValue lst (Name NsT cond)
+  BoolValue v <- getValue lst (NameExpr (Name NsT cond))
   if v
     then foldM evalStmtAnnot lst thens
     else foldM evalStmtAnnot lst elses
@@ -122,10 +122,10 @@ evalEmit lst (EmitPosition e) = do
   return lst
 
 evalLocalDecl :: LocalState -> LocalDecl -> Eval LocalState
-evalLocalDecl lst (LDecl ty (Name NsT -> n) Nothing) =
+evalLocalDecl lst (LDecl ty (NameExpr . Name NsT -> n) Nothing) =
   let v = defaultValue ty in
   setValue lst n v
-evalLocalDecl lst (LDecl ty (Name NsT -> n) (Just e)) = do
+evalLocalDecl lst (LDecl ty (NameExpr . Name NsT -> n) (Just e)) = do
   v <- evalExpr lst e >>= evalCoerce ty
   setValue lst n v
 
@@ -150,10 +150,9 @@ evalExprAtom lst = \case
   LitFloatExpr _ f   -> return $ FloatValue f
   LitIntExpr _ i     -> return $ IntValue i
   IdentifierExpr n   -> getValue lst n
-  SwizzleExpr n s    -> getValue lst (Name NsT n) >>= evalVecIndex s
+  SwizzleExpr n s    -> getValue lst (NameExpr (Name NsT n)) >>= evalVecIndex s
   VecIndexExpr n i   -> getValue lst n >>= evalVecIndex i
   MatIndexExpr n i j -> getValue lst n >>= evalMatIndex i j
-  UniformExpr n m    -> getValue lst (Name NsU $ toUniformId (n, m))
 
 evalVecIndex :: Swizzle -> Value -> Eval Value
 evalVecIndex X (Vec2Value v) = return $ FloatValue $ v ^. _x
@@ -180,32 +179,32 @@ evalMatIndex i j v =
       <> " on " <> show v
 
 
-setValue :: LocalState -> Name -> Value -> Eval LocalState
-setValue lst@LocalState{..} n@(Name NsT (NameId nId)) v =
-  trace (pp ppName n <> " = " <> show v) $
+setValue :: LocalState -> NameExpr -> Value -> Eval LocalState
+setValue lst@LocalState{..} n@(NameExpr (Name NsT (NameId nId))) v =
+  trace (pp ppNameExpr n <> " = " <> show v) $
   if isNaNValue v
-    then fail $ pp ppName n <> " = " <> show v
+    then fail $ pp ppNameExpr n <> " = " <> show v
     else return lst{temps = M.insert nId v temps}
 setValue lst n v = do
-  modify' $ \st@EvalState{..} -> st{globals = addDeclN n v globals}
-  trace (pp ppName n <> " = " <> show v) $
+  modify' $ \st@EvalState{..} -> st{globals = addDeclNE n v globals}
+  trace (pp ppNameExpr n <> " = " <> show v) $
     if isNaNValue v
-      then fail $ pp ppName n <> " = " <> show v
+      then fail $ pp ppNameExpr n <> " = " <> show v
       else return lst
 
 
-getValue :: LocalState -> Name -> Eval Value
-getValue LocalState{..} (Name NsT (NameId n)) = do
+getValue :: LocalState -> NameExpr -> Eval Value
+getValue LocalState{..} (NameExpr (Name NsT (NameId n))) = do
   let Just v = M.lookup n temps
   return v
 getValue _ n = do
-  v <- getDeclN n . globals <$> get
+  v <- getDeclNE n . globals <$> get
   case v of
-    Nothing -> fail $ "undefined global: " <> pp ppName n
+    Nothing -> fail $ "undefined global: " <> pp ppNameExpr n
     Just ok -> return ok
 
 
 main :: IO ()
 main = do
-  txt <- IO.readFile "../large-shaders/xax.frag"
+  txt <- IO.readFile "../large-shaders/xax.vert"
   print $ eval txt

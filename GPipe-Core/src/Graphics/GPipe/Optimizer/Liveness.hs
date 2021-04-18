@@ -62,13 +62,13 @@ clExpr (TextureExpr t x y) ls  = foldr clExprAtom ls [t, x, y]
 clExpr (AtomExpr e) ls         = clExprAtom e ls
 
 clExprAtom :: ExprAtom -> Liveness -> Liveness
-clExprAtom (IdentifierExpr n) ls         = clName n ls
+clExprAtom (IdentifierExpr n) ls         = clNameExpr n ls
 clExprAtom (SwizzleExpr (NameId n) _) ls = insert n ls
 clExprAtom _ ls                          = ls
 
-clName :: Name -> Liveness -> Liveness
-clName (Name NsT (NameId n)) ls = insert n ls
-clName _ ls                     = ls
+clNameExpr :: NameExpr -> Liveness -> Liveness
+clNameExpr (NameExpr (Name NsT (NameId n))) ls = insert n ls
+clNameExpr _ ls                                = ls
 
 insert :: Int -> Liveness -> Liveness
 insert n = Liveness . S.insert n . unLiveness
