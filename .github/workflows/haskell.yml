@@ -78,3 +78,15 @@ jobs:
           target-branch: "main"
           user-email: homectl@homectl.org
           commit-message: See ORIGIN_COMMIT
+
+      - name: Push to scenegraph
+        uses: cpina/github-action-push-to-another-repository@master
+        env:
+          API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
+        with:
+          source-directory: "scenegraph"
+          destination-github-username: "homectl"
+          destination-repository-name: "scenegraph"
+          target-branch: "main"
+          user-email: homectl@homectl.org
+          commit-message: See ORIGIN_COMMIT
