@@ -1,17 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Graphics.GPipe.ExprSpec where
 
-import           Test.Hspec                   (Spec, describe, it, shouldBe)
+import           Test.Hspec                      (Spec, describe, it, shouldBe)
 
-import qualified Data.Text.Lazy               as LT
-import           Graphics.GPipe               (V4 (..), identity, ifB, norm,
-                                               (==*))
-import qualified Graphics.GPipe.Debugger.Eval as Eval
-import           Graphics.GPipe.Expr          (FFloat, ifThenElse')
-import           Graphics.GPipe.Linear        ((!*))
+import qualified Data.Text.Lazy                  as LT
+import           Graphics.GPipe                  (V4 (..), identity, ifB, norm,
+                                                  (==*))
+import qualified Graphics.GPipe.Debugger.Compile as Compile
+import           Graphics.GPipe.Expr             (FFloat, ifThenElse')
+import           Graphics.GPipe.Linear           ((!*))
 
 wrap :: FFloat -> IO LT.Text
-wrap = Eval.compile
+wrap = Compile.compile
 
 golden :: LT.Text -> IO ()
 golden = mapM_ (\l -> putStrLn $ "                , " ++ show l) . LT.lines

@@ -3,66 +3,24 @@
 {-# LANGUAGE StrictData      #-}
 module Graphics.GPipe.Optimizer.DFG where
 
-import           Control.Monad.Trans.State     (StateT, execState, get, modify',
-                                                put)
-import           Data.Foldable                 (forM_)
-import           Data.Functor                  (void)
-import           Data.Functor.Identity         (Identity)
-import           Data.Graph.Inductive          (Node)
-import qualified Data.Graph.Inductive          as G
-import qualified Data.GraphViz                 as GV
-import qualified Data.GraphViz.Printing        as GV
-import qualified Data.IntMap.Strict            as M
-import qualified Data.Text.Lazy.IO             as IO
-import           Graphics.GPipe.Optimizer.GLSL hiding (t)
-
-data Decls = Decls
-  { declsS   :: M.IntMap Node
-  , declsT   :: M.IntMap Node
-  , declsU   :: M.IntMap Node
-  , declsVF  :: M.IntMap Node
-  , declsIn  :: M.IntMap Node
-  , declsOut :: M.IntMap Node
-  }
-
-emptyDecls :: Decls
-emptyDecls = Decls M.empty M.empty M.empty M.empty M.empty M.empty
-
-addDecl :: Namespace -> NameId -> Node -> Decls -> Decls
-addDecl NsT (NameId n) nodeId decls@Decls{..} = decls{declsT = M.insert n nodeId declsT}
-addDecl NsS (NameId n) nodeId decls@Decls{..} = decls{declsS = M.insert n nodeId declsS}
-addDecl NsU (NameId n) nodeId decls@Decls{..} = decls{declsU = M.insert n nodeId declsU}
-addDecl NsVF (NameId n) nodeId decls@Decls{..} = decls{declsVF = M.insert n nodeId declsVF}
-addDecl NsIn (NameId n) nodeId decls@Decls{..} = decls{declsIn = M.insert n nodeId declsIn}
-addDecl NsOut (NameId n) nodeId decls@Decls{..} = decls{declsOut = M.insert n nodeId declsOut}
-
-getDecls :: Namespace -> Decls -> M.IntMap Node
-getDecls NsT Decls{..}   = declsT
-getDecls NsS Decls{..}   = declsS
-getDecls NsU Decls{..}   = declsU
-getDecls NsVF Decls{..}  = declsVF
-getDecls NsIn Decls{..}  = declsIn
-getDecls NsOut Decls{..} = declsOut
-
-getDecl :: Namespace -> NameId -> Decls -> Maybe Node
-getDecl ns (NameId n) decls = M.lookup n (getDecls ns decls)
-
-toUniformId :: (NameId, NameId) -> NameId
-toUniformId (NameId n, NameId m) = NameId $ n * 1000 + m
-
-fromUniformId :: NameId -> (NameId, NameId)
-fromUniformId (NameId i) = let (n, m) = i `divMod` 1000 in (NameId n, NameId m)
-
-showUniformId :: NameId -> String
-showUniformId i =
-  let (n, m) = fromUniformId i in
-  "u" <> show n <> ".u" <> show m
+import           Control.Monad.Trans.State      (StateT, execState, get,
+                                                 modify', put)
+import           Data.Foldable                  (forM_)
+import           Data.Functor                   (void)
+import           Data.Functor.Identity          (Identity)
+import           Data.Graph.Inductive           (Node)
+import qualified Data.Graph.Inductive           as G
+import qualified Data.GraphViz                  as GV
+import qualified Data.GraphViz.Printing         as GV
+import qualified Data.Text.Lazy.IO              as IO
+import           Graphics.GPipe.Optimizer.Decls
+import           Graphics.GPipe.Optimizer.GLSL  hiding (t)
 
 --------------------------------------------------------------------------------
 
 data DFG = DFG
   { gr         :: G.Gr DFGNode DFGEdge
-  , decls      :: Decls
+  , decls      :: Decls Node
   , nextNodeId :: Node
   , ifCond     :: Maybe Node
   }

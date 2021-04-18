@@ -61,11 +61,11 @@ diStmts config ss =
   case findBody config ce ss of
     Nothing -> ss
     Just body ->
-      let newProc = pp ppTopDecl (FunctionGenerator.makeFunction body) in
+      let _newProc = pp ppTopDecl (FunctionGenerator.makeFunction body) in
       trace (
         "found one! length = " <> show (length body)
-        <> "\n" <> ppl ppStmtAnnot body <> "\n\n"
-        <> newProc
+        -- <> "\n" <> ppl ppStmtAnnot body <> "\n\n"
+        -- <> newProc
       ) $ deleteBody ce body ss
 
 

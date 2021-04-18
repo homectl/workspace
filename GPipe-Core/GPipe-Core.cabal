@@ -47,7 +47,10 @@ library
       Graphics.GPipe.Orphans
       -- Internal modules, exported for tests and power users, but don't have
       -- a stable API and are not necessarily safe to use.
+      Graphics.GPipe.Debugger.Compile
       Graphics.GPipe.Debugger.Eval
+      Graphics.GPipe.Debugger.PrimFuns
+      Graphics.GPipe.Debugger.Value
       Graphics.GPipe.Internal.Buffer
       Graphics.GPipe.Internal.Compiler
       Graphics.GPipe.Internal.Context
@@ -66,6 +69,7 @@ library
       Graphics.GPipe.Internal.Uniform
       Graphics.GPipe.Internal.Orphans
       Graphics.GPipe.Optimizer.ConstExpr
+      Graphics.GPipe.Optimizer.Decls
       Graphics.GPipe.Optimizer.Deinline
       Graphics.GPipe.Optimizer.DFG
       Graphics.GPipe.Optimizer.FunctionGenerator

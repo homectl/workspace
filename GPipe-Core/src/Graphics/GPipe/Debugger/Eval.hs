@@ -2,85 +2,54 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE RecordWildCards            #-}
+{-# LANGUAGE StrictData                 #-}
+{-# LANGUAGE ViewPatterns               #-}
 module Graphics.GPipe.Debugger.Eval where
 
+import           Control.Lens                     ((^.))
 import           Control.Monad                    (foldM, foldM_)
-import           Control.Monad.Trans.State.Strict (StateT, evalStateT, get,
-                                                   modify')
+import           Control.Monad.Trans.State.Strict (evalStateT, get, modify')
 import qualified Data.IntMap                      as M
 import qualified Data.Text.Lazy                   as LT
-import           Graphics.GPipe.Internal.Expr
-import           Graphics.GPipe.Linear            (V2, V3, V4)
+import qualified Data.Text.Lazy.IO                as IO
+import qualified Debug.Trace                      as Trace
+import qualified Graphics.GPipe.Debugger.PrimFuns as PrimFuns
+import           Graphics.GPipe.Debugger.Value    (Eval, EvalResult (..),
+                                                   EvalState (..), Proc (..),
+                                                   Value (..), defaultValue,
+                                                   evalBinaryOp, evalCoerce,
+                                                   evalUnaryOp, isNaNValue,
+                                                   roundValue)
+import           Graphics.GPipe.Linear            (R1 (..), R2 (..), R3 (..),
+                                                   R4 (..))
+import           Graphics.GPipe.Optimizer.Decls   (addDecl, addDeclN,
+                                                   emptyDecls, getDeclN,
+                                                   toUniformId)
 import           Graphics.GPipe.Optimizer.GLSL
 
 
-class ResultValue a where
-  resultExpr :: a -> ExprM LT.Text
-  resultType :: a -> SType
+traceAssignments :: Bool
+traceAssignments = False
 
-instance ResultValue (S x Float) where
-  resultExpr = unS
-  resultType _ = STypeFloat
-
-instance ResultValue (V2 (S x Float)) where
-  resultExpr = unS . fromVec2
-  resultType _ = STypeVec 2
-
-instance ResultValue (V3 (S x Float)) where
-  resultExpr = unS . fromVec3
-  resultType _ = STypeVec 3
-
-instance ResultValue (V4 (S x Float)) where
-  resultExpr = unS . fromVec4
-  resultType _ = STypeVec 4
-
-
-compile :: ResultValue a => a -> IO LT.Text
-compile expr =
-  fmap finalSource
-  $ runExprM (tellGlobalLn $ "out " <> stypeName (resultType expr) <> " out0")
-  $ resultExpr expr >>= tellAssignment' "out0"
+trace :: String -> a -> a
+trace = if traceAssignments then Trace.trace else const id
 
 
 eval :: LT.Text -> Either String Value
-eval code =
-  let Right glsl = parseShader code in
+eval code = do
+  glsl <- parseShader code
   fromResult $ evalStateT (evalGLSL glsl) startState
 
 
-data Proc
-  = Proc [ParamDecl] [StmtAnnot ()]
-
-data Value
-  = FloatValue Float
-  | IntValue Int
-  | BoolValue Bool
-  deriving (Show, Eq)
-
-defaultValue :: Type -> Value
-defaultValue TyFloat = FloatValue 0
-defaultValue ty      = error $ "not implemented: " <> pp ppType ty
-
-data EvalState = EvalState
-  { procs    :: M.IntMap Proc
-  , mainProc :: Maybe Proc
-  , outs     :: M.IntMap Value
-  }
-
-newtype EvalResult a = EvalResult { fromResult :: Either String a }
-  deriving (Functor, Applicative, Monad)
-
-instance MonadFail EvalResult where
-  fail = EvalResult . Left
-
-type Eval = StateT EvalState EvalResult
-
 startState :: EvalState
 startState = EvalState
-  { procs = M.empty
-  , mainProc = Nothing
-  , outs = M.empty
+  { stProcs = M.empty
+  , stMainProc = Nothing
+
+  , globals = emptyDecls
+  , gl_Position = Nothing
   }
 
 
@@ -88,27 +57,33 @@ evalGLSL :: GLSL () -> Eval Value
 evalGLSL (GLSL _ d) = do
   mapM_ discoverTopDecl d
   evalMain
-  getValue emptyLocals (Name NsOut (NameId 0))
+  -- maybe (FloatValue 0) id . gl_Position <$> get
+  roundValue <$> getValue emptyLocals (Name NsOut (NameId 0))
 
 discoverTopDecl :: TopDecl () -> Eval ()
 discoverTopDecl (LayoutDecl _ d) = discoverGlobalDecl d
 discoverTopDecl (GlobalDecl d) = discoverGlobalDecl d
 discoverTopDecl (ProcDecl ProcMain params body) =
-  modify' $ \st -> st{mainProc = Just $ Proc params body}
+  modify' $ \st -> st{stMainProc = Just $ Proc params body}
 discoverTopDecl (ProcDecl (ProcName (NameId n)) params body) =
-  modify' $ \st@EvalState{..} -> st{procs = M.insert n (Proc params body) procs}
+  modify' $ \st@EvalState{..} -> st{stProcs = M.insert n (Proc params body) stProcs}
 
 discoverGlobalDecl :: GlobalDecl -> Eval ()
-discoverGlobalDecl (GDecl GkOut ty (Name NsOut (NameId n))) =
-  modify' $ \st@EvalState{..} -> st{outs = M.insert n (defaultValue ty) outs}
+discoverGlobalDecl (GDecl GkUniform (TyStruct _ fields) (Name NsU n)) =
+  modify' $ \st@EvalState{..} ->
+    st{globals = foldr (\(ty, m) -> addDecl NsU (toUniformId (n, m)) (defaultValue ty)) globals fields}
+discoverGlobalDecl (GDecl GkOut ty n) =
+  modify' $ \st@EvalState{..} -> st{globals = addDeclN n (defaultValue ty) globals}
+discoverGlobalDecl (GDecl GkIn ty n) =
+  modify' $ \st@EvalState{..} -> st{globals = addDeclN n (defaultValue ty) globals}
 discoverGlobalDecl d =
-  error $ "not implemented: " <> pp ppGlobalDecl d
+  error $ "discoverGlobalDecl not implemented: " <> pp ppGlobalDecl d
 
 
 evalMain :: Eval ()
 evalMain = do
-  Just main <- mainProc <$> get
-  evalProc main []
+  Just mainProc <- stMainProc <$> get
+  evalProc mainProc []
   return ()
 
 newtype LocalState = LocalState
@@ -121,7 +96,7 @@ emptyLocals = LocalState
   }
 
 evalProc :: Proc -> [Value] -> Eval ()
-evalProc (Proc _ ss) _args =
+evalProc (Proc _params ss) _args =
   foldM_ evalStmtAnnot emptyLocals ss
 
 evalStmtAnnot :: LocalState -> StmtAnnot () -> Eval LocalState
@@ -140,19 +115,19 @@ evalStmt lst (IfStmt cond thens elses) = do
     else foldM evalStmtAnnot lst elses
 
 evalEmit :: LocalState -> Emit -> Eval LocalState
-evalEmit = error "not implemented"
+evalEmit lst EmitFragDepth = return lst
+evalEmit lst (EmitPosition e) = do
+  v <- evalExpr lst e
+  modify' $ \st -> st{gl_Position = Just v}
+  return lst
 
 evalLocalDecl :: LocalState -> LocalDecl -> Eval LocalState
-evalLocalDecl lst (LDecl ty n Nothing) =
-  setValue lst (Name NsT n) (defaultValue ty)
-evalLocalDecl lst (LDecl ty n (Just e)) = do
+evalLocalDecl lst (LDecl ty (Name NsT -> n) Nothing) =
+  let v = defaultValue ty in
+  setValue lst n v
+evalLocalDecl lst (LDecl ty (Name NsT -> n) (Just e)) = do
   v <- evalExpr lst e >>= evalCoerce ty
-  setValue lst (Name NsT n) v
-
-evalCoerce :: Type -> Value -> Eval Value
-evalCoerce TyFloat v@FloatValue{} = return v
-evalCoerce TyFloat (IntValue i)   = return $ FloatValue (fromIntegral i)
-evalCoerce ty v                   = fail $ "coerce failed: " <> show (ty, v)
+  setValue lst n v
 
 evalExpr :: LocalState -> Expr -> Eval Value
 evalExpr lst = \case
@@ -160,38 +135,63 @@ evalExpr lst = \case
     lv <- evalExprAtom lst l
     rv <- evalExprAtom lst r
     return $ evalBinaryOp lv op rv
+  UnaryExpr op e -> do
+    v <- evalExprAtom lst e
+    return $ evalUnaryOp op v
   AtomExpr e -> evalExprAtom lst e
+  FunCallExpr fun args -> do
+    vals <- mapM (evalExprAtom lst) args
+    PrimFuns.eval fun vals
   e -> fail $ "evalExpr not implemented: " <> pp ppExpr e
-
-evalBinaryOp :: Value -> BinaryOp -> Value -> Value
-evalBinaryOp (FloatValue l) BOpPlus (FloatValue r) = FloatValue (l + r)
-evalBinaryOp (IntValue l) BOpPlus (IntValue r) = IntValue (l + r)
-evalBinaryOp l o r =
-  error $ "not implemented: " <> show (l, o, r)
 
 evalExprAtom :: LocalState -> ExprAtom -> Eval Value
 evalExprAtom lst = \case
   LitFloatExpr _ f -> return $ FloatValue f
   LitIntExpr _ i   -> return $ IntValue i
   IdentifierExpr n -> getValue lst n
-  e                -> fail $ "not implemented: " <> pp ppExprAtom e
+  SwizzleExpr n s  -> getValue lst (Name NsT n) >>= evalSwizzle s
+  VecIndexExpr n s -> getValue lst n >>= evalSwizzle s
+  UniformExpr n m  -> getValue lst (Name NsU $ toUniformId (n, m))
+  e                -> fail $ "evalExpr not implemented: " <> pp ppExprAtom e
 
+evalSwizzle :: Swizzle -> Value -> Eval Value
+evalSwizzle X (Vec2Value v) = return $ FloatValue $ v ^. _x
+evalSwizzle Y (Vec2Value v) = return $ FloatValue $ v ^. _y
+evalSwizzle X (Vec3Value v) = return $ FloatValue $ v ^. _x
+evalSwizzle Y (Vec3Value v) = return $ FloatValue $ v ^. _y
+evalSwizzle Z (Vec3Value v) = return $ FloatValue $ v ^. _z
+evalSwizzle X (Vec4Value v) = return $ FloatValue $ v ^. _x
+evalSwizzle Y (Vec4Value v) = return $ FloatValue $ v ^. _y
+evalSwizzle Z (Vec4Value v) = return $ FloatValue $ v ^. _z
+evalSwizzle W (Vec4Value v) = return $ FloatValue $ v ^. _w
+evalSwizzle s v = fail $ "cannot access " <> pp ppSwizzle s <> " on " <> show v
 
 setValue :: LocalState -> Name -> Value -> Eval LocalState
-setValue lst@LocalState{..} (Name NsT (NameId n)) v =
-  return lst{temps = M.insert n v temps}
-setValue lst (Name NsOut (NameId n)) v = do
-  modify' $ \st@EvalState{..} -> st{outs = M.insert n v outs}
-  return lst
-setValue _ _ _ =
-  error "not implemented: setValue"
+setValue lst@LocalState{..} n@(Name NsT (NameId nId)) v =
+  trace (pp ppName n <> " = " <> show v) $
+  if isNaNValue v
+    then fail $ pp ppName n <> " = " <> show v
+    else return lst{temps = M.insert nId v temps}
+setValue lst n v = do
+  modify' $ \st@EvalState{..} -> st{globals = addDeclN n v globals}
+  trace (pp ppName n <> " = " <> show v) $
+    if isNaNValue v
+      then fail $ pp ppName n <> " = " <> show v
+      else return lst
+
 
 getValue :: LocalState -> Name -> Eval Value
 getValue LocalState{..} (Name NsT (NameId n)) = do
   let Just v = M.lookup n temps
   return v
-getValue _ (Name NsOut (NameId n)) = do
-  Just v <- M.lookup n . outs <$> get
-  return v
-getValue _ _ =
-  error "not implemented: setValue"
+getValue _ n = do
+  v <- getDeclN n . globals <$> get
+  case v of
+    Nothing -> fail $ "undefined global: " <> pp ppName n
+    Just ok -> return ok
+
+
+main :: IO ()
+main = do
+  txt <- IO.readFile "../large-shaders/xax.frag"
+  print $ eval txt
