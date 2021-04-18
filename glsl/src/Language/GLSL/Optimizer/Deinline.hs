@@ -1,17 +1,17 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TupleSections   #-}
-module Graphics.GPipe.Optimizer.Deinline where
+module Language.GLSL.Optimizer.Deinline where
 
 import           Control.Applicative                         (ZipList (..))
 import           Control.Arrow                               ((&&&))
 import qualified Data.List                                   as List
 import           Data.Maybe                                  (listToMaybe)
 import           Debug.Trace                                 (trace)
-import           Graphics.GPipe.Optimizer.ConstExpr          (ConstExprs,
+import           Language.GLSL.ConstExpr          (ConstExprs,
                                                               collectConstExprs)
-import qualified Graphics.GPipe.Optimizer.FunctionGenerator  as FunctionGenerator
-import           Graphics.GPipe.Optimizer.GLSL
-import qualified Graphics.GPipe.Optimizer.StructuralEquality as StructuralEquality
+import qualified Language.GLSL.Optimizer.FunctionGenerator  as FunctionGenerator
+import           Language.GLSL.Types
+import qualified Language.GLSL.StructuralEquality as StructuralEquality
 
 
 data Config = Config

@@ -1,9 +1,9 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StrictData      #-}
-module Graphics.GPipe.Optimizer.Decls where
+module Language.GLSL.Decls where
 
 import qualified Data.IntMap.Strict            as M
-import           Graphics.GPipe.Optimizer.GLSL (Name (..), NameExpr (..),
+import           Language.GLSL.Types (Name (..), NameExpr (..),
                                                 NameId (..), Namespace (..))
 
 

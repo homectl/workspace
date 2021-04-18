@@ -5,8 +5,8 @@ module Graphics.GPipe.Debugger.Value where
 import           Control.Monad.Trans.State.Strict (StateT)
 import qualified Data.IntMap                      as M
 import           Graphics.GPipe.Linear            (M44, V2, V3, V4, (!*), (!*!))
-import           Graphics.GPipe.Optimizer.Decls   (Decls)
-import           Graphics.GPipe.Optimizer.GLSL
+import           Language.GLSL.Decls   (Decls)
+import           Language.GLSL.Types
 
 data Proc
   = Proc [ParamDecl] [StmtAnnot ()]

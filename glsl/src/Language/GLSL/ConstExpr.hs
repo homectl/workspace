@@ -1,11 +1,11 @@
-module Graphics.GPipe.Optimizer.ConstExpr
+module Language.GLSL.ConstExpr
   ( ConstExprs
   , collectConstExprs
   , isConstExpr
   ) where
 
 import qualified Data.IntSet                   as S
-import           Graphics.GPipe.Optimizer.GLSL
+import           Language.GLSL.Types
 
 
 newtype ConstExprs = ConstExprs S.IntSet

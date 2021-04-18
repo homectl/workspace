@@ -22,12 +22,12 @@ import           Graphics.GPipe.Debugger.Value    (Eval, EvalResult (..),
                                                    evalBinaryOp, evalCoerce,
                                                    evalUnaryOp, isNaNValue,
                                                    roundValue)
-import           Graphics.GPipe.Linear            (R1 (..), R2 (..), R3 (..),
+import           Linear            (R1 (..), R2 (..), R3 (..),
                                                    R4 (..))
-import           Graphics.GPipe.Optimizer.Decls   (addDecl, addDeclN, addDeclNE,
+import           Language.GLSL.Decls   (addDecl, addDeclN, addDeclNE,
                                                    emptyDecls, getDeclNE,
                                                    toUniformId)
-import           Graphics.GPipe.Optimizer.GLSL
+import           Language.GLSL.Types
 
 
 traceAssignments :: Bool

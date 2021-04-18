@@ -5,7 +5,7 @@ import           Data.Fixed                    (mod')
 import           Graphics.GPipe.Debugger.Value
 import           Graphics.GPipe.Expr           (fract', smoothstep, step)
 import           Graphics.GPipe.Linear
-import           Graphics.GPipe.Optimizer.GLSL
+import           Language.GLSL.Types
 
 flt :: Value -> Eval Float
 flt = evalCoerce TyFloat >=> convert

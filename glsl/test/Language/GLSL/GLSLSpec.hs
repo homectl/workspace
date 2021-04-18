@@ -1,11 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Graphics.GPipe.Optimizer.GLSLSpec where
+module Language.GLSL.GLSLSpec where
 
 import           Test.Hspec                       (Spec, describe, it)
 
 import           Control.Applicative              (liftA2)
 import           Data.Attoparsec.ByteString.Char8 (decimal)
-import qualified Graphics.GPipe.Optimizer.GLSL    as GLSL
+import qualified Language.GLSL.Types    as GLSL
 import           Test.GLSL                        (Transform, shouldTransformTo,
                                                    with)
 

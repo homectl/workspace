@@ -1,9 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Graphics.GPipe.Optimizer.DeinlineSpec where
+module Language.GLSL.Optimizer.DeinlineSpec where
 
 import           Test.Hspec                        (Spec, describe, it)
 
-import           Graphics.GPipe.Optimizer.Deinline (Config (..), defaultConfig,
+import           Language.GLSL.Optimizer.Deinline (Config (..), defaultConfig,
                                                     diStmts)
 import           Test.GLSL                         (Transform,
                                                     shouldNotTransform,

@@ -1,7 +1,7 @@
 {-# LANGUAGE NamedFieldPuns  #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StrictData      #-}
-module Graphics.GPipe.Optimizer.DFG where
+module Language.GLSL.Optimizer.DFG where
 
 import           Control.Monad.Trans.State      (StateT, execState, get,
                                                  modify', put)
@@ -13,8 +13,8 @@ import qualified Data.Graph.Inductive           as G
 import qualified Data.GraphViz                  as GV
 import qualified Data.GraphViz.Printing         as GV
 import qualified Data.Text.Lazy.IO              as IO
-import           Graphics.GPipe.Optimizer.Decls
-import           Graphics.GPipe.Optimizer.GLSL  hiding (t)
+import           Language.GLSL.Decls
+import           Language.GLSL.Types  hiding (t)
 
 --------------------------------------------------------------------------------
 

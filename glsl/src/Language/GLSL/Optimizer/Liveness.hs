@@ -1,9 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Graphics.GPipe.Optimizer.Liveness where
+module Language.GLSL.Optimizer.Liveness where
 
 import qualified Data.IntSet                   as S
 import qualified Data.Text.Lazy.Builder        as LTB
-import           Graphics.GPipe.Optimizer.GLSL hiding (t)
+import           Language.GLSL.Types hiding (t)
 
 
 newtype Liveness = Liveness { unLiveness :: S.IntSet }

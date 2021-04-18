@@ -63,7 +63,7 @@ import           Graphics.GPipe.Internal.Texture         (ComparisonFunction,
                                                           getImageBinding,
                                                           getImageFBOKey,
                                                           imageEquals)
-import           Graphics.GPipe.Optimizer                (optimizeShader)
+import           Language.GLSL.Optimizer                (optimizeShader)
 import           Linear.V4                               (V4 (..))
 import qualified System.Environment                      as Env
 

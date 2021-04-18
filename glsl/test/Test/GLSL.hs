@@ -8,7 +8,7 @@ import qualified Data.ByteString.Char8             as BS
 import           Data.String                       (fromString)
 import qualified Data.Text.Lazy                    as LT
 import qualified Data.Text.Lazy.Builder            as LTB
-import qualified Graphics.GPipe.Optimizer.GLSL     as GLSL
+import qualified Language.GLSL.Types     as GLSL
 
 
 type Transform a b = [GLSL.StmtAnnot a] -> [GLSL.StmtAnnot b]

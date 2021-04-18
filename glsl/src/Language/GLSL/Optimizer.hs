@@ -1,16 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StrictData        #-}
-module Graphics.GPipe.Optimizer where
+module Language.GLSL.Optimizer where
 
 import           Control.Monad                     (when)
 import           Data.Attoparsec.ByteString.Char8  (Parser)
 import qualified Data.Text.Lazy                    as LT
 import qualified Data.Text.Lazy.IO                 as IO
-import qualified Graphics.GPipe.Optimizer.Deinline as Deinline
-import           Graphics.GPipe.Optimizer.GLSL     (Annot, GLSL, parseGLSL,
+import qualified Language.GLSL.Optimizer.Deinline as Deinline
+import           Language.GLSL.Types     (Annot, GLSL, parseGLSL,
                                                     parseShader, parseTest,
                                                     printShader)
-import qualified Graphics.GPipe.Optimizer.Liveness as Liveness
+import qualified Language.GLSL.Optimizer.Liveness as Liveness
 
 
 optimizeShader :: LT.Text -> Either String LT.Text

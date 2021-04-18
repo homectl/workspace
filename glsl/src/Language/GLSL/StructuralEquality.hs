@@ -1,8 +1,8 @@
 -- | Structural equality, ignoring the variable names.
-module Graphics.GPipe.Optimizer.StructuralEquality where
+module Language.GLSL.StructuralEquality where
 
-import           Graphics.GPipe.Optimizer.ConstExpr (ConstExprs, isConstExpr)
-import           Graphics.GPipe.Optimizer.GLSL
+import           Language.GLSL.ConstExpr (ConstExprs, isConstExpr)
+import           Language.GLSL.Types
 
 
 eqStmtAnnots :: ConstExprs -> [(StmtAnnot a, StmtAnnot a)] -> Bool

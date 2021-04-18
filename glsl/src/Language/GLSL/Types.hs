@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StrictData        #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
-module Graphics.GPipe.Optimizer.GLSL where
+module Language.GLSL.Types where
 
 import           Control.Applicative              (Applicative (..), (<|>))
 import           Data.Attoparsec.ByteString.Char8 (IResult (Partial), Parser,
