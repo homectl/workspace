@@ -76,8 +76,8 @@ discoverGlobalDecl (GDecl GkOut ty n) =
   modify' $ \st@EvalState{..} -> st{globals = addDeclN n (defaultValue ty) globals}
 discoverGlobalDecl (GDecl GkIn ty n) =
   modify' $ \st@EvalState{..} -> st{globals = addDeclN n (defaultValue ty) globals}
-discoverGlobalDecl d =
-  error $ "discoverGlobalDecl not implemented: " <> pp ppGlobalDecl d
+discoverGlobalDecl d@(GDecl GkUniform _ _) =
+  fail $ "unsupported uniform type in decl: " <> pp ppGlobalDecl d
 
 
 evalMain :: Eval ()
@@ -142,29 +142,43 @@ evalExpr lst = \case
   FunCallExpr fun args -> do
     vals <- mapM (evalExprAtom lst) args
     PrimFuns.eval fun vals
-  e -> fail $ "evalExpr not implemented: " <> pp ppExpr e
+  e@TextureExpr{} ->
+    fail $ "texture() not implemented: " <> pp ppExpr e
 
 evalExprAtom :: LocalState -> ExprAtom -> Eval Value
 evalExprAtom lst = \case
-  LitFloatExpr _ f -> return $ FloatValue f
-  LitIntExpr _ i   -> return $ IntValue i
-  IdentifierExpr n -> getValue lst n
-  SwizzleExpr n s  -> getValue lst (Name NsT n) >>= evalSwizzle s
-  VecIndexExpr n s -> getValue lst n >>= evalSwizzle s
-  UniformExpr n m  -> getValue lst (Name NsU $ toUniformId (n, m))
-  e                -> fail $ "evalExpr not implemented: " <> pp ppExprAtom e
+  LitFloatExpr _ f   -> return $ FloatValue f
+  LitIntExpr _ i     -> return $ IntValue i
+  IdentifierExpr n   -> getValue lst n
+  SwizzleExpr n s    -> getValue lst (Name NsT n) >>= evalVecIndex s
+  VecIndexExpr n i   -> getValue lst n >>= evalVecIndex i
+  MatIndexExpr n i j -> getValue lst n >>= evalMatIndex i j
+  UniformExpr n m    -> getValue lst (Name NsU $ toUniformId (n, m))
 
-evalSwizzle :: Swizzle -> Value -> Eval Value
-evalSwizzle X (Vec2Value v) = return $ FloatValue $ v ^. _x
-evalSwizzle Y (Vec2Value v) = return $ FloatValue $ v ^. _y
-evalSwizzle X (Vec3Value v) = return $ FloatValue $ v ^. _x
-evalSwizzle Y (Vec3Value v) = return $ FloatValue $ v ^. _y
-evalSwizzle Z (Vec3Value v) = return $ FloatValue $ v ^. _z
-evalSwizzle X (Vec4Value v) = return $ FloatValue $ v ^. _x
-evalSwizzle Y (Vec4Value v) = return $ FloatValue $ v ^. _y
-evalSwizzle Z (Vec4Value v) = return $ FloatValue $ v ^. _z
-evalSwizzle W (Vec4Value v) = return $ FloatValue $ v ^. _w
-evalSwizzle s v = fail $ "cannot access " <> pp ppSwizzle s <> " on " <> show v
+evalVecIndex :: Swizzle -> Value -> Eval Value
+evalVecIndex X (Vec2Value v) = return $ FloatValue $ v ^. _x
+evalVecIndex Y (Vec2Value v) = return $ FloatValue $ v ^. _y
+evalVecIndex X (Vec3Value v) = return $ FloatValue $ v ^. _x
+evalVecIndex Y (Vec3Value v) = return $ FloatValue $ v ^. _y
+evalVecIndex Z (Vec3Value v) = return $ FloatValue $ v ^. _z
+evalVecIndex X (Vec4Value v) = return $ FloatValue $ v ^. _x
+evalVecIndex Y (Vec4Value v) = return $ FloatValue $ v ^. _y
+evalVecIndex Z (Vec4Value v) = return $ FloatValue $ v ^. _z
+evalVecIndex W (Vec4Value v) = return $ FloatValue $ v ^. _w
+evalVecIndex s v = fail $ "cannot access " <> pp ppSwizzle s <> " on " <> show v
+
+evalMatIndex :: Swizzle -> Swizzle -> Value -> Eval Value
+evalMatIndex i j (Mat4x4Value v) =
+  return $ FloatValue $ v ^. (swizzle i . swizzle j)
+  where
+    swizzle X = _x
+    swizzle Y = _y
+    swizzle Z = _z
+    swizzle W = _w
+evalMatIndex i j v =
+  fail $ "cannot access [" <> pp ppVecIndex i <> "][" <> pp ppVecIndex j <> "]"
+      <> " on " <> show v
+
 
 setValue :: LocalState -> Name -> Value -> Eval LocalState
 setValue lst@LocalState{..} n@(Name NsT (NameId nId)) v =
