@@ -31,7 +31,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get install libgl1-mesa-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev libxxf86vm-dev
+          sudo apt-get install graphviz
           cabal update
           cabal build --only-dependencies --enable-tests --enable-benchmarks --enable-doc all
       - name: Build
