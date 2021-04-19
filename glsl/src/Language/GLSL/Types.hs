@@ -3,6 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StrictData        #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
+{-# LANGUAGE DeriveGeneric     #-}
 module Language.GLSL.Types where
 
 import           Control.Applicative              (Applicative (..), (<|>))
@@ -18,6 +19,7 @@ import qualified Data.Text.Lazy                   as LT
 import qualified Data.Text.Lazy.Builder           as LTB
 import qualified Data.Text.Lazy.Builder.Int       as LTB
 import qualified Data.Text.Lazy.Builder.RealFloat as LTB
+import           GHC.Generics                     (Generic)
 
 
 parseShader :: Annot a => LT.Text -> Either String (GLSL a)
@@ -28,7 +30,7 @@ printShader = LTB.toLazyText . ppGLSL
 
 
 data GLSL a = GLSL Version [TopDecl a]
-  deriving (Show, Functor, Foldable, Traversable)
+  deriving (Generic, Show, Eq, Functor, Foldable, Traversable)
 
 parseGLSL :: Annot a => Parser (GLSL a)
 parseGLSL = GLSL
@@ -41,7 +43,7 @@ ppGLSL (GLSL v decls) =
   <> "\n" <> ppL ppTopDecl decls
 
 newtype Version = Version Int
-  deriving (Show)
+  deriving (Generic, Show, Eq)
 
 parseVersion :: Parser Version
 parseVersion = Version <$> ("#version " >> decimal)
@@ -53,7 +55,7 @@ data TopDecl a
   = LayoutDecl LayoutSpec GlobalDecl
   | GlobalDecl GlobalDecl
   | ProcDecl ProcName [ParamDecl] [StmtAnnot a]
-  deriving (Show, Functor, Foldable, Traversable)
+  deriving (Generic, Show, Eq, Functor, Foldable, Traversable)
 
 parseTopDecl :: Annot a => Parser (TopDecl a)
 parseTopDecl = layoutDecl <|> globalDecl <|> procDecl
@@ -83,7 +85,7 @@ ppTopDecl (ProcDecl n a b) =
 data ProcName
   = ProcMain
   | ProcName NameId
-  deriving (Show)
+  deriving (Generic, Show, Eq)
 
 parseProcName :: Parser ProcName
 parseProcName =
@@ -97,7 +99,7 @@ ppProcName (ProcName n) = "p" <> ppNameId n
 data LayoutSpec
   = LayoutStd140
   | LayoutLocation Int
-  deriving (Show)
+  deriving (Generic, Show, Eq)
 
 parseLayoutSpec :: Parser LayoutSpec
 parseLayoutSpec =
@@ -110,7 +112,7 @@ ppLayoutSpec (LayoutLocation l) = "location = " <> ppInt l
 
 data ParamDecl
   = Param ParamKind LocalDecl
-  deriving (Show)
+  deriving (Generic, Show, Eq)
 
 parseParamDecl :: Parser ParamDecl
 parseParamDecl = Param
@@ -125,7 +127,7 @@ data ParamKind
   = PkIn
   | PkOut
   | PkInout
-  deriving (Show)
+  deriving (Generic, Show, Eq)
 
 parseParamKind :: Parser ParamKind
 parseParamKind = (char ' ' <|> pure ' ') >>
@@ -140,7 +142,7 @@ ppParamKind PkInout = "inout"
 
 data LocalDecl
   = LDecl Type NameId (Maybe Expr)
-  deriving (Show)
+  deriving (Generic, Show, Eq)
 
 parseLocalDecl :: Parser LocalDecl
 parseLocalDecl = LDecl
@@ -159,7 +161,7 @@ ppLocalDecl (LDecl t n (Just e)) =
 
 data GlobalDecl
   = GDecl GDeclKind Type Name
-  deriving (Show)
+  deriving (Generic, Show, Eq)
 
 parseGlobalDecl :: Parser GlobalDecl
 parseGlobalDecl = GDecl
@@ -177,7 +179,7 @@ data GDeclKind
   = GkIn
   | GkOut
   | GkUniform
-  deriving (Show)
+  deriving (Generic, Show, Eq)
 
 parseGDeclKind :: Parser GDeclKind
 parseGDeclKind =
@@ -197,7 +199,7 @@ data Type
   | TyVec Int
   | TyMat Int Int
   | TyStruct NameId [(Type, NameId)]
-  deriving (Show, Eq)
+  deriving (Generic, Show, Eq)
 
 parseType :: Parser Type
 parseType =
@@ -229,7 +231,7 @@ ppType (TyStruct n ms) =
   where ppStructMember (t, n) = ppType t <> " u" <> ppNameId n <> ";\n"
 
 newtype NameId = NameId Int
-  deriving (Show, Eq)
+  deriving (Generic, Show, Eq)
 
 parseNameId :: Parser NameId
 parseNameId = NameId
@@ -240,7 +242,7 @@ ppNameId (NameId n) = ppInt n
 
 data Name
   = Name Namespace NameId
-  deriving (Show)
+  deriving (Generic, Show, Eq)
 
 parseName :: Parser Name
 parseName = Name
@@ -257,7 +259,7 @@ data Namespace
   | NsVF
   | NsIn
   | NsOut
-  deriving (Show, Eq)
+  deriving (Generic, Show, Eq)
 
 parseNamespace :: Parser Namespace
 parseNamespace =
@@ -277,85 +279,82 @@ ppNamespace NsIn  = "in"
 ppNamespace NsOut = "out"
 
 data FunName
-  = PrimMain
+  = PrimAbs
+  | PrimAsin
+  | PrimAtan
+  | PrimCos
+  | PrimCross
+  | PrimDot
+  | PrimFloor
+  | PrimFract
+  | PrimLength
   | PrimMat3x3
   | PrimMat4x4
+  | PrimMod
+  | PrimNormalize
+  | PrimPow
+  | PrimSin
+  | PrimSmoothstep
+  | PrimSqrt
+  | PrimStep
+  | PrimTan
   | PrimVec2
   | PrimVec3
   | PrimVec4
-  | PrimPow
-  | PrimDot
-  | PrimCos
-  | PrimAtan
-  | PrimMod
-  | PrimAbs
-  | PrimCross
-  | PrimLength
-  | PrimAsin
-  | PrimSmoothstep
-  | PrimStep
-  | PrimFract
-  | PrimFloor
-  | PrimSin
-  | PrimTan
-  | PrimSqrt
-  | PrimNormalize
-  deriving (Show, Eq)
+  deriving (Generic, Show, Eq)
 
 parseFunName :: Parser FunName
 parseFunName =
-  ("main" >> pure PrimMain)
+  ("abs" >> pure PrimAbs)
+  <|> ("asin" >> pure PrimAsin)
+  <|> ("atan" >> pure PrimAtan)
+  <|> ("cos" >> pure PrimCos)
+  <|> ("cross" >> pure PrimCross)
+  <|> ("dot" >> pure PrimDot)
+  <|> ("floor" >> pure PrimFloor)
+  <|> ("fract" >> pure PrimFract)
+  <|> ("length" >> pure PrimLength)
   <|> ("mat3x3" >> pure PrimMat3x3)
   <|> ("mat4x4" >> pure PrimMat4x4)
+  <|> ("mod" >> pure PrimMod)
+  <|> ("normalize" >> pure PrimNormalize)
+  <|> ("pow" >> pure PrimPow)
+  <|> ("sin" >> pure PrimSin)
+  <|> ("smoothstep" >> pure PrimSmoothstep)
+  <|> ("sqrt" >> pure PrimSqrt)
+  <|> ("step" >> pure PrimStep)
+  <|> ("tan" >> pure PrimTan)
   <|> ("vec2" >> pure PrimVec2)
   <|> ("vec3" >> pure PrimVec3)
   <|> ("vec4" >> pure PrimVec4)
-  <|> ("pow" >> pure PrimPow)
-  <|> ("dot" >> pure PrimDot)
-  <|> ("cos" >> pure PrimCos)
-  <|> ("atan" >> pure PrimAtan)
-  <|> ("mod" >> pure PrimMod)
-  <|> ("abs" >> pure PrimAbs)
-  <|> ("cross" >> pure PrimCross)
-  <|> ("length" >> pure PrimLength)
-  <|> ("asin" >> pure PrimAsin)
-  <|> ("smoothstep" >> pure PrimSmoothstep)
-  <|> ("step" >> pure PrimStep)
-  <|> ("fract" >> pure PrimFract)
-  <|> ("floor" >> pure PrimFloor)
-  <|> ("sin" >> pure PrimSin)
-  <|> ("tan" >> pure PrimTan)
-  <|> ("sqrt" >> pure PrimSqrt)
-  <|> ("normalize" >> pure PrimNormalize)
 
 ppFunName :: FunName -> LTB.Builder
-ppFunName PrimMain       = "main"
+ppFunName PrimAbs        = "abs"
+ppFunName PrimAsin       = "asin"
+ppFunName PrimAtan       = "atan"
+ppFunName PrimCos        = "cos"
+ppFunName PrimCross      = "cross"
+ppFunName PrimDot        = "dot"
+ppFunName PrimFloor      = "floor"
+ppFunName PrimFract      = "fract"
+ppFunName PrimLength     = "length"
 ppFunName PrimMat3x3     = "mat3x3"
 ppFunName PrimMat4x4     = "mat4x4"
+ppFunName PrimMod        = "mod"
+ppFunName PrimNormalize  = "normalize"
+ppFunName PrimPow        = "pow"
+ppFunName PrimSin        = "sin"
+ppFunName PrimSmoothstep = "smoothstep"
+ppFunName PrimSqrt       = "sqrt"
+ppFunName PrimStep       = "step"
+ppFunName PrimTan        = "tan"
 ppFunName PrimVec2       = "vec2"
 ppFunName PrimVec3       = "vec3"
 ppFunName PrimVec4       = "vec4"
-ppFunName PrimPow        = "pow"
-ppFunName PrimDot        = "dot"
-ppFunName PrimCos        = "cos"
-ppFunName PrimAtan       = "atan"
-ppFunName PrimMod        = "mod"
-ppFunName PrimAbs        = "abs"
-ppFunName PrimCross      = "cross"
-ppFunName PrimLength     = "length"
-ppFunName PrimAsin       = "asin"
-ppFunName PrimSmoothstep = "smoothstep"
-ppFunName PrimStep       = "step"
-ppFunName PrimFract      = "fract"
-ppFunName PrimFloor      = "floor"
-ppFunName PrimSin        = "sin"
-ppFunName PrimTan        = "tan"
-ppFunName PrimSqrt       = "sqrt"
-ppFunName PrimNormalize  = "normalize"
 
 data Swizzle
   = X | Y | Z | W
-  deriving (Show, Eq)
+  deriving (Generic, Show, Eq)
 
 parseSwizzle :: Parser Swizzle
 parseSwizzle =
@@ -386,7 +385,7 @@ ppVecIndex W = "3"
 data NameExpr
   = NameExpr Name
   | UniformExpr NameId NameId
-  deriving (Show)
+  deriving (Generic, Show, Eq)
 
 parseNameExpr :: Parser NameExpr
 parseNameExpr =
@@ -394,13 +393,13 @@ parseNameExpr =
   <|> NameExpr <$> parseName
 
 ppNameExpr :: NameExpr -> LTB.Builder
-ppNameExpr (NameExpr n) = ppName n
+ppNameExpr (NameExpr n)      = ppName n
 ppNameExpr (UniformExpr n m) = "u" <> ppNameId n <> ".u" <> ppNameId m
 
 data Cast
   = Cast
   | NoCast
-  deriving (Show)
+  deriving (Generic, Show, Eq)
 
 data ExprAtom
   = LitIntExpr Cast Int
@@ -409,7 +408,7 @@ data ExprAtom
   | SwizzleExpr NameId Swizzle
   | VecIndexExpr NameExpr Swizzle
   | MatIndexExpr NameExpr Swizzle Swizzle
-  deriving (Show)
+  deriving (Generic, Show, Eq)
 
 parseExprAtom :: Parser ExprAtom
 parseExprAtom =
@@ -444,7 +443,7 @@ data Expr
   | FunCallExpr FunName [ExprAtom]
   | TextureExpr ExprAtom ExprAtom ExprAtom
   | AtomExpr ExprAtom
-  deriving (Show)
+  deriving (Generic, Show, Eq)
 
 parseExpr :: Parser Expr
 parseExpr =
@@ -485,7 +484,7 @@ data BinaryOp
   | BOpLT
   | BOpAnd
   | BOpOr
-  deriving (Show, Eq)
+  deriving (Generic, Show, Eq)
 
 parseBinaryOp :: Parser BinaryOp
 parseBinaryOp =
@@ -515,7 +514,7 @@ ppBinaryOp BOpOr    = "||"
 data UnaryOp
   = UOpMinus
   | UOpNot
-  deriving (Show, Eq)
+  deriving (Generic, Show, Eq)
 
 parseUnaryOp :: Parser UnaryOp
 parseUnaryOp =
@@ -530,7 +529,7 @@ data StmtAnnot a = SA
   { annot   :: a
   , unAnnot :: Stmt a
   }
-  deriving (Show, Functor, Foldable, Traversable)
+  deriving (Generic, Show, Eq, Functor, Foldable, Traversable)
 
 instance Applicative StmtAnnot where
   pure a = SA a (pure a)
@@ -548,7 +547,7 @@ data Stmt a
   | DeclStmt LocalDecl
   | EmitStmt Emit
   | IfStmt NameId [StmtAnnot a] [StmtAnnot a]
-  deriving (Show, Functor, Foldable, Traversable)
+  deriving (Generic, Show, Eq, Functor, Foldable, Traversable)
 
 instance Applicative Stmt where
   -- Arbitrary decision because "pure" doesn't really make sense.
@@ -586,7 +585,7 @@ ppStmt (IfStmt c t e) =
 data Emit
   = EmitPosition Expr
   | EmitFragDepth
-  deriving (Show)
+  deriving (Generic, Show, Eq)
 
 parseEmit :: Parser Emit
 parseEmit =
@@ -626,6 +625,41 @@ instance (Annot a, Annot b) => Annot (a, b) where
 
 ----------------------------------
 
+argCountForFunName :: FunName -> Int
+argCountForFunName PrimAbs        = 1
+argCountForFunName PrimAsin       = 1
+argCountForFunName PrimAtan       = 2
+argCountForFunName PrimCos        = 1
+argCountForFunName PrimCross      = 2
+argCountForFunName PrimDot        = 2
+argCountForFunName PrimFloor      = 1
+argCountForFunName PrimFract      = 1
+argCountForFunName PrimLength     = 1
+argCountForFunName PrimMat3x3     = 3
+argCountForFunName PrimMat4x4     = 4
+argCountForFunName PrimMod        = 2
+argCountForFunName PrimNormalize  = 1
+argCountForFunName PrimPow        = 2
+argCountForFunName PrimSin        = 1
+argCountForFunName PrimSmoothstep = 3
+argCountForFunName PrimSqrt       = 1
+argCountForFunName PrimStep       = 2
+argCountForFunName PrimTan        = 1
+argCountForFunName PrimVec2       = 2
+argCountForFunName PrimVec3       = 3
+argCountForFunName PrimVec4       = 4
+
+isLitExpr :: ExprAtom -> Bool
+isLitExpr LitFloatExpr{} = True
+isLitExpr LitIntExpr{}   = True
+isLitExpr _              = False
+
+isIdentifierExpr :: ExprAtom -> Bool
+isIdentifierExpr IdentifierExpr{} = True
+isIdentifierExpr _                = False
+
+----------------------------------
+
 parseTest :: Show a => Parser a -> LT.Text -> IO ()
 parseTest p input =
   let r = show . fromPartial . parse p . T.encodeUtf8 . LT.toStrict $ input in
@@ -648,3 +682,6 @@ pp printer = LT.unpack . LTB.toLazyText . printer
 
 ppl :: (a -> LTB.Builder) -> [a] -> String
 ppl printer = LT.unpack . LTB.toLazyText . ppL printer
+
+pps :: LTB.Builder -> (a -> LTB.Builder) -> [a] -> String
+pps sep printer = LT.unpack . LTB.toLazyText . ppS sep printer

@@ -57,7 +57,7 @@ diTopDecl _ d = d
 
 diStmts :: Annot a => Config -> [StmtAnnot a] -> [StmtAnnot a]
 diStmts config ss =
-  let ce = collectConstExprs ss in
+  let ce = Just (collectConstExprs ss) in
   case findBody config ce ss of
     Nothing -> ss
     Just body ->
@@ -70,7 +70,7 @@ diStmts config ss =
 
 
 -- | Remove all occurrences of 'body' from 'ss'.
-deleteBody :: ConstExprs -> [StmtAnnot a] -> [StmtAnnot a] -> [StmtAnnot a]
+deleteBody :: Maybe ConstExprs -> [StmtAnnot a] -> [StmtAnnot a] -> [StmtAnnot a]
 deleteBody ce body = go []
   where
     go acc [] = reverse acc
@@ -80,7 +80,7 @@ deleteBody ce body = go []
         else go (s:acc) ss
 
 
-findBody :: Config -> ConstExprs -> [StmtAnnot a] -> Maybe [StmtAnnot a]
+findBody :: Config -> Maybe ConstExprs -> [StmtAnnot a] -> Maybe [StmtAnnot a]
 findBody _ _ [] = Nothing
 findBody Config{..} _ (_:ss) | length ss < windowSize = Nothing
 findBody config@Config{..} ce (_:ss) =
@@ -139,6 +139,6 @@ transpose :: [[a]] -> [[a]]
 transpose = getZipList . traverse ZipList
 
 -- | Check for each statement whether it's structurally equal to the first one.
-allEqual :: ConstExprs -> [StmtAnnot a] -> Bool
+allEqual :: Maybe ConstExprs -> [StmtAnnot a] -> Bool
 allEqual _ []      = True
 allEqual ce (x:xs) = all (StructuralEquality.eqStmtAnnot ce x) xs

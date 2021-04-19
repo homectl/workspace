@@ -2,6 +2,7 @@ module Language.GLSL.ConstExpr
   ( ConstExprs
   , collectConstExprs
   , isConstExpr
+  , empty
   ) where
 
 import qualified Data.IntSet         as S
@@ -9,6 +10,9 @@ import           Language.GLSL.Types
 
 
 newtype ConstExprs = ConstExprs S.IntSet
+
+empty :: ConstExprs
+empty = ConstExprs S.empty
 
 collectConstExprs :: [StmtAnnot a] -> ConstExprs
 collectConstExprs = ConstExprs . foldr (add . unAnnot) S.empty

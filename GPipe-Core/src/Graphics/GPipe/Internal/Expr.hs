@@ -10,8 +10,9 @@
 {-# LANGUAGE ScopedTypeVariables       #-}
 {-# LANGUAGE TypeFamilies              #-}
 {-# LANGUAGE ViewPatterns              #-}
-{-# OPTIONS_GHC -Wno-type-defaults #-}
+{-# OPTIONS_GHC -Wno-inline-rule-shadowing #-}
 {-# OPTIONS_GHC -Wno-missing-signatures #-}
+{-# OPTIONS_GHC -Wno-type-defaults #-}
 module Graphics.GPipe.Internal.Expr where
 
 import           Control.Applicative               (liftA2, liftA3)
@@ -740,7 +741,7 @@ fun1u = fun1 STypeUInt
 preopu :: Text -> S c x -> S c Word
 preopu = preop STypeUInt
 
-instance Num (S a Float) where
+instance Num (S x Float) where
     (+) = binf "+"
     (-) = binf "-"
     abs = fun1f "abs"
@@ -749,7 +750,7 @@ instance Num (S a Float) where
     fromInteger = S . return . tshow
     negate = preopf "-"
 
-instance Num (S a Int) where
+instance Num (S x Int) where
     (+) = bini "+"
     (-) = bini "-"
     abs = fun1i "abs"
@@ -758,7 +759,7 @@ instance Num (S a Int) where
     fromInteger = S . return . tshow
     negate = preopi "-"
 
-instance Num (S a Word) where
+instance Num (S x Word) where
     (+) = binu "+"
     (-) = binu "-"
     abs = fun1u "abs"
@@ -767,9 +768,9 @@ instance Num (S a Word) where
     fromInteger x = S $ return $ tshow x <> "u"
     negate = preopu "-"
 
-instance Fractional (S a Float) where
-  (/)          = binf "/"
-  fromRational = S . return . ("float(" <>) . (<> ")") . tshow . (`asTypeOf` (undefined :: Float)) . fromRational
+instance Fractional (S x Float) where
+    (/)          = binf "/"
+    fromRational = S . return . ("float(" <>) . (<> ")") . tshow . (`asTypeOf` (undefined :: Float)) . fromRational
 
 class Integral' a where
     div' :: a -> a -> a
@@ -799,10 +800,10 @@ instance Integral' Word16 where
 instance Integral' Word8 where
     div' = div
     mod' = mod
-instance Integral' (S a Int) where
+instance Integral' (S x Int) where
     div' = bini "/"
     mod' = bini "%"
-instance Integral' (S a Word) where
+instance Integral' (S x Word) where
     div' = binu "/"
     mod' = binu "%"
 instance Integral' a => Integral' (V0 a) where
@@ -830,7 +831,7 @@ class Bits' a where
     shiftR' :: a -> a -> a
     bitSize' :: a -> Int
 
-instance Bits' (S a Int) where
+instance Bits' (S x Int) where
     and' = bini "&"
     or' = bini "|"
     xor' = bini "^"
@@ -838,7 +839,7 @@ instance Bits' (S a Int) where
     shiftL' = bini "<<"
     shiftR' = bini ">>"
     bitSize' = pure (finiteBitSize (undefined :: Int))
-instance Bits' (S a Word) where
+instance Bits' (S x Word) where
     and' = binu "&"
     or' = binu "|"
     xor' = binu "^"
@@ -847,169 +848,169 @@ instance Bits' (S a Word) where
     shiftR' = binu ">>"
     bitSize' = pure (finiteBitSize (undefined :: Word))
 
-instance Floating (S a Float) where
-  pi    = S $ return $ tshow (pi :: Float)
-  sqrt  = fun1f "sqrt"
-  exp   = fun1f "exp"
-  log   = fun1f "log"
-  (**)  = fun2f "pow"
-  sin   = fun1f "sin"
-  cos   = fun1f "cos"
-  tan   = fun1f "tan"
-  asin  = fun1f "asin"
-  acos  = fun1f "acos"
-  atan  = fun1f "atan"
-  sinh  = fun1f "sinh"
-  cosh  = fun1f "cosh"
-  asinh = fun1f "asinh"
-  atanh = fun1f "atanh"
-  acosh = fun1f "acosh"
+instance Floating (S x Float) where
+    pi    = S $ return $ tshow (pi :: Float)
+    sqrt  = fun1f "sqrt"
+    exp   = fun1f "exp"
+    log   = fun1f "log"
+    (**)  = fun2f "pow"
+    sin   = fun1f "sin"
+    cos   = fun1f "cos"
+    tan   = fun1f "tan"
+    asin  = fun1f "asin"
+    acos  = fun1f "acos"
+    atan  = fun1f "atan"
+    sinh  = fun1f "sinh"
+    cosh  = fun1f "cosh"
+    asinh = fun1f "asinh"
+    atanh = fun1f "atanh"
+    acosh = fun1f "acosh"
 
-instance Boolean (S a Bool) where
-  true = S $ return "true"
-  false = S $ return "false"
-  notB  = preop STypeBool "!"
-  (&&*) = bin STypeBool "&&"
-  (||*) = bin STypeBool "||"
+instance Boolean (S x Bool) where
+    true = S $ return "true"
+    false = S $ return "false"
+    notB  = preop STypeBool "!"
+    (&&*) = bin STypeBool "&&"
+    (||*) = bin STypeBool "||"
 
-type instance BooleanOf (S a x) = S a Bool
+type instance BooleanOf (S x a) = S x Bool
 
-instance Eq x => EqB (S a x) where
-  (==*) = bin STypeBool "=="
-  (/=*) = bin STypeBool "!="
+instance Eq a => EqB (S x a) where
+    (==*) = bin STypeBool "=="
+    (/=*) = bin STypeBool "!="
 
-instance Ord x => OrdB (S a x) where
-  (<*) = bin STypeBool "<"
-  (<=*) = bin STypeBool "<="
-  (>=*) = bin STypeBool ">="
-  (>*) = bin STypeBool ">"
+instance Ord a => OrdB (S x a) where
+    (<*) = bin STypeBool "<"
+    (<=*) = bin STypeBool "<="
+    (>=*) = bin STypeBool ">="
+    (>*) = bin STypeBool ">"
 
-instance IfB (S a Float) where ifB = ifThenElse'
-instance IfB (S a Int) where ifB = ifThenElse'
-instance IfB (S a Word) where ifB = ifThenElse'
-instance IfB (S a Bool) where ifB = ifThenElse'
-instance IfB (S a (GenerativeGeometry p b)) where ifB = ifThenElse'
+instance IfB (S x Float) where ifB = ifThenElse'
+instance IfB (S x Int) where ifB = ifThenElse'
+instance IfB (S x Word) where ifB = ifThenElse'
+instance IfB (S x Bool) where ifB = ifThenElse'
+instance IfB (S x (GenerativeGeometry p b)) where ifB = ifThenElse'
 
-instance Conjugate (S a Float)
-instance Conjugate (S a Int)
-instance Conjugate (S a Word)
-instance TrivialConjugate  (S a Float)
-instance TrivialConjugate  (S a Int)
-instance TrivialConjugate  (S a Word)
+instance Conjugate (S x Float)
+instance Conjugate (S x Int)
+instance Conjugate (S x Word)
+instance TrivialConjugate  (S x Float)
+instance TrivialConjugate  (S x Int)
+instance TrivialConjugate  (S x Word)
 
 -- | This class provides the GPU functions either not found in Prelude's numerical classes, or that has wrong types.
 --   Instances are also provided for normal 'Float's and 'Double's.
 class Floating a => Real' a where
-  rsqrt :: a -> a
-  exp2 :: a -> a
-  log2 :: a -> a
-  floor' :: a -> a
-  ceiling' :: a -> a
-  fract' :: a -> a
-  mod'' :: a -> a -> a
-  mix :: a -> a -> a-> a
-  atan2' :: a -> a -> a
+    rsqrt :: a -> a
+    exp2 :: a -> a
+    log2 :: a -> a
+    floor' :: a -> a
+    ceiling' :: a -> a
+    fract' :: a -> a
+    mod'' :: a -> a -> a
+    mix :: a -> a -> a-> a
+    atan2' :: a -> a -> a
 
-  rsqrt = (1/) . sqrt
-  exp2 = (2**)
-  log2 = logBase 2
-  mix x y a = x*(1-a)+y*a
-  fract' x = x - floor' x
-  mod'' x y = x - y* floor' (x/y)
-  floor' x = -ceiling' (-x)
-  ceiling' x = -floor' (-x)
+    rsqrt = (1/) . sqrt
+    exp2 = (2**)
+    log2 = logBase 2
+    mix x y a = x*(1-a)+y*a
+    fract' x = x - floor' x
+    mod'' x y = x - y* floor' (x/y)
+    floor' x = -ceiling' (-x)
+    ceiling' x = -floor' (-x)
 
-  {-# MINIMAL (floor' | ceiling') , atan2' #-}
+    {-# MINIMAL (floor' | ceiling') , atan2' #-}
 
 instance Real' Float where
-  floor' = fromIntegral . floor
-  ceiling' = fromIntegral . ceiling
-  atan2' = atan2
+    floor' = fromIntegral . floor
+    ceiling' = fromIntegral . ceiling
+    atan2' = atan2
 
 instance Real' Double where
-  floor' = fromIntegral . floor
-  ceiling' = fromIntegral . ceiling
-  atan2' = atan2
+    floor' = fromIntegral . floor
+    ceiling' = fromIntegral . ceiling
+    atan2' = atan2
 
 instance Real' (S x Float) where
-  rsqrt = fun1f "inversesqrt"
-  exp2 = fun1f "exp2"
-  log2 = fun1f "log2"
-  floor' = fun1f "floor"
-  ceiling' = fun1f "ceil"
-  fract' = fun1f "fract"
-  mod'' = fun2f "mod"
-  mix = fun3f "mix"
-  atan2' = fun2f "atan"
+    rsqrt = fun1f "inversesqrt"
+    exp2 = fun1f "exp2"
+    log2 = fun1f "log2"
+    floor' = fun1f "floor"
+    ceiling' = fun1f "ceil"
+    fract' = fun1f "fract"
+    mod'' = fun2f "mod"
+    mix = fun3f "mix"
+    atan2' = fun2f "atan"
 
 instance (Real' a) => Real' (V0 a) where
-  rsqrt = fmap rsqrt
-  exp2 = fmap exp2
-  log2 = fmap log2
-  floor' = fmap floor'
-  ceiling' = fmap ceiling'
-  fract' = fmap fract'
-  mod'' = liftA2 mod''
-  mix = liftA3 mix
-  atan2' = liftA2 atan2'
+    rsqrt = fmap rsqrt
+    exp2 = fmap exp2
+    log2 = fmap log2
+    floor' = fmap floor'
+    ceiling' = fmap ceiling'
+    fract' = fmap fract'
+    mod'' = liftA2 mod''
+    mix = liftA3 mix
+    atan2' = liftA2 atan2'
 instance (Real' a) => Real' (V1 a) where
-  rsqrt = fmap rsqrt
-  exp2 = fmap exp2
-  log2 = fmap log2
-  floor' = fmap floor'
-  ceiling' = fmap ceiling'
-  fract' = fmap fract'
-  mod'' = liftA2 mod''
-  mix = liftA3 mix
-  atan2' = liftA2 atan2'
+    rsqrt = fmap rsqrt
+    exp2 = fmap exp2
+    log2 = fmap log2
+    floor' = fmap floor'
+    ceiling' = fmap ceiling'
+    fract' = fmap fract'
+    mod'' = liftA2 mod''
+    mix = liftA3 mix
+    atan2' = liftA2 atan2'
 instance (Real' a) => Real' (V2 a) where
-  rsqrt = fmap rsqrt
-  exp2 = fmap exp2
-  log2 = fmap log2
-  floor' = fmap floor'
-  ceiling' = fmap ceiling'
-  fract' = fmap fract'
-  mod'' = liftA2 mod''
-  mix = liftA3 mix
-  atan2' = liftA2 atan2'
+    rsqrt = fmap rsqrt
+    exp2 = fmap exp2
+    log2 = fmap log2
+    floor' = fmap floor'
+    ceiling' = fmap ceiling'
+    fract' = fmap fract'
+    mod'' = liftA2 mod''
+    mix = liftA3 mix
+    atan2' = liftA2 atan2'
 instance (Real' a) => Real' (V3 a) where
-  rsqrt = fmap rsqrt
-  exp2 = fmap exp2
-  log2 = fmap log2
-  floor' = fmap floor'
-  ceiling' = fmap ceiling'
-  fract' = fmap fract'
-  mod'' = liftA2 mod''
-  mix = liftA3 mix
-  atan2' = liftA2 atan2'
+    rsqrt = fmap rsqrt
+    exp2 = fmap exp2
+    log2 = fmap log2
+    floor' = fmap floor'
+    ceiling' = fmap ceiling'
+    fract' = fmap fract'
+    mod'' = liftA2 mod''
+    mix = liftA3 mix
+    atan2' = liftA2 atan2'
 instance (Real' a) => Real' (V4 a) where
-  rsqrt = fmap rsqrt
-  exp2 = fmap exp2
-  log2 = fmap log2
-  floor' = fmap floor'
-  ceiling' = fmap ceiling'
-  fract' = fmap fract'
-  mod'' = liftA2 mod''
-  mix = liftA3 mix
-  atan2' = liftA2 atan2'
+    rsqrt = fmap rsqrt
+    exp2 = fmap exp2
+    log2 = fmap log2
+    floor' = fmap floor'
+    ceiling' = fmap ceiling'
+    fract' = fmap fract'
+    mod'' = liftA2 mod''
+    mix = liftA3 mix
+    atan2' = liftA2 atan2'
 
 -- | This class provides various order comparing functions
 class (IfB a, OrdB a, Floating a) => FloatingOrd a where
-  clamp :: a -> a -> a -> a
-  saturate :: a -> a
-  step :: a -> a -> a
-  smoothstep :: a -> a -> a -> a
-  clamp x a = minB (maxB x a)
-  saturate x = clamp x 0 1
-  step a x = ifB (x <* a) 0 1
-  smoothstep a b x = let t = saturate ((x-a) / (b-a)) in t*t*(3-2*t)
+    clamp :: a -> a -> a -> a
+    saturate :: a -> a
+    step :: a -> a -> a
+    smoothstep :: a -> a -> a -> a
+    clamp x a = minB (maxB x a)
+    saturate x = clamp x 0 1
+    step a x = ifB (x <* a) 0 1
+    smoothstep a b x = let t = saturate ((x-a) / (b-a)) in t*t*(3-2*t)
 
 instance FloatingOrd Float
 instance FloatingOrd Double
 instance FloatingOrd (S x Float) where
-  clamp = fun3f "clamp"
-  step = fun2f "step"
-  smoothstep = fun3f "smoothstep"
+    clamp = fun3f "clamp"
+    step = fun2f "step"
+    smoothstep = fun3f "smoothstep"
 
 -- | Provides a common way to convert numeric types to integer and floating point representations.
 class Convert a where
