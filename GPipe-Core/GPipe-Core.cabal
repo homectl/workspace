@@ -81,7 +81,7 @@ library
     , containers                    >= 0.5 && < 0.7
     , exception-transformers        >= 0.3 && < 0.5
     , gl                            >= 0.8 && < 0.10
-    , glsl                          >= 0.0.0.1 && < 0.0.0.2
+    , glsl                          >= 0.0.0.1 && < 0.0.2
     , lens                          >= 4.15.2 && < 6
     , linear                        >= 1.18 && < 1.22
     , text                          >= 0.10 && < 1.3
