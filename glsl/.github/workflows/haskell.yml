@@ -44,7 +44,7 @@ jobs:
         env:
           API_TOKEN_HACKAGE: ${{ secrets.API_TOKEN_HACKAGE }}
           PACKAGE: glsl
-          VERSION: 0.0.0.1
+          VERSION: 0.0.0.2
         run: |
           cabal sdist
           curl --header "Authorization: X-ApiKey $API_TOKEN_HACKAGE" \
