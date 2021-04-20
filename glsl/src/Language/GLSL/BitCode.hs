@@ -13,10 +13,12 @@ import qualified Data.Text.Lazy              as LT
 import qualified Data.Text.Lazy.IO           as IO
 import           Data.Word                   (Word64)
 import           Debug.Trace                 (trace)
+import           Language.GLSL.AST
 import           Language.GLSL.ConstExpr     (ConstExprs)
 import qualified Language.GLSL.ConstExpr     as ConstExpr
 import           Language.GLSL.Internal.Bits (B (..), expand, flat, zero)
-import           Language.GLSL.Types         hiding (t)
+import           Language.GLSL.Parser        (parseShader)
+import           Language.GLSL.PrettyPrint
 
 
 assemble :: BitsStmt -> Word64

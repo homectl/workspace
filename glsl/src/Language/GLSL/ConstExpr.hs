@@ -5,8 +5,8 @@ module Language.GLSL.ConstExpr
   , empty
   ) where
 
-import qualified Data.IntSet         as S
-import           Language.GLSL.Types
+import qualified Data.IntSet       as S
+import           Language.GLSL.AST
 
 
 newtype ConstExprs = ConstExprs S.IntSet

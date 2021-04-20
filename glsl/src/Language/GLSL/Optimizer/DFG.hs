@@ -13,8 +13,9 @@ import qualified Data.Graph.Inductive      as G
 import qualified Data.GraphViz             as GV
 import qualified Data.GraphViz.Printing    as GV
 import qualified Data.Text.Lazy.IO         as IO
+import           Language.GLSL.AST
 import           Language.GLSL.Decls
-import           Language.GLSL.Types       hiding (t)
+import           Language.GLSL.PrettyPrint (pp, ppName, ppNamespace)
 
 --------------------------------------------------------------------------------
 

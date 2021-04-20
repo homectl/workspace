@@ -13,11 +13,12 @@ import qualified Test.QuickCheck.Gen              as Gen
 import           Control.Monad                    (forM_, unless, when)
 import qualified Data.Text.Lazy.IO                as IO
 import qualified Data.Vector                      as V
+import           Language.GLSL.AST
 import           Language.GLSL.BitCode            (encodeStmt)
 import qualified Language.GLSL.ConstExpr          as ConstExpr
+import           Language.GLSL.Parser             (parseShader)
 import           Language.GLSL.StructuralEquality (eqStmt)
-import           Language.GLSL.Types
-import qualified System.Directory as Dir
+import qualified System.Directory                 as Dir
 
 -- Run an exhaustive n^2 test comparing every line to every other line in the
 -- test file. This takes around 13 seconds on my laptop.

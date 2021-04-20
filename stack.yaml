@@ -5,6 +5,7 @@ packages:
   - "GPipe-Engine"
   - "GPipe-Fonts"
   - "GPipe-GLFW4"
+  - "glsl"
   - "lambdacnc"
   - "lambdaray"
   - "livecoding"

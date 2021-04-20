@@ -1,11 +1,11 @@
 module Language.GLSL.Runtime.PrimFuns where
 
 import           Control.Monad               ((>=>))
+import           Language.GLSL.AST           (FunName (..), Type (..))
+import           Language.GLSL.PrettyPrint   (pp, ppFunName)
 import           Language.GLSL.Runtime.Math  (floor, fract, mod, smoothstep,
                                               step)
 import           Language.GLSL.Runtime.Value (Eval, Value (..), evalCoerce)
-import           Language.GLSL.Types         (FunName (..), Type (..), pp,
-                                              ppFunName)
 import           Linear
 import           Prelude                     hiding (floor, mod)
 

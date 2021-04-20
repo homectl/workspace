@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 module Test.GLSL.Arbitrary where
 
-import           Language.GLSL.Types
+import           Language.GLSL.AST
 import           Test.QuickCheck.Arbitrary (Arbitrary (..), genericShrink)
 import qualified Test.QuickCheck.Gen       as Gen
 
@@ -42,7 +42,7 @@ instance Arbitrary Expr where
 
 isValidExpr :: Expr -> Bool
 isValidExpr (FunCallExpr f args) = length args == argCountForFunName f
-isValidExpr _ = True
+isValidExpr _                    = True
 
 instance Arbitrary Emit where
   shrink = genericShrink

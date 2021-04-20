@@ -3,13 +3,13 @@
 module Language.GLSL.StructuralEqualitySpec where
 
 import           Test.GLSL.Arbitrary              ()
-import           Test.Hspec                       (Spec, describe, shouldBe, it)
+import           Test.Hspec                       (Spec, describe, it, shouldBe)
 import           Test.Hspec.QuickCheck            (prop)
 
 import           Control.Monad                    (when)
+import           Language.GLSL.AST
 import qualified Language.GLSL.ConstExpr          as ConstExpr
 import           Language.GLSL.StructuralEquality (eqStmt)
-import           Language.GLSL.Types              
 
 ce :: Maybe ConstExpr.ConstExprs
 ce = Just ConstExpr.empty

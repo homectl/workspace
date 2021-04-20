@@ -2,9 +2,9 @@
 {-# LANGUAGE StrictData      #-}
 module Language.GLSL.Decls where
 
-import qualified Data.IntMap.Strict  as M
-import           Language.GLSL.Types (Name (..), NameExpr (..), NameId (..),
-                                      Namespace (..))
+import qualified Data.IntMap.Strict as M
+import           Language.GLSL.AST  (Name (..), NameExpr (..), NameId (..),
+                                     Namespace (..))
 
 
 data Decls a = Decls

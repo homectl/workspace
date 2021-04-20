@@ -15,9 +15,14 @@ import qualified Data.IntMap                      as M
 import qualified Data.Text.Lazy                   as LT
 import qualified Data.Text.Lazy.IO                as IO
 import qualified Debug.Trace                      as Trace
+import           Language.GLSL.AST
 import           Language.GLSL.Decls              (addDecl, addDeclN, addDeclNE,
                                                    emptyDecls, getDeclNE,
                                                    toUniformId)
+import           Language.GLSL.Parser             (parseShader)
+import           Language.GLSL.PrettyPrint        (pp, ppExpr, ppGlobalDecl,
+                                                   ppNameExpr, ppSwizzle,
+                                                   ppVecIndex)
 import qualified Language.GLSL.Runtime.PrimFuns   as PrimFuns
 import           Language.GLSL.Runtime.Value      (Eval, EvalResult (..),
                                                    EvalState (..), Proc (..),
@@ -25,7 +30,6 @@ import           Language.GLSL.Runtime.Value      (Eval, EvalResult (..),
                                                    evalBinaryOp, evalCoerce,
                                                    evalUnaryOp, isNaNValue,
                                                    roundValue)
-import           Language.GLSL.Types
 import           Linear                           (R1 (..), R2 (..), R3 (..),
                                                    R4 (..))
 

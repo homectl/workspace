@@ -1,14 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Test.GLSL where
 
-import           Test.Hspec                        (Expectation, shouldBe)
+import           Test.Hspec                       (Expectation, shouldBe)
 
-import           Data.Attoparsec.ByteString.Char8  (many1, parseOnly)
-import qualified Data.ByteString.Char8             as BS
-import           Data.String                       (fromString)
-import qualified Data.Text.Lazy                    as LT
-import qualified Data.Text.Lazy.Builder            as LTB
-import qualified Language.GLSL.Types     as GLSL
+import           Data.Attoparsec.ByteString.Char8 (many1, parseOnly)
+import qualified Data.ByteString.Char8            as BS
+import           Data.String                      (fromString)
+import qualified Data.Text.Lazy                   as LT
+import qualified Data.Text.Lazy.Builder           as LTB
+import qualified Language.GLSL.AST                as GLSL
+import qualified Language.GLSL.Parser             as GLSL
+import qualified Language.GLSL.PrettyPrint        as GLSL
 
 
 type Transform a b = [GLSL.StmtAnnot a] -> [GLSL.StmtAnnot b]

@@ -6,11 +6,12 @@ import           Control.Monad                    (when)
 import           Data.Attoparsec.ByteString.Char8 (Parser)
 import qualified Data.Text.Lazy                   as LT
 import qualified Data.Text.Lazy.IO                as IO
+import           Language.GLSL.AST                (Annot, GLSL)
 import qualified Language.GLSL.Optimizer.Deinline as Deinline
 import qualified Language.GLSL.Optimizer.Liveness as Liveness
-import           Language.GLSL.Types              (Annot, GLSL, parseGLSL,
-                                                   parseShader, parseTest,
-                                                   printShader)
+import           Language.GLSL.Parser             (parseGLSL, parseShader,
+                                                   parseTest)
+import           Language.GLSL.PrettyPrint        (printShader)
 
 
 optimizeShader :: LT.Text -> Either String LT.Text

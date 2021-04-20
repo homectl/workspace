@@ -7,11 +7,12 @@ import           Control.Arrow                             ((&&&))
 import qualified Data.List                                 as List
 import           Data.Maybe                                (listToMaybe)
 import           Debug.Trace                               (trace)
+import           Language.GLSL.AST
 import           Language.GLSL.ConstExpr                   (ConstExprs,
                                                             collectConstExprs)
 import qualified Language.GLSL.Optimizer.FunctionGenerator as FunctionGenerator
+import           Language.GLSL.PrettyPrint                 (pp, ppTopDecl)
 import qualified Language.GLSL.StructuralEquality          as StructuralEquality
-import           Language.GLSL.Types
 
 
 data Config = Config

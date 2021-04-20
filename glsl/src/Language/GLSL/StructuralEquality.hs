@@ -1,8 +1,8 @@
 -- | Structural equality, ignoring the variable names.
 module Language.GLSL.StructuralEquality where
 
+import           Language.GLSL.AST
 import           Language.GLSL.ConstExpr (ConstExprs, isConstExpr)
-import           Language.GLSL.Types
 
 
 eqStmtAnnots :: Maybe ConstExprs -> [(StmtAnnot a, StmtAnnot a)] -> Bool
@@ -87,8 +87,8 @@ eqType = (==)
 
 eqEmit :: Maybe ConstExprs -> Emit -> Emit -> Bool
 eqEmit ce (EmitPosition a) (EmitPosition b) = eqExpr ce a b
-eqEmit _ EmitFragDepth EmitFragDepth       = True
-eqEmit _ _ _                               = False
+eqEmit _ EmitFragDepth EmitFragDepth        = True
+eqEmit _ _ _                                = False
 
 
 eqMaybe :: (a -> a -> Bool) -> Maybe a -> Maybe a -> Bool

@@ -4,8 +4,11 @@ module Language.GLSL.Runtime.Value where
 
 import           Control.Monad.Trans.State.Strict (StateT)
 import qualified Data.IntMap                      as M
+import           Language.GLSL.AST                (BinaryOp (..), ParamDecl,
+                                                   StmtAnnot, Type (..),
+                                                   UnaryOp (..))
 import           Language.GLSL.Decls              (Decls)
-import           Language.GLSL.Types
+import           Language.GLSL.PrettyPrint        (pp, ppType)
 import           Linear                           (M44, V2, V3, V4, (!*!), (!*))
 
 data Proc

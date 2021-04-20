@@ -1,6 +1,6 @@
 module Language.GLSL.Optimizer.FunctionGenerator where
 
-import           Language.GLSL.Types
+import           Language.GLSL.AST
 
 
 makeFunction :: [StmtAnnot a] -> TopDecl a
