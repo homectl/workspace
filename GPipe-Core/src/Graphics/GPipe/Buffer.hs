@@ -40,6 +40,7 @@ module Graphics.GPipe.Buffer (
     bufferLength,
     writeBuffer,
     copyBuffer,
+    resizeBuffer,
     BufferStartPos,
 
     -- * Buffer colors
@@ -54,4 +55,4 @@ import           Graphics.GPipe.Internal.Buffer (B, B2, B3, B4, BPacked,
                                                  BufferStartPos,
                                                  Normalized (..), ToBuffer,
                                                  copyBuffer, newBuffer,
-                                                 writeBuffer)
+                                                 resizeBuffer, writeBuffer)

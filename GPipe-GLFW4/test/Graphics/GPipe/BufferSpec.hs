@@ -20,3 +20,20 @@ spec = do
         writeBuffer buf 0 [0..50000]
         return $ bufferLength buf
       l `shouldBe` 100000
+
+  describe "resizeBuffer" $ do
+    it "from 0 to 100k, should return the new size of the buffer" $ do
+      l <- runContextT GLFW.defaultHandleConfig $ do
+        buf :: Buffer os (B Float) <- newBuffer 0
+        resized <- resizeBuffer buf 100000
+        writeBuffer resized 0 [1..100000]
+        return $ bufferLength resized
+      l `shouldBe` 100000
+
+    it "from 10 to 1, shouldn't crash on OOB write" $ do
+      l <- runContextT GLFW.defaultHandleConfig $ do
+        buf :: Buffer os (B Float) <- newBuffer 10
+        resized <- resizeBuffer buf 1
+        writeBuffer resized 0 [0..1]
+        return $ bufferLength resized
+      l `shouldBe` 1
